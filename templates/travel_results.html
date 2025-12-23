@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Travel Results | Find Your Perfect Flight</title>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@600;700&family=Playfair+Display:wght@400;600;700&display=swap"
+    rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/travel_results.css') }}" />
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+
+<body data-user-id="{{ current_user_id|default('') }}">
+  <div class="container">
+    <nav class="flight-navbar">
+      <div class="nav-brand">
+        <h2><i class="fas fa-plane"></i> DriveEase Flights</h2>
+      </div>
+      <div class="nav-links">
+        <a href="{{ url_for('dashboard') }}" class="nav-link">
+          <i class="fas fa-tachometer-alt"></i> Dashboard
+        </a>
+        <a href="{{ url_for('dashboard') }}#requests-section" class="nav-link active">
+          <i class="fas fa-list-alt"></i> My Requests
+        </a>
+      </div>
+    </nav>
+
+    <div class="page-title">
+      <h1>Available Flights</h1>
+      <p>Find the perfect flight for your journey</p>
+    </div>
+
+    <div id="dynamicAlertContainer"></div>
+
+    <div class="search-summary">
+      <div class="search-info">
+        <span class="search-item"><i class="fas fa-route"></i> {{ origin or 'N/A' }} → {{ destination or 'N/A' }}</span>
+        <span class="search-item"><i class="fas fa-calendar-alt"></i> {{ departure_date or 'N/A' }} {% if return_date
+          %}- {{ return_date }}{% endif %}</span>
+        <span class="search-item"><i class="fas fa-users"></i> {{ adults or '0' }} Adult(s), {{ children or '0' }}
+          Child(ren)</span>
+        <span class="search-item"><i class="fas fa-chair"></i> Class: {{ travel_class|capitalize or 'Economy' }}</span>
+      </div>
+      <button onclick="toggleModifyPanel()" class="modify-search-btn btn-outline-primary">
+        <i class="fas fa-edit"></i> Modify Search
+      </button>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for category, message in messages %}
+    <div class="alert alert-{{ 'danger' if category == 'danger' else 'warning' if category == 'warning' else 'info' }}"
+      role="alert">
+      {{ message|escape }}
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    <div id="modifyPanel" class="modify-search-panel">
+      <div class="panel-title">
+        <h2>Modify Your Search</h2>
+        <span class="close-search" onclick="toggleModifyPanel()">&times;</span>
+      </div>
+      <div class="modify-form-wrapper">
+        <form action="{{ url_for('submit_travel_booking') }}" method="POST" class="modify-form">
+          <input type="hidden" name="is_initial" value="false">
+
+          <div class="form-group">
+            <label class="form-label">Trip Type:</label>
+            <div class="trip-type">
+              <input type="radio" id="oneway" name="trip_type" value="oneway" {% if not return_date %}checked{% endif %}
+                onclick="handleTripType()">
+              <label for="oneway">● One-way</label>
+              <input type="radio" id="round" name="trip_type" value="round" {% if return_date %}checked{% endif %}
+                onclick="handleTripType()">
+              <label for="round">◎ Round-trip</label>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label" for="origin">From:</label>
+              <div class="input-with-icon">
+                <i class="fas fa-plane-departure"></i>
+                <input type="text" id="origin" name="origin" value="{{ origin or '' }}" class="form-control"
+                  placeholder="City or Airport" required>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="destination">To:</label>
+              <div class="input-with-icon">
+                <i class="fas fa-plane-arrival"></i>
+                <input type="text" id="destination" name="destination" value="{{ destination or '' }}"
+                  class="form-control" placeholder="City or Airport" required>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label" for="departure_date">Departure Date:</label>
+              <div class="input-with-icon">
+                <i class="fas fa-calendar"></i>
+                <input type="text" id="departure_date" name="departure_date" value="{{ departure_date or '' }}"
+                  class="form-control date-input" placeholder="YYYY-MM-DD" required>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="returnDate">Return Date:</label>
+              <div class="input-with-icon">
+                <i class="fas fa-calendar"></i>
+                <input type="text" id="returnDate" name="return_date" value="{{ return_date or '' }}"
+                  class="form-control date-input" {% if not return_date %}disabled{% endif %} placeholder="YYYY-MM-DD">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="travel_class">Class:</label>
+            <div class="input-with-icon">
+              <i class="fas fa-chair"></i>
+              <select id="travel_class" name="class" class="form-control" required>
+                <option value="economy" {% if travel_class=='economy' %}selected{% endif %}>Economy</option>
+                <option value="premium_economy" {% if travel_class=='premium_economy' %}selected{% endif %}>Premium
+                  Economy</option>
+                <option value="business" {% if travel_class=='business' %}selected{% endif %}>Business</option>
+                <option value="first" {% if travel_class=='first' %}selected{% endif %}>First Class</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid three-column">
+            <div class="form-group">
+              <label class="form-label" for="adults">Adults (12+ yrs):</label>
+              <div class="input-with-icon">
+                <i class="fas fa-user"></i>
+                <input type="number" id="adults" name="adults" min="1" max="9" value="{{ adults or 1 }}"
+                  class="form-control" required>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="children">Children (2-11 yrs):</label>
+              <div class="input-with-icon">
+                <i class="fas fa-child"></i>
+                <input type="number" id="children" name="children" min="0" max="9" value="{{ children or 0 }}"
+                  class="form-control">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="infants">Infants (0-1 yrs):</label>
+              <div class="input-with-icon">
+                <i class="fas fa-baby"></i>
+                <input type="number" id="infants" name="infants" min="0" max="4" value="{{ infants or 0 }}"
+                  class="form-control">
+              </div>
+            </div>
+          </div>
+
+          <div class="apply-btn">
+            <button type="submit" class="btn-primary search-flights-btn">
+              <i class="fas fa-search"></i> Search Flights
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="flights-grid" id="flightsContainer">
+      {% for flight in flights %}
+      <div
+        class="card flight-card {% if flight.travel_class == 'business' or flight.travel_class == 'first' %}premium-card{% endif %}">
+        <div class="flight-info">
+          {% if flight.travel_class == 'business' or flight.travel_class == 'first' %}
+          <div class="premium-label">
+            <i class="fas fa-crown"></i> {{ flight.travel_class|upper }}
+          </div>
+          {% endif %}
+
+          <h3 class="card-title flight-name">
+            <i class="fas fa-plane"></i> {{ flight.airline }}
+            <span class="flight-class-badge">{{ flight.travel_class|capitalize }}</span>
+          </h3>
+
+          <div class="flight-details">
+            <div class="route">
+              <div class="time-point">
+                <span class="time">{{ flight.departure_time }}</span>
+                <span class="place">{{ flight.origin }} ({{ flight.origin_code }})</span>
+                <span class="date">{{ departure_date }}</span>
+              </div>
+              <div class="route-line">
+                <span class="duration-label">{{ flight.duration }}</span>
+                <div class="plane-icon">
+                  <i class="fas fa-plane"></i>
+                  <div class="flight-direction">{{ flight.origin_code }} → {{ flight.destination_code }}</div>
+                </div>
+                <span class="stops">{% if flight.stops == 0 %}Non-stop{% else %}{{ flight.stops }} stop(s){% endif
+                  %}</span>
+              </div>
+              <div class="time-point">
+                <span class="time">{{ flight.arrival_time }}</span>
+                <span class="place">{{ flight.destination }} ({{ flight.destination_code }})</span>
+                <span class="date">{{ arrival_date }}</span>
+              </div>
+            </div>
+            <div class="flight-no">{{ flight.flight_no }}</div>
+          </div>
+
+          <div class="flight-info-details">
+            <span><i class="fas fa-suitcase"></i> Baggage: {{ flight.baggage_allowance }}</span>
+            <span><i class="fas fa-utensils"></i> {% if flight.meal_included %}Meal Included{% else %}No Meal{% endif
+              %}</span>
+            <span><i class="fas fa-wifi"></i> {% if flight.wifi_available %}WiFi Available{% else %}No WiFi{% endif
+              %}</span>
+            <span class="status-tag status-{{ flight.status|lower|replace(' ', '-') }}">
+              <i class="fas fa-circle"></i> {{ flight.status }}
+            </span>
+          </div>
+
+          <div class="flight-pricing">
+            <div class="price-container">
+              <span class="price-badge">₹{{ flight.price }}</span>
+              <span class="price-per-person">per person</span>
+              {% if flight.deal %}
+              <span class="deal-badge"><i class="fas fa-bolt"></i> {{ flight.deal }}</span>
+              {% endif %}
+            </div>
+            <button class="book-btn btn-primary" onclick="showBookingModalForButton(this)"
+              data-flight-no="{{ flight.flight_no }}" data-airline="{{ flight.airline }}"
+              data-origin="{{ flight.origin }}" data-origin-code="{{ flight.origin_code }}"
+              data-destination="{{ flight.destination }}" data-destination-code="{{ flight.destination_code }}"
+              data-departure-time="{{ flight.departure_time }}" data-arrival-time="{{ flight.arrival_time }}"
+              data-travel-class="{{ flight.travel_class }}" data-duration="{{ flight.duration }}"
+              data-price="{{ flight.price }}" data-baggage="{{ flight.baggage_allowance }}"
+              data-seats="{{ flight.seats_available }}" data-stops="{{ flight.stops }}">
+              <i class="fas fa-ticket-alt"></i> Book Now
+            </button>
+            <div class="tooltip">
+              <strong>Flight Details:</strong><br>
+              • Baggage: {{ flight.baggage_allowance }}<br>
+              • Cabin: {{ flight.travel_class|capitalize }}<br>
+              • Seats Available: {{ flight.seats_available }}<br>
+              • Refundable: {% if flight.refundable %}Yes{% else %}No{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+
+      {% if not flights %}
+      <div class="no-flights">
+        <i class="fas fa-plane-slash"></i>
+        <p>No Flights Found for your search criteria.</p>
+        <button onclick="toggleModifyPanel()" class="btn-primary mt-3">
+          <i class="fas fa-search"></i> Modify Search
+        </button>
+      </div>
+      {% endif %}
+    </div>
+
+    <p class="modify-hint">
+      <i class="fas fa-info-circle"></i> Modify your search to see different flight options.
+      Click on Dashboard or My Requests to track your bookings.
+    </p>
+  </div>
+
+  <div class="modal fade" id="booking-modal" tabindex="-1" aria-labelledby="bookingModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="bookingModalLabel">
+            <i class="fas fa-plane"></i> Flight Booking Details
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="booking-summary" id="flightSummary">
+            <h6>Flight Summary</h6>
+            <div class="summary-item">
+              <span>Flight:</span>
+              <span id="booking-flight-details">-</span>
+            </div>
+            <div class="summary-item">
+              <span>Class:</span>
+              <span id="booking-flight-class">-</span>
+            </div>
+            <div class="summary-item">
+              <span>Duration:</span>
+              <span id="booking-flight-duration">-</span>
+            </div>
+            <div class="summary-item">
+              <span>Baggage:</span>
+              <span id="booking-flight-baggage">-</span>
+            </div>
+          </div>
+
+          <h6 class="section-title">
+            <i class="fas fa-users"></i> Traveller Details
+            <span class="badge bg-primary" id="travellerCount">0 travellers</span>
+          </h6>
+          <div id="traveller-details-section" class="traveller-form-container">
+          </div>
+
+          <hr>
+
+          <h6><i class="fas fa-address-card"></i> Contact Details</h6>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label">Email Address *</label>
+              <input type="email" class="form-control" id="email" value="{{ current_user.email|default('') }}"
+                placeholder="your.email@example.com" required>
+              <div class="form-text">Booking confirmation will be sent to this email</div>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label">Mobile Number *</label>
+              <input type="tel" class="form-control" id="mobile" value="{{ current_user.mobile|default('') }}"
+                placeholder="9876543210" pattern="[0-9]{10}" title="10-digit phone number" required>
+              <div class="form-text">For booking updates and notifications</div>
+            </div>
+          </div>
+
+          <hr>
+
+          <h6><i class="fas fa-calendar-alt"></i> Travel Dates & Price Details</h6>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label">Departure Date *</label>
+              <input type="text" class="form-control date-input" id="booking-departure"
+                value="{{ departure_date|default('')|escape }}" required>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label">Return Date</label>
+              <input type="text" class="form-control date-input" id="booking-return"
+                value="{{ return_date|default('')|escape }}" {% if not return_date %}disabled{% endif %}>
+            </div>
+          </div>
+
+          <div id="price-details-section" class="mt-4"></div>
+
+          <div class="seat-selection mt-4" id="seatSelection">
+            <h6><i class="fas fa-chair"></i> Seat Preference (Optional)</h6>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="seatPreference" id="seatWindow" value="window">
+              <label class="form-check-label" for="seatWindow">Window</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="seatPreference" id="seatAisle" value="aisle">
+              <label class="form-check-label" for="seatAisle">Aisle</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="seatPreference" id="seatMiddle" value="middle">
+              <label class="form-check-label" for="seatMiddle">Middle</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="seatPreference" id="seatNoPref" value="no_preference"
+                checked>
+              <label class="form-check-label" for="seatNoPref">No Preference</label>
+            </div>
+          </div>
+
+          <div class="special-requests mt-4">
+            <label class="form-label">Special Requests (Optional)</label>
+            <textarea class="form-control" id="special_requests" rows="2"
+              placeholder="e.g., Wheelchair assistance, dietary requirements, etc."></textarea>
+          </div>
+        </div>
+
+        <div class="modal-terms-section">
+          <div class="form-check">
+            <input type="checkbox" class="form-check-input" id="terms-checkbox" required>
+            <label class="form-check-label" for="terms-checkbox">
+              I agree to the
+              <a href="javascript:void(0)" onclick="showTermsModal()" class="terms-link">Terms & Conditions</a>
+              and understand this is a simulated booking. I confirm that all information provided is accurate.
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            <i class="fas fa-times"></i> Cancel
+          </button>
+          <button type="button" class="btn btn-success" id="continue-booking-btn" onclick="confirmBooking()" disabled>
+            <i class="fas fa-check-circle"></i> Continue to Payment
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="confirm-modal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="confirmModalLabel">
+            <i class="fas fa-plane"></i> Confirm Flight Booking
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="booking-summary">
+            <h6>Booking Summary</h6>
+            <div class="summary-item">
+              <span>Flight:</span>
+              <span id="confirm-flight-details"></span>
+            </div>
+            <div class="summary-item">
+              <span>Travel Class:</span>
+              <span id="confirm-flight-class"></span>
+            </div>
+            <div class="summary-item">
+              <span>Travellers:</span>
+              <span id="confirm-travellers-count"></span>
+            </div>
+            <div class="summary-item">
+              <span>Departure Date:</span>
+              <span id="confirm-departure"></span>
+            </div>
+            <div class="summary-item">
+              <span>Return Date:</span>
+              <span id="confirm-return"></span>
+            </div>
+            <div class="summary-item total">
+              <span>Total Amount:</span>
+              <span id="confirm-flight-price"></span>
+            </div>
+          </div>
+          <div class="alert alert-info mt-3">
+            <i class="fas fa-info-circle"></i>
+            <small>This is a simulated booking. No real payment will be processed.
+              You will receive a booking confirmation with a unique Booking ID.</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            <i class="fas fa-arrow-left"></i> Go Back
+          </button>
+          <button type="button" class="btn btn-success" onclick="initiatePayment()">
+            <i class="fas fa-credit-card"></i> Confirm & Get Booking ID
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="terms-modal" tabindex="-1" aria-labelledby="termsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="termsModalLabel">
+            <i class="fas fa-file-contract"></i> Flight Booking Terms & Conditions
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="terms-content">
+            <div class="alert alert-warning">
+              <i class="fas fa-exclamation-circle"></i>
+              <strong>Important:</strong> This is a demonstration booking system. No real payments are processed and no
+              actual flight reservations are made.
+            </div>
+
+            <h6>1. Simulated Booking System</h6>
+            <p>This platform is for demonstration purposes only. All bookings, payments, and confirmations are simulated
+              and do not result in actual flight reservations.</p>
+
+            <h6>2. Booking Process</h6>
+            <p>Flight bookings are subject to admin approval. You will receive a simulated confirmation once your
+              booking is processed in the system.</p>
+
+            <h6>3. Cancellation & Refund Policy</h6>
+            <p>Free cancellation up to 24 hours before departure. Late cancellations may be subject to charges as per
+              airline policies.</p>
+
+            <h6>4. Check-in & Boarding Procedures</h6>
+            <p>• Check-in opens 3 hours before departure<br>
+              • Check-in closes 45 minutes before departure<br>
+              • Boarding gates close 20 minutes before departure<br>
+              • Photo ID is mandatory for all travellers</p>
+
+            <h6>5. Baggage Allowance</h6>
+            <p>• Economy: 15kg check-in + 7kg cabin baggage<br>
+              • Premium Economy: 20kg check-in + 10kg cabin<br>
+              • Business: 30kg check-in + 12kg cabin<br>
+              • First Class: 40kg check-in + 15kg cabin<br>
+              • Additional baggage charges may apply</p>
+
+            <h6>6. Traveller Responsibility</h6>
+            <p>Passengers are responsible for providing accurate information, arriving at the airport on time, and
+              carrying valid travel documents.</p>
+
+            <h6>7. Privacy & Data Protection</h6>
+            <p>Your personal information is protected and will not be shared with third parties. All data is stored
+              securely in accordance with privacy regulations.</p>
+
+            <h6>8. Flight Changes & Disruptions</h6>
+            <p>In case of flight cancellations or schedule changes, passengers will be notified via email/SMS and
+              alternative arrangements will be made.</p>
+
+            <div class="text-center mt-4">
+              <button type="button" class="btn btn-primary" data-bs-dismiss="modal">
+                <i class="fas fa-check"></i> I Understand & Accept
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    // ---------- Global Variables ----------
+    let currentFlight = null;
+    let currentPrice = null;
+    let currentAdults = {{ adults or 1 }};
+    let currentChildren = {{ children or 0 }};
+    let currentInfants = {{ infants or 0 }};
+    let currentDeparture = '{{ departure_date or '' }}';
+    let currentReturn = '{{ return_date or '' }}';
+    let bookingId = null;
+    let selectedFlightData = null;
+
+    // ---------- Utilities ----------
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.style.cssText = `position:fixed;bottom:20px;right:20px;z-index:10000;background:${type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#007bff'};color:white;padding:12px 20px;border-radius:8px;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.3);opacity:0;transition:opacity .3s`;
+      toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i> ${message}`;
+      document.body.appendChild(toast);
+
+      setTimeout(() => toast.style.opacity = '1', 100);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
+    }
+
+    // ---------- Dynamic Alert Function ----------
+    function showDynamicAlert(message, bookingId) {
+      const container = document.getElementById('dynamicAlertContainer');
+      if (!container) return;
+
+      const alertDiv = document.createElement('div');
+      alertDiv.className = 'alert alert-success alert-dismissible fade show';
+      alertDiv.style.cssText = `
+                position: fixed;
+                top: 80px;
+                right: 20px;
+                z-index: 1050;
+                min-width: 350px;
+                max-width: 500px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                border: none;
+                border-left: 4px solid #28a745;
+                animation: slideInRight 0.3s ease;
+            `;
+
+      alertDiv.innerHTML = `
+                <div class="d-flex align-items-start">
+                    <i class="fas fa-check-circle me-3" style="font-size: 1.2rem; margin-top: 2px;"></i>
+                    <div class="flex-grow-1">
+                        <strong>✓ Booking submitted!</strong> Your flight booking has been confirmed! Booking ID: ${bookingId}.
+                        <div class="mt-2">
+                            <button class="btn btn-sm btn-outline-success me-2" onclick="copyToClipboard('${bookingId}')">
+                                <i class="fas fa-copy"></i> Copy Booking ID
+                            </button>
+                            <a href="/dashboard#requests-section" class="btn btn-sm btn-success">
+                                <i class="fas fa-list-alt"></i> View Request
+                            </a>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close ms-3" data-bs-dismiss="alert" onclick="this.parentElement.parentElement.remove()"></button>
+                </div>
+            `;
+
+      container.appendChild(alertDiv);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      // Auto remove after 10 seconds
+      setTimeout(() => {
+        if (alertDiv.parentElement) {
+          alertDiv.remove();
+        }
+      }, 10000);
+    }
+
+    function toggleModifyPanel() {
+      const panel = document.getElementById("modifyPanel");
+      if (panel) {
+        panel.classList.toggle("active");
+        document.body.classList.toggle("modify-search-open", panel.classList.contains("active"));
+      }
+    }
+
+    function handleTripType() {
+      const roundTrip = document.getElementById("round");
+      const returnDateField = document.getElementById("returnDate");
+      const bookingReturn = document.getElementById("booking-return");
+
+      if (returnDateField) {
+        returnDateField.disabled = !roundTrip.checked;
+        if (!roundTrip.checked) returnDateField.value = "";
+      }
+      if (bookingReturn) {
+        bookingReturn.disabled = !roundTrip.checked;
+        if (!roundTrip.checked) bookingReturn.value = "";
+      }
+
+      // Note: generatePriceDetails() relies on booking-return status/value, so this is crucial.
+      generatePriceDetails();
+    }
+
+    // ---------- Date Pickers Initialization ----------
+    document.addEventListener('DOMContentLoaded', function () {
+      // Re-initialize date pickers for elements in the Modify Panel and Modal
+      const initFlatpickr = () => {
+        const departurePicker = flatpickr("#departure_date", {
+          dateFormat: "Y-m-d",
+          minDate: "today",
+          onChange: function (selectedDates) {
+            const minReturnDate = selectedDates[0] ? new Date(selectedDates[0].getTime() + 86400000) : new Date().fp_incr(1);
+            flatpickr("#returnDate")?.set("minDate", minReturnDate);
+            flatpickr("#booking-return")?.set("minDate", minReturnDate);
+          }
+        });
+
+        flatpickr("#returnDate", {
+          dateFormat: "Y-m-d",
+          minDate: new Date().fp_incr(1)
+        });
+
+        flatpickr("#booking-departure", {
+          dateFormat: "Y-m-d",
+          minDate: "today"
+        });
+
+        flatpickr("#booking-return", {
+          dateFormat: "Y-m-d",
+          minDate: new Date().fp_incr(1),
+          onChange: generatePriceDetails // Trigger price update on return date change in modal
+        });
+      };
+      initFlatpickr();
+
+      // Add event listeners (assuming these IDs exist after JS execution)
+      document.getElementById('booking-departure')?.addEventListener('change', generatePriceDetails);
+      document.getElementById('terms-checkbox')?.addEventListener('change', updateContinueButton);
+
+      // Set initial state of return fields based on Jinja context
+      handleTripType();
+    });
+
+    // ---------- Simplified Traveller Details Generation ----------
+    function generateTravellerFields() {
+      const section = document.getElementById('traveller-details-section');
+      if (!section) return;
+
+      section.innerHTML = '';
+      const adults = currentAdults || 1;
+      const children = currentChildren || 0;
+      const infants = currentInfants || 0;
+      let travellerIndex = 1;
+
+      // Generate adult fields (simplified)
+      for (let i = 1; i <= adults; i++) {
+        const travellerDiv = document.createElement('div');
+        travellerDiv.className = 'traveller-form-section';
+        travellerDiv.innerHTML = `
+                    <h6 class="text-primary">Traveller ${travellerIndex} - Adult</h6>
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Title *</label>
+                            <select class="form-control" id="title-${travellerIndex}" required>
+                                <option value="">Select</option>
+                                <option value="Mr.">Mr.</option>
+                                <option value="Mrs.">Mrs.</option>
+                                <option value="Ms.">Ms.</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-8">
+                            <label class="form-label">Full Name *</label>
+                            <input type="text" class="form-control" id="full-name-${travellerIndex}" 
+                                    placeholder="Full Name" required>
+                        </div>
+                    </div>
+                `;
+        section.appendChild(travellerDiv);
+        travellerIndex++;
+      }
+
+      // Generate children fields (simplified)
+      for (let i = 1; i <= children; i++) {
+        const travellerDiv = document.createElement('div');
+        travellerDiv.className = 'traveller-form-section';
+        travellerDiv.innerHTML = `
+                    <h6 class="text-primary">Traveller ${travellerIndex} - Child (2-11 years)</h6>
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Title *</label>
+                            <select class="form-control" id="title-${travellerIndex}" required>
+                                <option value="">Select</option>
+                                <option value="Master">Master</option>
+                                <option value="Miss">Miss</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-8">
+                            <label class="form-label">Full Name *</label>
+                            <input type="text" class="form-control" id="full-name-${travellerIndex}" 
+                                    placeholder="Full Name" required>
+                        </div>
+                    </div>
+                `;
+        section.appendChild(travellerDiv);
+        travellerIndex++;
+      }
+
+      // Generate infants fields (simplified)
+      for (let i = 1; i <= infants; i++) {
+        const travellerDiv = document.createElement('div');
+        travellerDiv.className = 'traveller-form-section';
+        travellerDiv.innerHTML = `
+                    <h6 class="text-primary">Traveller ${travellerIndex} - Infant (0-1 years)</h6>
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Title *</label>
+                            <select class="form-control" id="title-${travellerIndex}" required>
+                                <option value="">Select</option>
+                                <option value="Master">Master</option>
+                                <option value="Miss">Miss</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-8">
+                            <label class="form-label">Full Name *</label>
+                            <input type="text" class="form-control" id="full-name-${travellerIndex}" 
+                                    placeholder="Full Name" required>
+                        </div>
+                    </div>
+                    <div class="alert alert-warning">
+                        <small><i class="fas fa-info-circle"></i> Infants do not get a separate seat and travel on lap.</small>
+                    </div>
+                `;
+        section.appendChild(travellerDiv);
+        travellerIndex++;
+      }
+
+      // Update traveller count
+      document.getElementById('travellerCount').textContent = `${adults + children + infants} traveller(s)`;
+    }
+
+    // ---------- Price Calculation ----------
+    function calculateTotalAmount() {
+      if (!currentPrice) return 0;
+
+      const adults = currentAdults || 1;
+      const children = currentChildren || 0;
+      const infants = currentInfants || 0;
+      const isRoundTrip = document.getElementById('booking-return')?.value &&
+        !document.getElementById('booking-return')?.disabled;
+
+      const classMultiplier = {
+        'economy': 1,
+        'premium_economy': 1.5,
+        'business': 2.5,
+        'first': 4
+      };
+
+      const travelClass = selectedFlightData?.travel_class || 'economy';
+      const multiplier = classMultiplier[travelClass] || 1;
+
+      // Base price calculation (per traveler)
+      const adultPrice = currentPrice * adults;
+      const childPrice = (currentPrice * 0.7) * children; // 30% discount for children
+      const infantPrice = (currentPrice * 0.1) * infants; // 10% of base price for infants
+
+      let subtotal = adultPrice + childPrice + infantPrice;
+
+      // Apply class multiplier and trip multiplier
+      const total = subtotal * multiplier * (isRoundTrip ? 2 : 1);
+
+      // Apply tax (18% GST/Tax)
+      const finalTotal = total * 1.18;
+
+      return finalTotal;
+    }
+
+    function generatePriceDetails() {
+      const section = document.getElementById('price-details-section');
+      if (!section || !currentPrice) return;
+
+      const adults = currentAdults || 1;
+      const children = currentChildren || 0;
+      const infants = currentInfants || 0;
+      const isRoundTrip = document.getElementById('booking-return')?.value && !document.getElementById('booking-return')?.disabled;
+
+      const classMultiplier = {
+        'economy': 1,
+        'premium_economy': 1.5,
+        'business': 2.5,
+        'first': 4
+      };
+
+      const travelClass = selectedFlightData?.travel_class || 'economy';
+      const multiplier = classMultiplier[travelClass] || 1;
+
+      const adultPrice = currentPrice * adults;
+      const childPrice = (currentPrice * 0.7) * children;
+      const infantPrice = (currentPrice * 0.1) * infants;
+
+      const baseTotal = adultPrice + childPrice + infantPrice;
+      const classTotal = baseTotal * multiplier;
+      const tripTotal = classTotal * (isRoundTrip ? 2 : 1);
+      const tax = tripTotal * 0.18;
+      const finalTotal = tripTotal + tax;
+
+
+      section.innerHTML = `
+                <div class="price-breakdown">
+                    <h6>Price Breakdown</h6>
+                    <div class="price-row">
+                        <span>${adults} Adult${adults > 1 ? 's' : ''} Base Fare</span>
+                        <span>₹${(adultPrice).toFixed(2)}</span>
+                    </div>
+                    ${children > 0 ? `
+                    <div class="price-row">
+                        <span>${children} Child${children > 1 ? 'ren' : ''} Base Fare (30% off)</span>
+                        <span>₹${(childPrice).toFixed(2)}</span>
+                    </div>
+                    ` : ''}
+                    ${infants > 0 ? `
+                    <div class="price-row">
+                        <span>${infants} Infant${infants > 1 ? 's' : ''} Fare (10% base)</span>
+                        <span>₹${(infantPrice).toFixed(2)}</span>
+                    </div>
+                    ` : ''}
+                    <div class="price-row">
+                        <span>Base Subtotal (1x Trip)</span>
+                        <span>₹${(baseTotal).toFixed(2)}</span>
+                    </div>
+                    
+                    <div class="price-row grand-total" style="border-top: 1px solid rgba(255, 255, 255, 0.2)">
+                        <span><strong>Class/Trip Multiplier</strong></span>
+                        <span><strong>x${(multiplier * (isRoundTrip ? 2 : 1)).toFixed(1)}</strong></span>
+                    </div>
+
+                    <div class="price-row">
+                        <span>Subtotal after Class/Trip</span>
+                        <span>₹${(tripTotal).toFixed(2)}</span>
+                    </div>
+
+                    <div class="price-row">
+                        <span>Taxes & Fees (18% GST)</span>
+                        <span>₹${(tax).toFixed(2)}</span>
+                    </div>
+                    <div class="price-row grand-total">
+                        <span><strong>Grand Total</strong></span>
+                        <span><strong>₹${finalTotal.toFixed(2)}</strong></span>
+                    </div>
+                    <div class="text-end mt-2">
+                        <small class="text-muted">All prices in Indian Rupees (₹)</small>
+                    </div>
+                </div>`;
+    }
+
+    function updateContinueButton() {
+      const termsCheckbox = document.getElementById('terms-checkbox');
+      const continueBtn = document.getElementById('continue-booking-btn');
+
+      if (continueBtn) {
+        // Ensure all traveller fields are filled before enabling (simple validation check)
+        const isFormValid = validateTravellerDetails(true); // Pass true to only check, not display errors
+        continueBtn.disabled = !termsCheckbox?.checked || !isFormValid;
+      }
+    }
+
+    // ---------- Booking Modal Functions ----------
+    function showBookingModal(flightData) {
+      try {
+        selectedFlightData = flightData;
+        currentFlight = `${flightData.airline} ${flightData.flight_no}`;
+        currentPrice = parseFloat(flightData.price) || 0;
+
+        // Get passenger counts from the search inputs, which hold the original Jinja values
+        currentAdults = parseInt(document.getElementById('adults')?.value) || 1;
+        currentChildren = parseInt(document.getElementById('children')?.value) || 0;
+        currentInfants = parseInt(document.getElementById('infants')?.value) || 0;
+        currentDeparture = document.getElementById('departure_date')?.value || '';
+        currentReturn = document.getElementById('returnDate')?.value || '';
+
+        if (!currentFlight || !currentPrice) {
+          throw new Error('Invalid flight data');
+        }
+
+        // Update modal title
+        const label = document.getElementById('bookingModalLabel');
+        if (label) {
+          label.innerHTML = `<i class="fas fa-plane"></i> ${currentFlight} - Booking Details`;
+        }
+
+        // Update flight summary
+        document.getElementById('booking-flight-details').textContent =
+          `${flightData.airline} ${flightData.flight_no} (${flightData.origin_code} → ${flightData.destination_code})`;
+        document.getElementById('booking-flight-class').textContent =
+          flightData.travel_class.replace('_', ' ').toUpperCase();
+        document.getElementById('booking-flight-duration').textContent = flightData.duration;
+        document.getElementById('booking-flight-baggage').textContent = flightData.baggage || '20kg';
+
+        // Set dates
+        const bookingDeparture = document.getElementById('booking-departure');
+        if (bookingDeparture) bookingDeparture.value = currentDeparture;
+
+        const bookingReturn = document.getElementById('booking-return');
+        const isRoundTripChecked = document.getElementById('round')?.checked;
+        if (bookingReturn) {
+          bookingReturn.value = currentReturn;
+          bookingReturn.disabled = !isRoundTripChecked;
+        }
+
+        // Set the default seat preference to 'No Preference'
+        document.getElementById('seatNoPref').checked = true;
+
+        // Generate forms and pricing
+        generateTravellerFields();
+        generatePriceDetails();
+        updateContinueButton();
+
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('booking-modal'));
+        modal.show();
+
+      } catch (e) {
+        console.error('Error opening booking modal:', e);
+        showToast('Unable to open booking modal. Please try again.', 'error');
+      }
+    }
+
+    function showBookingModalForButton(btn) {
+      try {
+        const flightData = {
+          flight_no: btn.dataset.flightNo || 'N/A',
+          airline: btn.dataset.airline || 'Unknown Airline',
+          origin: btn.dataset.origin || 'N/A',
+          origin_code: btn.dataset.originCode || 'N/A',
+          destination: btn.dataset.destination || 'N/A',
+          destination_code: btn.dataset.destinationCode || 'N/A',
+          departure_time: btn.dataset.departureTime || '',
+          arrival_time: btn.dataset.arrivalTime || '',
+          travel_class: btn.dataset.travelClass || 'economy',
+          duration: btn.dataset.duration || 'N/A',
+          price: parseFloat(btn.dataset.price) || 0,
+          baggage: btn.dataset.baggage || '20kg',
+          seats_available: btn.dataset.seats || '0',
+          stops: btn.dataset.stops || '0'
+        };
+        showBookingModal(flightData);
+      } catch (e) {
+        console.error('Error showing booking modal:', e);
+        showToast('Error loading flight details.', 'error');
+      }
+    }
+
+    // ---------- Validation Functions ----------
+    function validateTravellerDetails(silent = false) {
+      const adults = currentAdults || 1;
+      const children = currentChildren || 0;
+      const infants = currentInfants || 0;
+      let isValid = true;
+
+      // Validate all traveller fields (simplified)
+      for (let i = 1; i <= adults + children + infants; i++) {
+        const title = document.getElementById(`title-${i}`);
+        const fullName = document.getElementById(`full-name-${i}`);
+
+        [title, fullName].forEach(field => {
+          if (field) {
+            if (!field.value.trim()) {
+              if (!silent) field.classList.add('is-invalid');
+              isValid = false;
+            } else {
+              if (!silent) field.classList.remove('is-invalid');
+            }
+          }
+        });
+      }
+
+      // Validate contact details
+      const emailInput = document.getElementById('email');
+      const mobileInput = document.getElementById('mobile');
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const mobileRegex = /^[0-9]{10}$/;
+
+      if (!emailRegex.test(emailInput.value.trim())) {
+        if (!silent) emailInput.classList.add('is-invalid');
+        isValid = false;
+      } else {
+        if (!silent) emailInput.classList.remove('is-invalid');
+      }
+
+      if (!mobileRegex.test(mobileInput.value.trim())) {
+        if (!silent) mobileInput.classList.add('is-invalid');
+        isValid = false;
+      } else {
+        if (!silent) mobileInput.classList.remove('is-invalid');
+      }
+
+      return isValid;
+    }
+
+    // ---------- Booking Confirmation ----------
+    function confirmBooking() {
+      try {
+        // Validate terms acceptance
+        if (!document.getElementById('terms-checkbox').checked) {
+          showToast('Please accept Terms & Conditions', 'error');
+          return;
+        }
+
+        // Validate all fields (will show visual errors now)
+        if (!validateTravellerDetails()) {
+          showToast('Please fill all required fields correctly', 'error');
+          return;
+        }
+
+        // Calculate final price
+        const adults = currentAdults || 1;
+        const children = currentChildren || 0;
+        const infants = currentInfants || 0;
+        const isRoundTrip = document.getElementById('booking-return')?.value &&
+          !document.getElementById('booking-return')?.disabled;
+
+        const classMultiplier = {
+          'economy': 1,
+          'premium_economy': 1.5,
+          'business': 2.5,
+          'first': 4
+        };
+
+        const travelClass = selectedFlightData?.travel_class || 'economy';
+        const multiplier = classMultiplier[travelClass] || 1;
+
+        const baseTotal = (currentPrice * adults) +
+          (currentPrice * 0.7 * children) +
+          (currentPrice * 0.1 * infants);
+        const tripMultiplier = isRoundTrip ? 2 : 1;
+        const subtotal = baseTotal * multiplier * tripMultiplier;
+        const tax = subtotal * 0.18;
+        const total = subtotal + tax;
+
+        // Update confirmation modal
+        document.getElementById('confirm-flight-details').textContent =
+          `${selectedFlightData.airline} ${selectedFlightData.flight_no}`;
+        document.getElementById('confirm-flight-class').textContent =
+          travelClass.replace('_', ' ').toUpperCase();
+        document.getElementById('confirm-travellers-count').textContent =
+          `${adults + children + infants} passenger(s)`;
+        document.getElementById('confirm-departure').textContent =
+          document.getElementById('booking-departure').value || 'N/A';
+        document.getElementById('confirm-return').textContent =
+          isRoundTrip ? (document.getElementById('booking-return').value || 'N/A') : 'One-way';
+        document.getElementById('confirm-flight-price').textContent = `₹${total.toFixed(2)}`;
+
+        // Close booking modal and show confirmation
+        const bookingModal = bootstrap.Modal.getInstance(document.getElementById('booking-modal'));
+        bookingModal.hide();
+
+        const confirmModal = new bootstrap.Modal(document.getElementById('confirm-modal'));
+        confirmModal.show();
+
+      } catch (error) {
+        console.error('Error confirming booking:', error);
+        showToast('Error processing booking confirmation.', 'error');
+      }
+    }
+
+    // ---------- Payment & Booking Submission (FIXED) ----------
+    function generateBookingId() {
+      const prefix = 'FLIGHT';
+      const timestamp = Date.now().toString().slice(-6);
+      const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+      return `${prefix}-${timestamp}-${random}`;
+    }
+
+    async function initiatePayment() {
+      try {
+        // Generate booking ID
+        bookingId = generateBookingId();
+
+        // Show loading
+        showToast('Processing your booking...', 'info');
+
+        // Close confirmation modal
+        const confirmModal = bootstrap.Modal.getInstance(document.getElementById('confirm-modal'));
+        if (confirmModal) confirmModal.hide();
+
+        // 1. Collect Traveller Details
+        const travellerDetails = [];
+        const totalTravellers = currentAdults + currentChildren + currentInfants;
+        for (let i = 1; i <= totalTravellers; i++) {
+          travellerDetails.push({
+            title: document.getElementById(`title-${i}`).value,
+            full_name: document.getElementById(`full-name-${i}`).value
+          });
+        }
+
+        // 2. Prepare booking data
+        const bookingData = {
+          flight: selectedFlightData,
+          amount: calculateTotalAmount().toFixed(2),
+          departure_date: document.getElementById('booking-departure').value,
+          return_date: document.getElementById('booking-return').value || null,
+          email: document.getElementById('email').value,
+          mobile: document.getElementById('mobile').value,
+          adults: currentAdults,
+          children: currentChildren,
+          infants: currentInfants,
+          travel_class: selectedFlightData.travel_class,
+          origin: selectedFlightData.origin,
+          destination: selectedFlightData.destination,
+          traveller_details: travellerDetails,
+          seat_preference: document.querySelector('input[name="seatPreference"]:checked').value,
+          special_requests: document.getElementById('special_requests').value,
+          booking_id: bookingId
+        };
+        // Debug: log what we're sending
+        console.log("Sending booking data:", JSON.stringify(bookingData, null, 2));
+
+        // 3. Send booking data to server
+        const response = await fetch('/confirm-flight', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(bookingData)
+        });
+
+        const result = await response.json();
+        console.log("Server response:", result);
+
+        // 4. Handle response from Flask
+        if (response.ok && result.success) {
+          bookingId = result.booking_id || bookingId;
+
+          showToast('Flight booking submitted! Check your dashboard.', 'success');
+          showDynamicAlert(`Your flight booking has been confirmed! Booking ID: ${bookingId}. You can track it in your dashboard.`, bookingId);
+
+          // Close all modals
+          const modals = document.querySelectorAll('.modal');
+          modals.forEach(modal => {
+            const bsModal = bootstrap.Modal.getInstance(modal);
+            if (bsModal) bsModal.hide();
+          });
+
+          // Reset form fields
+          document.getElementById('terms-checkbox').checked = false;
+          updateContinueButton();
+
+        } else {
+          showToast(result.error || 'Booking failed on server side. Please try again.', 'error');
+        }
+
+      } catch (error) {
+        console.error('Network or unexpected error:', error);
+        showToast('An unexpected error occurred. Please try again.', 'error');
+      }
+    }
+
+    // Helper function to copy Booking ID
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Booking ID copied to clipboard!', 'success');
+      }).catch(err => {
+        console.error('Failed to copy:', err);
+        showToast('Failed to copy Booking ID', 'error');
+      });
+    }
+
+    function redirectToDashboard() {
+      // ... (existing logic) ...
+      // Redirect to dashboard
+      showToast('Redirecting to Dashboard...', 'info');
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 1000);
+    }
+
+    function redirectToMyRequests() {
+      // ... (existing logic) ...
+      // Redirect to dashboard requests section
+      showToast('Redirecting to My Requests...', 'info');
+      setTimeout(() => {
+        window.location.href = '/dashboard#requests-section';
+      }, 1000);
+    }
+
+    // ---------- Terms & Conditions Modal ----------
+    function showTermsModal() {
+      const termsModal = new bootstrap.Modal(document.getElementById('terms-modal'));
+      termsModal.show();
+    }
+
+    // ---------- Socket.IO Integration ----------
+    const USER_ID = document.body.getAttribute('data-user-id');
+    if (USER_ID) {
+      const socket = io();
+
+      socket.on('connect', () => {
+        socket.emit('join', { user_id: USER_ID });
+      });
+
+      socket.on('flight_booking_approved', (payload) => {
+        if (payload?.booking_id === bookingId) {
+          showToast('Flight booking approved by admin!', 'success');
+        }
+      });
+
+      socket.on('error', (error) => {
+        console.error('Socket error:', error);
+        showToast('Connection error occurred.', 'error');
+      });
+    }
+  </script>
+</body>
+
+</html>

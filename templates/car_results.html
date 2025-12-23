@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Car Rental Results | Find Your Perfect Vehicle</title>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@600;700&family=Playfair+Display:wght@400;600;700&display=swap"
+        rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/car_results.css') }}" />
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+
+<body data-user-id="{{ current_user_id|default('') }}">
+    <div class="container">
+        <nav class="car-navbar">
+            <div class="nav-brand">
+                <h2><i class="fas fa-car"></i> DriveEase Cars</h2>
+            </div>
+            <div class="nav-links">
+                <a href="{{ url_for('dashboard') }}" class="nav-link">
+                    <i class="fas fa-tachometer-alt"></i> Dashboard
+                </a>
+                <a href="{{ url_for('dashboard') }}#requests-section" class="nav-link active">
+                    <i class="fas fa-list-alt"></i> My Requests
+                </a>
+            </div>
+        </nav>
+
+        <div class="page-title">
+            <h1>Available Vehicles</h1>
+            <p>Find the perfect car for your journey</p>
+        </div>
+
+        <div class="search-summary">
+            <div class="search-info">
+                <span class="search-item"><i class="fas fa-route"></i> {{ pickup or 'N/A' }} → {{ dropoff or 'N/A' }}</span>
+                <span class="search-item"><i class="fas fa-calendar-alt"></i> {{ pickup_date or 'N/A' }} at {{ pickup_time or
+                    'N/A' }}</span>
+                <span class="search-item"><i class="fas fa-users"></i> {{ passengers or '1' }} Passenger(s)</span>
+                <span class="search-item"><i class="fas fa-car"></i> {{ car_class or 'Standard' }}</span>
+            </div>
+            <div class="action-buttons">
+                <button onclick="toggleModifyPanel()" class="modify-search-btn btn-outline-primary">
+                    <i class="fas fa-edit"></i> Modify Search
+                </button>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ 'danger' if category == 'danger' else 'warning' if category == 'warning' else 'info' }}"
+            role="alert">
+            {{ message|escape }}
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="overlay" id="overlay" onclick="toggleModifyPanel()"></div>
+        <div class="modify-search-panel-right" id="modifyPanel">
+            <div class="panel-title">
+                <h2>Modify Your Search</h2>
+                <span class="close-search" onclick="toggleModifyPanel()">&times;</span>
+            </div>
+            <div class="modify-form-wrapper">
+                <form action="{{ url_for('submit_car_booking') }}" method="POST" class="modify-form" id="modifyForm">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label" for="pickup">Pickup Location:</label>
+                            <div class="input-with-icon">
+                                <i class="fas fa-map-marker-alt"></i>
+                                <input type="text" id="pickup" name="pickup" value="{{ pickup or '' }}" class="form-control" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="dropoff">Dropoff Location:</label>
+                            <div class="input-with-icon">
+                                <i class="fas fa-flag-checkered"></i>
+                                <input type="text" id="dropoff" name="dropoff" value="{{ dropoff or '' }}" class="form-control" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label" for="pickup_date">Pickup Date:</label>
+                            <div class="input-with-icon">
+                                <i class="fas fa-calendar-plus"></i>
+                                <input type="text" id="pickup_date" name="pickup_date" value="{{ pickup_date or '' }}"
+                                    class="form-control date-input" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="pickup_time">Pickup Time:</label>
+                            <div class="input-with-icon">
+                                <i class="fas fa-clock"></i>
+                                <input type="time" id="pickup_time" name="pickup_time" value="{{ pickup_time or '' }}"
+                                    class="form-control" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label" for="return_date">Return Date:</label>
+                            <div class="input-with-icon">
+                                <i class="fas fa-calendar-minus"></i>
+                                <input type="text" id="return_date" name="return_date" value="{{ return_date or '' }}"
+                                    class="form-control date-input">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="return_time">Return Time:</label>
+                            <div class="input-with-icon">
+                                <i class="fas fa-clock"></i>
+                                <input type="time" id="return_time" name="return_time" value="{{ return_time or '' }}"
+                                    class="form-control">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label" for="car_class">Car Class:</label>
+                            <div class="input-with-icon">
+                                <i class="fas fa-car"></i>
+                                <select id="car_class" name="car_class" class="form-control" required>
+                                    <option value="economy" {% if car_class=='economy' %}selected{% endif %}>Economy</option>
+                                    <option value="standard" {% if car_class=='standard' %}selected{% endif %}>Standard</option>
+                                    <option value="luxury" {% if car_class=='luxury' %}selected{% endif %}>Luxury</option>
+                                    <option value="suv" {% if car_class=='suv' %}selected{% endif %}>SUV</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="passengers">Passengers:</label>
+                            <div class="input-with-icon">
+                                <i class="fas fa-user-friends"></i>
+                                <select id="passengers" name="passengers" class="form-control" required>
+                                    <option value="1" {% if passengers|int==1 %}selected{% endif %}>1 Passenger</option>
+                                    <option value="2" {% if passengers|int==2 %}selected{% endif %}>2 Passengers</option>
+                                    <option value="3" {% if passengers|int==3 %}selected{% endif %}>3 Passengers</option>
+                                    <option value="4" {% if passengers|int==4 %}selected{% endif %}>4 Passengers</option>
+                                    <option value="5" {% if passengers|int==5 %}selected{% endif %}>5 Passengers</option>
+                                    <option value="6" {% if passengers|int==6 %}selected{% endif %}>6 Passengers</option>
+                                    <option value="7" {% if passengers|int==7 %}selected{% endif %}>7 Passengers</option>
+                                    <option value="8" {% if passengers|int==8 %}selected{% endif %}>8 Passengers</option>
+                                    <option value="9" {% if passengers|int==9 %}selected{% endif %}>9 Passengers</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="apply-btn">
+                        <button type="submit" class="btn-primary search-flights-btn">
+                            <i class="fas fa-search"></i> Search Cars
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="cars-grid" id="carsContainer">
+            {% for car in cars %}
+            <div class="card car-card">
+                <div class="car-badge {{ car.cab_class|lower if car.cab_class else 'standard' }}">
+                    {{ car.cab_class|title if car.cab_class else 'Standard' }}
+                </div>
+                <div class="car-info">
+                    <div class="car-image" id="car-image-{{ loop.index }}">
+                        <div class="image-placeholder">
+                            <i class="fas fa-car-side"></i>
+                        </div>
+                    </div>
+
+                    <h3 class="card-title car-name">
+                        <i class="fas fa-car"></i> {{ car.model }}
+                    </h3>
+                    <div class="car-details">
+                        <div class="specs">
+                            <div class="spec-item">
+                                <span class="spec-label">Class:</span>
+                                <span class="spec-value">{{ car.cab_class|title if car.cab_class else 'Standard' }}</span>
+                            </div>
+                            <div class="spec-item">
+                                <span class="spec-label">Seats:</span>
+                                <span class="spec-value">{{ car.seats if car.seats else '4' }}</span>
+                            </div>
+                            <div class="spec-item">
+                                <span class="spec-label">Fuel:</span>
+                                <span class="spec-value">{{ car.fuel_type if car.fuel_type else 'Petrol' }}</span>
+                            </div>
+                            <div class="spec-item">
+                                <span class="spec-label">Transmission:</span>
+                                <span class="spec-value">{{ car.transmission if car.transmission else 'Manual' }}</span>
+                            </div>
+                        </div>
+                        <div class="car-features">
+                            <span class="feature-tag">AC</span>
+                            <span class="feature-tag">GPS</span>
+                            <span class="feature-tag">Music</span>
+                            {% if car.cab_class and car.cab_class|lower == 'luxury' or car.cab_class|lower == 'suv' %}
+                            <span class="feature-tag">Leather</span>
+                            {% endif %}
+                            {% if car.fuel_type and car.fuel_type|lower == 'electric' or car.fuel_type|lower == 'hybrid' %}
+                            <span class="feature-tag electric">
+                                <i class="fas fa-bolt"></i> {{ 'Electric' if car.fuel_type|lower == 'electric' else 'Hybrid' }}
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="car-pricing">
+                        <div class="price-container">
+                            <span class="price-badge">₹{{ car.price if car.price else 'N/A' }}</span>
+                            <span class="price-note">per day</span>
+                            <small class="tax-note">+ taxes & fees</small>
+                        </div>
+                        <button class="book-btn btn-primary" onclick="showBookingModalForButton(this)"
+                            data-car-model="{{ car.model }}" data-car-class="{{ car.cab_class if car.cab_class else 'Standard' }}"
+                            data-seats="{{ car.seats if car.seats else '4' }}"
+                            data-fuel-type="{{ car.fuel_type if car.fuel_type else 'Petrol' }}"
+                            data-transmission="{{ car.transmission if car.transmission else 'Manual' }}"
+                            data-price="{{ car.price if car.price else '0' }}" data-car-id="{{ car.id|default(loop.index) }}">
+                            <i class="fas fa-calendar-plus"></i> Book Now
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% if not cars %}
+            <div class="no-cars">
+                <i class="fas fa-car-crash"></i>
+                <p>No Cars Found. Try modifying your search criteria.</p>
+                <button class="btn btn-primary mt-3" onclick="toggleModifyPanel()">
+                    <i class="fas fa-edit"></i> Modify Search
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="modal fade" id="booking-modal" tabindex="-1" aria-labelledby="bookingModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="bookingModalLabel">
+                        <i class="fas fa-car"></i> Car Rental Booking Details
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="car-summary-section mb-4" id="carSummary">
+                        <h6>Car Summary</h6>
+                        <div class="selected-car-info">
+                            <div class="row align-items-center">
+                                <div class="col-md-8">
+                                    <h5 id="selectedCarModel"></h5>
+                                    <div class="car-specs-small">
+                                        <span class="me-3"><i class="fas fa-users"></i> <span id="selectedCarSeats"></span> Seats</span>
+                                        <span class="me-3"><i class="fas fa-gas-pump"></i> <span id="selectedCarFuel"></span></span>
+                                        <span><i class="fas fa-cog"></i> <span id="selectedCarTransmission"></span></span>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <div class="selected-car-price">
+                                        <span class="price-display" id="selectedCarPrice"></span>
+                                        <small class="text-muted">per day</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h6 class="section-title">
+                        <i class="fas fa-users"></i> Passenger Details
+                        <span class="badge bg-primary" id="passengerCount">0 passengers</span>
+                    </h6>
+                    <div id="passenger-details-section" class="passenger-form-container"></div>
+
+                    <hr>
+
+                    <h6><i class="fas fa-address-book"></i> Contact Details</h6>
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Email Address *</label>
+                            <input type="email" class="form-control" id="email" value="{{ current_user.email|default('') }}" required>
+                            <div class="form-text">Booking confirmation will be sent to this email</div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Mobile Number *</label>
+                            <input type="tel" class="form-control" id="mobile" value="{{ current_user.mobile|default('') }}"
+                                pattern="[0-9]{10}" title="10-digit phone number" required>
+                            <div class="form-text">For booking updates and notifications</div>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <h6><i class="fas fa-calendar-alt"></i> Rental Details</h6>
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Pickup Date *</label>
+                            <input type="text" class="form-control date-input" id="booking-pickup-date"
+                                value="{{ pickup_date|default('')|escape }}" required>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Pickup Time *</label>
+                            <input type="time" class="form-control" id="booking-pickup-time"
+                                value="{{ pickup_time|default('')|escape }}" required>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Return Date</label>
+                            <input type="text" class="form-control date-input" id="booking-return-date"
+                                value="{{ return_date|default('')|escape }}">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Return Time</label>
+                            <input type="time" class="form-control" id="booking-return-time"
+                                value="{{ return_time|default('')|escape }}">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Pickup Location *</label>
+                            <input type="text" class="form-control" id="booking-pickup-location"
+                                value="{{ pickup|default('')|escape }}" required>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Dropoff Location *</label>
+                            <input type="text" class="form-control" id="booking-dropoff-location"
+                                value="{{ dropoff|default('')|escape }}" required>
+                        </div>
+                    </div>
+
+                    <div id="price-details-section" class="mt-4"></div>
+
+                    <div class="additional-options mt-4">
+                        <h6><i class="fas fa-cog"></i> Additional Options (Optional)</h6>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="gps" value="gps">
+                            <label class="form-check-label" for="gps">GPS Navigation</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="insurance" value="insurance">
+                            <label class="form-check-label" for="insurance">Extra Insurance</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="child_seat" value="child_seat">
+                            <label class="form-check-label" for="child_seat">Child Seat</label>
+                        </div>
+                    </div>
+
+                    <div class="special-requests mt-4">
+                        <label class="form-label">Special Instructions (Optional)</label>
+                        <textarea class="form-control" id="special_instructions" rows="2"
+                            placeholder="e.g., Early check-in, special requirements, etc."></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-terms-section">
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="terms-checkbox" required>
+                        <label class="form-check-label" for="terms-checkbox">
+                            I agree to the
+                            <a href="javascript:void(0)" onclick="showTermsModal()" class="terms-link">Terms & Conditions</a>
+                            and understand this is a simulated booking. I confirm that all information provided is accurate.
+                        </label>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="button" class="btn btn-success" id="continue-booking-btn" onclick="confirmBooking()" disabled>
+                        <i class="fas fa-check-circle"></i> Continue to Payment
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="confirm-modal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="confirmModalLabel">
+                        <i class="fas fa-car"></i> Confirm Car Rental Booking
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="booking-summary">
+                        <h6>Booking Summary</h6>
+                        <div class="summary-item">
+                            <span>Vehicle:</span>
+                            <span id="confirm-car-details"></span>
+                        </div>
+                        <div class="summary-item">
+                            <span>Pickup:</span>
+                            <span id="confirm-pickup-location"></span>
+                        </div>
+                        <div class="summary-item">
+                            <span>Dropoff:</span>
+                            <span id="confirm-dropoff-location"></span>
+                        </div>
+                        <div class="summary-item">
+                            <span>Pickup Date & Time:</span>
+                            <span id="confirm-pickup-datetime"></span>
+                        </div>
+                        <div class="summary-item">
+                            <span>Return Date & Time:</span>
+                            <span id="confirm-return-datetime"></span>
+                        </div>
+                        <div class="summary-item">
+                            <span>Duration:</span>
+                            <span id="confirm-duration"></span>
+                        </div>
+                        <div class="summary-item">
+                            <span>Passengers:</span>
+                            <span id="confirm-passengers"></span>
+                        </div>
+                        <div class="summary-item total">
+                            <span>Total Amount:</span>
+                            <span id="confirm-car-price"></span>
+                        </div>
+                    </div>
+                    <div class="alert alert-info mt-3">
+                        <i class="fas fa-info-circle"></i>
+                        <small>This is a simulated booking. No real payment will be processed.
+                            You will receive a booking confirmation with a unique Booking ID.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-arrow-left"></i> Go Back
+                    </button>
+                    <button type="button" class="btn btn-success" onclick="initiatePayment()">
+                        <i class="fas fa-credit-card"></i> Confirm & Get Booking ID
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="terms-modal" tabindex="-1" aria-labelledby="termsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="termsModalLabel">
+                        <i class="fas fa-file-contract"></i> Car Rental Terms & Conditions
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="terms-content">
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <strong>Important:</strong> This is a demonstration booking system. No real payments are processed and no
+                            actual car reservations are made.
+                        </div>
+
+                        <h6>1. Simulated Booking System</h6>
+                        <p>This platform is for demonstration purposes only. All bookings, payments, and confirmations are simulated
+                            and do not result in actual car rentals.</p>
+
+                        <h6>2. Booking Process</h6>
+                        <p>Car rental bookings are subject to admin approval. You will receive a simulated confirmation once your
+                            booking is processed in the system.</p>
+
+                        <h6>3. Cancellation & Refund Policy</h6>
+                        <p>Free cancellation up to 24 hours before pickup. Late cancellations may be subject to charges as per
+                            rental company policies.</p>
+
+                        <h6>4. Driver Requirements</h6>
+                        <p>• Valid driver's license required<br>
+                            • Minimum age: 21 years (25+ for luxury vehicles)<br>
+                            • Credit card may be required for security deposit<br>
+                            • International driver's license required for foreign drivers</p>
+
+                        <h6>5. Fuel Policy</h6>
+                        <p>• Vehicle is provided with a full tank of fuel<br>
+                            • Must be returned with a full tank<br>
+                            • Refueling charges apply if returned without full tank</p>
+
+                        <h6>6. Renter Responsibility</h6>
+                        <p>Renter is responsible for providing accurate information, adhering to traffic laws, and respecting the
+                            rental agreement terms.</p>
+
+                        <h6>7. Privacy & Data Protection</h6>
+                        <p>Your personal information is protected and will not be shared with third parties. All data is stored
+                            securely in accordance with privacy regulations.</p>
+
+                        <h6>8. Insurance Coverage</h6>
+                        <p>• Basic insurance included in rental price<br>
+                            • Additional coverage options available<br>
+                            • Deductible applies in case of damage</p>
+
+                        <div class="text-center mt-4">
+                            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">
+                                <i class="fas fa-check"></i> I Understand & Accept
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p>Processing your request...</p>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // ===== Global Variables =====
+        let currentCar = null;
+        let currentPrice = null;
+        let currentCarClass = null;
+        let currentSeats = null;
+        let currentFuelType = null;
+        let currentTransmission = null;
+        let currentPickupDate = null;
+        let currentPickupTime = null;
+        let currentReturnDate = null;
+        let currentReturnTime = null;
+        let currentPassengers = {{ passengers or 1 }}; // Initialize with value from Flask context
+        let currentPickup = "{{ pickup or '' }}";
+        let currentDropoff = "{{ dropoff or '' }}";
+        let currentCarId = null;
+        let bookingId = null;
+
+        // ===== Toast Notification (Existing) =====
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                z-index: 10000;
+                background: ${type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#007bff'};
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                font-size: 14px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                opacity: 0;
+                transition: opacity .3s;
+            `;
+            toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i> ${message}`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.style.opacity = '1', 100);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // ===== Success Alert Function (Existing) =====
+        function showSuccessAlert(message, bookingId) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.style.cssText = `
+                position: fixed;
+                top: 100px;
+                right: 20px;
+                z-index: 1050;
+                min-width: 350px;
+                max-width: 500px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                border: none;
+                border-left: 4px solid #28a745;
+                animation: slideInRight 0.3s ease;
+            `;
+            
+            alertDiv.innerHTML = `
+                <div class="d-flex align-items-start">
+                    <i class="fas fa-check-circle me-3" style="font-size: 1.2rem; margin-top: 2px;"></i>
+                    <div class="flex-grow-1">
+                        <strong>✓ Booking submitted!</strong> Your car booking has been confirmed! Booking ID: ${bookingId}. You can track it in your dashboard.
+                        <div class="mt-2">
+                            <button class="btn btn-sm btn-outline-success me-2" onclick="copyToClipboard('${bookingId}')">
+                                <i class="fas fa-copy"></i> Copy Booking ID
+                            </button>
+                            <a href="/dashboard#requests-section" class="btn btn-sm btn-success">
+                                <i class="fas fa-list-alt"></i> View Request
+                            </a>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close ms-3" onclick="this.parentElement.parentElement.remove()"></button>
+                </div>
+            `;
+            
+            document.body.appendChild(alertDiv);
+            
+            setTimeout(() => {
+                if (alertDiv.parentElement) {
+                    alertDiv.remove();
+                }
+            }, 10000);
+        }
+
+        // ===== Copy to Clipboard (Existing) =====
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('Booking ID copied to clipboard!', 'success');
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                showToast('Failed to copy Booking ID', 'error');
+            });
+        }
+
+        // ===== Modify Panel Functions (Existing) =====
+        function toggleModifyPanel() {
+            const panel = document.getElementById("modifyPanel");
+            const overlay = document.getElementById("overlay");
+            
+            if (panel) {
+                panel.classList.toggle("active");
+                document.body.classList.toggle("modify-search-open", panel.classList.contains("active"));
+                
+                if (overlay) {
+                    overlay.classList.toggle("active", panel.classList.contains("active"));
+                }
+            }
+        }
+
+        // ===== Loading Overlay (Existing) =====
+        function showLoading(show = true) {
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) {
+                overlay.style.display = show ? 'flex' : 'none';
+            }
+        }
+
+        // ===== Car Image API (Existing) =====
+        async function loadCarImages() {
+            // ... (Your existing loadCarImages logic here) ...
+            const carCards = document.querySelectorAll('.car-card');
+            const carImages = {
+                'Toyota Etios': 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341',
+                'Honda City': 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d',
+                'Toyota Fortuner': 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7',
+                'BMW 5 Series': 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d',
+                'Maruti Eeco': 'https://images.unsplash.com/photo-1580273916550-e323be2ae537',
+                'Hyundai Creta': 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8',
+                'Mini Cooper': 'https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98',
+                'Mercedes E-Class': 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d',
+                'Mahindra XUV700': 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7',
+                'Maruti Alto': 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341',
+                'Range Rover': 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7',
+                'Toyota Innova': 'https://images.unsplash.com/photo-1580273916550-e323be2ae537',
+                'Audi A4': 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d',
+                'Toyota Prius': 'https://images.unsplash.com/photo-1553440569-bcc63803a83d',
+                'Mercedes V-Class': 'https://images.unsplash.com/photo-1580273916550-e323be2ae537'
+            };
+
+            for (let i = 0; i < carCards.length; i++) {
+                const card = carCards[i];
+                const carNameElement = card.querySelector('.car-name');
+                if (!carNameElement) continue;
+
+                const carModel = carNameElement.textContent
+                    .replace(/fas fa-car/g, '')
+                    .replace(/<i.*?<\/i>/g, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+
+                const imageContainer = card.querySelector('.car-image');
+                if (!imageContainer) continue;
+
+                try {
+                    let imageUrl = carImages[carModel] || null;
+                    if (!imageUrl) {
+                        for (const [key, url] of Object.entries(carImages)) {
+                            if (carModel.toLowerCase().includes(key.toLowerCase()) ||
+                                key.toLowerCase().includes(carModel.toLowerCase())) {
+                                imageUrl = url;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!imageUrl) {
+                        const carBadge = card.querySelector('.car-badge');
+                        const carClass = carBadge ? carBadge.textContent.toLowerCase().trim() : '';
+                        if (carClass.includes('luxury')) {
+                            imageUrl = 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d';
+                        } else if (carClass.includes('suv')) {
+                            imageUrl = 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7';
+                        } else if (carModel.toLowerCase().includes('van')) {
+                            imageUrl = 'https://images.unsplash.com/photo-1580273916550-e323be2ae537';
+                        } else {
+                            imageUrl = 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341';
+                        }
+                    }
+
+                    const optimizedUrl = `${imageUrl}?auto=format&fit=crop&w=500&q=80`;
+                    const img = new Image();
+                    img.onload = function () {
+                        imageContainer.innerHTML = `<img src="${optimizedUrl}" alt="${carModel}" class="car-image-loaded" loading="lazy">`;
+                    };
+                    img.onerror = function () {
+                        const placeholder = imageContainer.querySelector('.image-placeholder');
+                        if (placeholder) {
+                            placeholder.innerHTML = `<i class="fas fa-car-side" style="color: var(--primary); font-size: 3rem;"></i>`;
+                        }
+                    };
+                    img.src = optimizedUrl;
+                } catch (error) {
+                    console.log('Error loading image for', carModel, error);
+                }
+            }
+        }
+
+        // ===== Date Pickers Initialization (Existing) =====
+        document.addEventListener('DOMContentLoaded', function () {
+            // Initialize date pickers
+            flatpickr("#pickup_date", {
+                dateFormat: "Y-m-d",
+                minDate: "today"
+            });
+            flatpickr("#return_date", {
+                dateFormat: "Y-m-d",
+                minDate: "today"
+            });
+            flatpickr("#booking-pickup-date", {
+                dateFormat: "Y-m-d",
+                minDate: "today"
+            });
+            flatpickr("#booking-return-date", {
+                dateFormat: "Y-m-d",
+                minDate: "today"
+            });
+
+            // Add event listeners
+            document.getElementById('booking-pickup-date')?.addEventListener('change', generatePriceDetails);
+            document.getElementById('booking-return-date')?.addEventListener('change', generatePriceDetails);
+            document.getElementById('terms-checkbox')?.addEventListener('change', updateContinueButton);
+
+            // Load car images
+            loadCarImages();
+
+            // Add submit handler for modify form
+            document.getElementById('modifyForm')?.addEventListener('submit', function (e) {
+                showLoading(true);
+            });
+        });
+
+        // ===== Passenger Fields Generation (Existing) =====
+        function generatePassengerFields() {
+            const section = document.getElementById('passenger-details-section');
+            if (!section) return;
+            section.innerHTML = '';
+
+            const passengers = currentPassengers || parseInt(document.getElementById('passengers')?.value) || 1;
+            
+            // Update passenger count badge
+            document.getElementById('passengerCount').textContent = `${passengers} passenger(s)`;
+
+            for (let i = 1; i <= passengers; i++) {
+                const passengerDiv = document.createElement('div');
+                passengerDiv.className = 'passenger-form-section';
+                passengerDiv.innerHTML = `
+                    <h6 class="text-primary">
+                        <i class="fas fa-user"></i> Passenger ${i} Details
+                    </h6>
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-3">
+                            <label class="form-label">Title *</label>
+                            <select class="form-control" id="title-${i}" required>
+                                <option value="">Select</option>
+                                <option value="Mr.">Mr.</option>
+                                <option value="Mrs.">Mrs.</option>
+                                <option value="Miss">Miss</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">First Name *</label>
+                            <input type="text" class="form-control" id="first-name-${i}" placeholder="First Name" required>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Last Name *</label>
+                            <input type="text" class="form-control" id="last-name-${i}" placeholder="Last Name" required>
+                        </div>
+                        <div class="col-12 col-md-1">
+                            <label class="form-label">Age *</label>
+                            <input type="number" class="form-control" id="age-${i}" placeholder="Age" min="1" max="120" required>
+                        </div>
+                    </div>
+                `;
+                section.appendChild(passengerDiv);
+            }
+        }
+
+        // ===== Price Calculation (Existing) =====
+        function generatePriceDetails() {
+            const section = document.getElementById('price-details-section');
+            if (!section) return;
+
+            const basePrice = currentPrice || 0;
+            const pickupDate = document.getElementById('booking-pickup-date')?.value;
+            const returnDate = document.getElementById('booking-return-date')?.value;
+
+            let days = 1;
+            if (pickupDate && returnDate) {
+                const pickup = new Date(pickupDate);
+                const dropoff = new Date(returnDate);
+                const diffTime = Math.abs(dropoff - pickup);
+                days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+            }
+
+            const subtotal = basePrice * days;
+            const tax = subtotal * 0.18; // 18% tax
+            const total = subtotal + tax;
+
+            section.innerHTML = `
+                <div class="price-breakdown">
+                    <h6><i class="fas fa-receipt"></i> Price Breakdown</h6>
+                    <div class="price-row">
+                        <span>${days} Day${days > 1 ? 's' : ''} × ₹${basePrice}</span>
+                        <span>₹${subtotal.toFixed(2)}</span>
+                    </div>
+                    <div class="price-row">
+                        <span>Taxes & Fees (18%)</span>
+                        <span>₹${tax.toFixed(2)}</span>
+                    </div>
+                    <div class="price-row grand-total">
+                        <span><strong>Grand Total</strong></span>
+                        <span><strong>₹${total.toFixed(2)}</strong></span>
+                    </div>
+                </div>`;
+        }
+
+        function updateContinueButton() {
+            const checkbox = document.getElementById('terms-checkbox');
+            const continueBtn = document.getElementById('continue-booking-btn');
+            if (checkbox && continueBtn) continueBtn.disabled = !checkbox.checked;
+        }
+
+        // ===== Booking Modal Functions (Existing) =====
+        function showBookingModal(carModel, carClass, seats, fuelType, transmission, price, carId) {
+            try {
+                currentCar = `${carModel}`;
+                currentPrice = parseFloat(price) || 0;
+                currentCarClass = carClass || 'Standard';
+                currentSeats = seats || 4;
+                currentFuelType = fuelType || 'Petrol';
+                currentTransmission = transmission || 'Manual';
+                currentCarId = carId;
+                currentPickupDate = document.getElementById('pickup_date')?.value || '';
+                currentPickupTime = document.getElementById('pickup_time')?.value || '';
+                currentReturnDate = document.getElementById('return_date')?.value || '';
+                currentReturnTime = document.getElementById('return_time')?.value || '';
+                currentPassengers = parseInt(document.getElementById('passengers')?.value) || 1;
+                currentPickup = document.getElementById('pickup')?.value || '';
+                currentDropoff = document.getElementById('dropoff')?.value || '';
+
+                // Update selected car display
+                document.getElementById('selectedCarModel').textContent = currentCar;
+                document.getElementById('selectedCarSeats').textContent = currentSeats || 'Not specified';
+                document.getElementById('selectedCarFuel').textContent = currentFuelType || 'Not specified';
+                document.getElementById('selectedCarTransmission').textContent = currentTransmission || 'Not specified';
+                document.getElementById('selectedCarPrice').textContent = `₹${currentPrice}/day`;
+
+                // Set form values
+                document.getElementById('booking-pickup-date').value = currentPickupDate;
+                document.getElementById('booking-pickup-time').value = currentPickupTime;
+                document.getElementById('booking-return-date').value = currentReturnDate;
+                document.getElementById('booking-return-time').value = currentReturnTime;
+                document.getElementById('booking-pickup-location').value = currentPickup;
+                document.getElementById('booking-dropoff-location').value = currentDropoff;
+
+                generatePassengerFields();
+                generatePriceDetails();
+                updateContinueButton();
+
+                const modal = new bootstrap.Modal(document.getElementById('booking-modal'));
+                modal.show();
+            } catch (e) {
+                console.error(e);
+                showToast('Error: Unable to open booking modal.', 'error');
+            }
+        }
+
+        function showBookingModalForButton(btn) {
+            try {
+                const carModel = btn.dataset.carModel || 'N/A';
+                const carClass = btn.dataset.carClass || 'Standard';
+                const seats = btn.dataset.seats || '4';
+                const fuelType = btn.dataset.fuelType || 'Petrol';
+                const transmission = btn.dataset.transmission || 'Manual';
+                const price = btn.dataset.price ? parseFloat(btn.dataset.price) : 0;
+                const carId = btn.dataset.carId || null;
+                showBookingModal(carModel, carClass, seats, fuelType, transmission, price, carId);
+            } catch (e) {
+                console.error(e);
+                showToast('Error: Unable to open booking modal.', 'error');
+            }
+        }
+
+        // ===== Validation Functions (Existing) =====
+        function validatePassengerDetails() {
+            let isValid = true;
+            const passengers = currentPassengers || 1;
+            
+            for (let i = 1; i <= passengers; i++) {
+                const title = document.getElementById(`title-${i}`);
+                const firstName = document.getElementById(`first-name-${i}`);
+                const lastName = document.getElementById(`last-name-${i}`);
+                const age = document.getElementById(`age-${i}`);
+
+                [title, firstName, lastName, age].forEach(field => {
+                    if (field && !field.value.trim()) {
+                        field.classList.add('is-invalid');
+                        isValid = false;
+                    } else if (field) {
+                        field.classList.remove('is-invalid');
+                    }
+                });
+            }
+
+            // Validate contact details
+            const emailInput = document.getElementById('email');
+            const mobileInput = document.getElementById('mobile');
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            const mobileRegex = /^[0-9]{10}$/;
+
+            if (!emailRegex.test(emailInput.value.trim())) {
+                emailInput.classList.add('is-invalid');
+                isValid = false;
+            } else {
+                emailInput.classList.remove('is-invalid');
+            }
+
+            if (!mobileRegex.test(mobileInput.value.trim())) {
+                mobileInput.classList.add('is-invalid');
+                isValid = false;
+            } else {
+                mobileInput.classList.remove('is-invalid');
+            }
+
+            return isValid;
+        }
+
+        // ===== Confirm Booking (Existing) =====
+        function confirmBooking() {
+            try {
+                // Validate terms acceptance
+                if (!document.getElementById('terms-checkbox').checked) {
+                    showToast('Please accept Terms & Conditions', 'error');
+                    return;
+                }
+
+                // Validate all fields
+                if (!validatePassengerDetails()) {
+                    showToast('Please fill all required fields correctly', 'error');
+                    return;
+                }
+
+                // Calculate final price
+                const basePrice = currentPrice || 0;
+                const pickupDate = document.getElementById('booking-pickup-date')?.value;
+                const returnDate = document.getElementById('booking-return-date')?.value;
+                const pickupLocation = document.getElementById('booking-pickup-location')?.value;
+                const dropoffLocation = document.getElementById('booking-dropoff-location')?.value;
+
+                let days = 1;
+                if (pickupDate && returnDate) {
+                    const pickup = new Date(pickupDate);
+                    const dropoff = new Date(returnDate);
+                    const diffTime = Math.abs(dropoff - pickup);
+                    days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+                }
+
+                const subtotal = basePrice * days;
+                const tax = subtotal * 0.18;
+                const total = subtotal + tax;
+
+                // Update confirmation modal
+                document.getElementById('confirm-car-details').textContent = currentCar;
+                document.getElementById('confirm-car-price').textContent = `₹${total.toFixed(2)}`;
+                document.getElementById('confirm-pickup-location').textContent = pickupLocation || currentPickup;
+                document.getElementById('confirm-dropoff-location').textContent = dropoffLocation || currentDropoff;
+                document.getElementById('confirm-pickup-datetime').textContent =
+                    `${currentPickupDate || 'N/A'} at ${document.getElementById('booking-pickup-time')?.value || 'N/A'}`;
+                document.getElementById('confirm-return-datetime').textContent =
+                    `${currentReturnDate || 'N/A'} at ${document.getElementById('booking-return-time')?.value || 'N/A'}`;
+                document.getElementById('confirm-duration').textContent = `${days} day${days > 1 ? 's' : ''}`;
+                document.getElementById('confirm-passengers').textContent = `${currentPassengers} passenger(s)`;
+
+                // Close booking modal and show confirmation
+                const bookingModal = bootstrap.Modal.getInstance(document.getElementById('booking-modal'));
+                bookingModal.hide();
+
+                const confirmModal = new bootstrap.Modal(document.getElementById('confirm-modal'));
+                confirmModal.show();
+
+            } catch (error) {
+                console.error('Error confirming booking:', error);
+                showToast('Error processing booking confirmation. (Check date formats)', 'error');
+            }
+        }
+
+        // ===== Generate Booking ID (Existing) =====
+        function generateBookingId() {
+            const prefix = 'CAR';
+            const timestamp = Date.now().toString().slice(-6);
+            const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+            return `${prefix}-${timestamp}-${random}`;
+        }
+
+        // ===== FIX: Payment & Booking Submission (Sending data to Flask) =====
+        async function initiatePayment() {
+            try {
+                bookingId = generateBookingId(); // Generate booking ID
+                showLoading(true);
+
+                const confirmModal = bootstrap.Modal.getInstance(document.getElementById('confirm-modal'));
+                confirmModal.hide();
+
+                const passengersArray = [];
+                for (let i = 1; i <= currentPassengers; i++) {
+                    passengersArray.push({
+                        title: document.getElementById(`title-${i}`).value,
+                        first_name: document.getElementById(`first-name-${i}`).value,
+                        last_name: document.getElementById(`last-name-${i}`).value,
+                        age: document.getElementById(`age-${i}`).value,
+                    });
+                }
+
+                const bookingData = {
+                    car_model: currentCar,
+                    cab_class: currentCarClass,
+                    car_id: currentCarId,
+                    total_price: calculateTotalPrice().toFixed(2),
+                    base_price_per_day: currentPrice,
+                    passengers: currentPassengers,
+                    pickup: document.getElementById('booking-pickup-location').value,
+                    dropoff: document.getElementById('booking-dropoff-location').value,
+                    pickup_date: document.getElementById('booking-pickup-date').value,
+                    pickup_time: document.getElementById('booking-pickup-time').value,
+                    return_date: document.getElementById('booking-return-date').value,
+                    return_time: document.getElementById('booking-return-time').value,
+                    email: document.getElementById('email').value,
+                    mobile: document.getElementById('mobile').value,
+                    passengers_details: passengersArray,
+                    special_instructions: document.getElementById('special_instructions').value,
+                    // Add selected options for saving in DB
+                    options: {
+                        gps: document.getElementById('gps').checked,
+                        insurance: document.getElementById('insurance').checked,
+                        child_seat: document.getElementById('child_seat').checked,
+                    },
+                    booking_id: bookingId // Pass generated ID
+                };
+
+                // --- API CALL TO FLASK SERVER ---
+                const response = await fetch('/confirm-car-booking', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(bookingData),
+                });
+
+                const data = await response.json();
+
+                // Handle response from Flask
+                if (response.ok && data.success) {
+                    showLoading(false);
+                    showSuccessAlert(`Your car booking has been confirmed! Booking ID: ${data.booking_id}.`, data.booking_id);
+                    
+                    // Close all modals
+                    const modals = document.querySelectorAll('.modal');
+                    modals.forEach(modal => {
+                        const bsModal = bootstrap.Modal.getInstance(modal);
+                        if (bsModal) bsModal.hide();
+                    });
+                    
+                    // Reset form fields
+                    document.getElementById('terms-checkbox').checked = false;
+                    updateContinueButton();
+                    
+                } else {
+                    showLoading(false);
+                    console.error('Server error:', data.error);
+                    showToast(data.error || 'Booking failed on server side. Please try again.', 'error');
+                }
+            } catch (error) {
+                console.error('Network or unexpected error:', error);
+                showToast('A network error occurred. Please check your connection.', 'error');
+                showLoading(false);
+            }
+        }
+
+
+        function calculateTotalPrice() {
+            const basePrice = currentPrice || 0;
+            const pickupDate = document.getElementById('booking-pickup-date')?.value;
+            const returnDate = document.getElementById('booking-return-date')?.value;
+            
+            let days = 1;
+            if (pickupDate && returnDate) {
+                const pickup = new Date(pickupDate);
+                const dropoff = new Date(returnDate);
+                const diffTime = Math.abs(dropoff - pickup);
+                days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+            }
+            
+            const subtotal = basePrice * days;
+            const tax = subtotal * 0.18;
+            return subtotal + tax;
+        }
+
+        // ===== Terms Modal (Existing) =====
+        function showTermsModal() {
+            const termsModal = new bootstrap.Modal(document.getElementById('terms-modal'));
+            termsModal.show();
+        }
+
+        // ===== Socket.IO Integration (Existing) =====
+        const USER_ID = document.body.getAttribute('data-user-id');
+        if (USER_ID && typeof io !== 'undefined') {
+            const socket = io();
+
+            socket.on('connect', () => {
+                socket.emit('join', { user_id: USER_ID });
+            });
+
+            socket.on('car_booking_approved', (payload) => {
+                if (payload?.booking_id === bookingId) {
+                    showToast('Car booking approved by admin!', 'success');
+                }
+            });
+
+            socket.on('error', (error) => {
+                console.error('Socket error:', error);
+                showToast('Connection error occurred.', 'error');
+            });
+        }
+
+    </script>
+
+</body>
+
+</html>

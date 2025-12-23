@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Technician Results | Find Your Service Expert</title>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@600;700&family=Playfair+Display:wght@400;600;700&display=swap"
+    rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous" />
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css" rel="stylesheet" />
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/technician_results.css') }}" />
+</head>
+
+<body data-user-id="{{ current_user_id|default('') }}">
+  <div class="container">
+    <!-- Navigation Header -->
+    <nav class="technician-navbar">
+      <div class="nav-brand">
+        <h2><i class="fas fa-tools"></i> DriveEase Technicians</h2>
+      </div>
+      <div class="nav-links">
+        <a href="{{ url_for('dashboard') }}" class="nav-link">
+          <i class="fas fa-tachometer-alt"></i> Dashboard
+        </a>
+        <a href="{{ url_for('dashboard') }}#requests-section" class="nav-link active">
+          <i class="fas fa-list-alt"></i> My Requests
+        </a>
+      </div>
+    </nav>
+
+    <!-- Custom Success Alert -->
+    <div id="customSuccessAlert" class="custom-alert-success" style="display: none;">
+      <div class="alert-content">
+        <div class="alert-icon">
+          <i class="fas fa-check-circle"></i>
+        </div>
+        <div class="alert-message">
+          <strong>✓ Booking submitted!</strong>
+          <span id="customSuccessMessage">Your technician service has been booked!</span>
+        </div>
+        <div class="alert-actions">
+          <button class="btn btn-sm btn-light me-2" onclick="copyBookingIdToClipboard()">
+            <i class="fas fa-copy"></i> Copy Booking ID
+          </button>
+          <a href="/dashboard" class="btn btn-sm btn-success">
+            <i class="fas fa-tachometer-alt"></i> Go to Dashboard
+          </a>
+        </div>
+        <button type="button" class="alert-close" onclick="closeCustomAlert()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="page-title">
+      <h1>Available Technicians</h1>
+      <p>Book your verified technician with ease</p>
+    </div>
+
+    <div class="search-summary">
+      <div class="search-info">
+        <span class="search-item"><i class="fas fa-map-marker-alt"></i> {{ location or 'N/A' }}</span>
+        <span class="search-item"><i class="fas fa-calendar-alt"></i> {{ service_date or 'N/A' }} at {{ service_time or
+          'N/A' }}</span>
+        <span class="search-item"><i class="fas fa-tools"></i> {{ service_type or 'N/A' }}</span>
+      </div>
+      <button onclick="toggleModifyPanel()" class="modify-search-btn btn-outline-primary">
+        <i class="fas fa-edit"></i> Modify Search
+      </button>
+    </div>
+
+    <!-- Modify Search Panel (Right Side) -->
+    <div id="modifyPanel" class="modify-search-panel">
+      <div class="panel-title">
+        <h2><i class="fas fa-edit"></i> Modify Your Technician Search</h2>
+        <span class="close-search" onclick="toggleModifyPanel()">&times;</span>
+      </div>
+      <form action="{{ url_for('submit_technician_booking') }}" method="POST" class="modify-form"
+        onsubmit="return validateModifyForm()">
+        <input type="hidden" name="is_initial" value="false" />
+        <div class="form-group">
+          <label class="form-label" for="service_type">Service Type:</label>
+          <select id="service_type" name="service_type" class="form-control" required>
+            <option value="" disabled {% if not service_type %}selected{% endif %}>Select a service</option>
+            <option value="ac_repair" {% if service_type=='ac_repair' %}selected{% endif %}>AC Repair</option>
+            <option value="plumbing" {% if service_type=='plumbing' %}selected{% endif %}>Plumbing</option>
+            <option value="electrical" {% if service_type=='electrical' %}selected{% endif %}>Electrical</option>
+            <option value="carpentry" {% if service_type=='carpentry' %}selected{% endif %}>Carpentry</option>
+            <option value="other" {% if service_type=='other' %}selected{% endif %}>Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="location">Service Location:</label>
+          <input type="text" id="location" name="location" value="{{ location or '' }}" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="service_date">Service Date:</label>
+          <input type="text" id="service_date" name="service_date" value="{{ service_date or '' }}"
+            class="form-control date-input" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="service_time">Service Time:</label>
+          <input type="time" id="service_time" name="service_time" value="{{ service_time or '' }}" class="form-control"
+            required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="urgency">Urgency:</label>
+          <select id="urgency" name="urgency" class="form-control" required>
+            <option value="normal" {% if urgency=='normal' %}selected{% endif %}>Normal (Within 24 hours)</option>
+            <option value="urgent" {% if urgency=='urgent' %}selected{% endif %}>Urgent (Within 4 hours)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="description">Issue Description:</label>
+          <textarea id="description" name="description" class="form-control" rows="4"
+            placeholder="Describe the issue (e.g., AC not cooling, leaking pipe)"
+            required>{{ description or '' }}</textarea>
+        </div>
+        <div class="apply-btn">
+          <button type="submit" class="btn-primary">
+            <span class="btn-text">Apply Changes</span>
+            <span class="loading"></span>
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div class="technicians-grid" id="techniciansContainer">
+      {% for technician in technicians %}
+      <div class="card technician-card {% if loop.first %}premium-card{% endif %}">
+        <div class="technician-info">
+          <h3 class="card-title technician-name"><i class="fas fa-tools"></i> {{ technician.name }}</h3>
+          {% if loop.first %}<span class="premium-label">Premium</span>{% endif %}
+          <div class="technician-details">
+            <div class="service-info">
+              <span class="service-type">{{ technician.service_type }}</span>
+              <span class="experience">Experience: {{ technician.experience }} years</span>
+              <span class="rating">Rating: {{ technician.rating }}/5</span>
+            </div>
+          </div>
+          <div class="technician-info-details">
+            <span>Service: {{ technician.service_type }}</span>
+            <span>Location: {{ technician.location }}</span>
+            <span>Availability: {{ technician.availability }}</span>
+            {% if technician.status %}<span class="status-tag">{{ technician.status }}</span>{% endif %}
+          </div>
+          <div class="technician-pricing">
+            <div class="price-container">
+              <span class="price-badge">₹{{ technician.price }}</span>
+            </div>
+            <button class="book-btn btn-primary" aria-label="Book technician {{ technician.id }}"
+              onclick="showBookingModalForButton(this)" data-technician-id="{{ technician.id }}"
+              data-name="{{ technician.name }}" data-service-type="{{ technician.service_type }}"
+              data-location="{{ technician.location }}" data-service-time="{{ technician.service_time }}"
+              data-price="{{ technician.price }}" data-service-date="{{ service_date|default('') }}"
+              data-description="{{ description|default('') }}" data-urgency="{{ urgency|default('normal') }}">
+              <i class="fas fa-calendar-check"></i> Book Now
+            </button>
+            <input type="checkbox" class="compare-checkbox" data-technician="{{ technician.id }}" />
+            <div class="tooltip">Rating: {{ technician.rating }}/5</div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+      {% if not technicians %}
+      <div class="no-technicians">
+        <i class="fas fa-tools"></i>
+        <p>No Technicians Found. Try modifying your search criteria.</p>
+      </div>
+      {% endif %}
+    </div>
+    <p class="modify-hint" style="text-align: center; color: var(--text-gray); margin-top: 20px;">Modify your search
+      again to see different technician options.</p>
+  </div>
+
+  <!-- Booking Modal -->
+  <div class="modal fade" id="booking-modal" tabindex="-1" aria-labelledby="bookingModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="bookingModalLabel">
+            <i class="fas fa-tools"></i> Technician Booking Details
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <!-- Customer Details Section -->
+          <div id="customer-details-section">
+            <h6>Customer Details</h6>
+            <div class="customer-form-section">
+              <div class="row g-3 mb-3">
+                <div class="col-12 col-md-6">
+                  <label class="form-label">Full Name</label>
+                  <input type="text" class="form-control" id="customer-name" placeholder="Enter full name" required>
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="form-label">Email Address</label>
+                  <input type="email" class="form-control" id="email" placeholder="Enter email address" required>
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="form-label">Mobile Number</label>
+                  <input type="tel" class="form-control" id="mobile" placeholder="Enter 10-digit mobile number"
+                    pattern="[0-9]{10}" title="10-digit phone number" required>
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="form-label">Alternate Phone (Optional)</label>
+                  <input type="tel" class="form-control" id="alternate-phone" placeholder="Optional alternate phone">
+                </div>
+                <div class="col-12">
+                  <label class="form-label">Full Address</label>
+                  <textarea class="form-control" id="customer-address" placeholder="Enter complete service address"
+                    rows="3" required></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <hr />
+
+          <!-- Service Details Section -->
+          <h6>Service Details</h6>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label">Technician Name</label>
+              <input type="text" class="form-control" id="booking-technician-name" readonly>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label">Service Type</label>
+              <input type="text" class="form-control" id="booking-service-type" readonly>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label">Service Location</label>
+              <input type="text" class="form-control" id="booking-location" readonly>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label">Service Time</label>
+              <input type="text" class="form-control" id="booking-service-time" readonly>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label">Service Date</label>
+              <input type="text" class="form-control date-input" id="booking-service-date" readonly />
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label">Urgency Level</label>
+              <input type="text" class="form-control" id="booking-urgency" readonly>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Issue Description</label>
+              <textarea class="form-control" id="booking-description" readonly rows="3"></textarea>
+            </div>
+          </div>
+
+          <hr />
+
+          <!-- Price Details Section -->
+          <div id="price-details-section" class="mt-3">
+            <h6>Price Breakdown</h6>
+            <div class="price-breakdown">
+              <div class="price-row">
+                <span>Base Service Charge:</span>
+                <span id="base-fare">₹0</span>
+              </div>
+              <div class="price-row">
+                <span>Urgency Surcharge:</span>
+                <span id="urgency-surcharge">₹0</span>
+              </div>
+              <div class="price-row">
+                <span>Taxes & Service Fees (18%):</span>
+                <span id="tax-amount">₹0</span>
+              </div>
+              <div class="price-row total">
+                <span><strong>Grand Total:</strong></span>
+                <span><strong id="grand-total">₹0</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Updated Terms & Conditions Section -->
+          <div class="modal-terms-section">
+            <div class="form-check">
+              <input type="checkbox" class="form-check-input" id="terms-checkbox" required>
+              <label class="form-check-label" for="terms-checkbox">
+                I agree to the
+                <a href="javascript:void(0)" onclick="showTermsModal()" class="terms-link">Terms & Conditions</a>
+                and understand this is a simulated booking
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            <i class="fas fa-times"></i> Cancel
+          </button>
+          <button type="button" class="btn btn-success" id="continue-booking-btn" onclick="confirmBooking()" disabled>
+            <i class="fas fa-check-circle"></i> Continue to Payment
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmation Modal -->
+  <div class="modal fade" id="confirm-modal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="confirmModalLabel">
+            <i class="fas fa-tools"></i> Confirm Technician Booking
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="booking-summary">
+            <h6>Booking Summary</h6>
+            <div class="summary-item">
+              <span>Technician:</span>
+              <span id="confirm-technician-name"></span>
+            </div>
+            <div class="summary-item">
+              <span>Service Type:</span>
+              <span id="confirm-service-type"></span>
+            </div>
+            <div class="summary-item">
+              <span>Total Amount:</span>
+              <span id="confirm-technician-price"></span>
+            </div>
+            <div class="summary-item">
+              <span>Service Date:</span>
+              <span id="confirm-service-date"></span>
+            </div>
+            <div class="summary-item">
+              <span>Location:</span>
+              <span id="confirm-location"></span>
+            </div>
+          </div>
+          <div class="alert alert-info mt-3">
+            <i class="fas fa-info-circle"></i>
+            <small>This is a simulated booking. No real payment will be processed.
+              You will receive a booking confirmation with a unique Booking ID.</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            <i class="fas fa-arrow-left"></i> Go Back
+          </button>
+          <button type="button" class="btn btn-success" onclick="initiatePayment()">
+            <i class="fas fa-credit-card"></i> Confirm & Get Booking ID
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terms & Conditions Modal -->
+  <div class="modal fade" id="terms-modal" tabindex="-1" aria-labelledby="termsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="termsModalLabel">
+            <i class="fas fa-file-contract"></i> Technician Service Terms & Conditions
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="terms-content">
+            <div class="alert alert-warning">
+              <i class="fas fa-exclamation-circle"></i>
+              <strong>Important:</strong> This is a demonstration booking system. No real payments are processed and no
+              actual service bookings are made.
+            </div>
+
+            <h6>1. Simulated Booking System</h6>
+            <p>This platform is for demonstration purposes only. All bookings, payments, and confirmations are simulated
+              and do not result in actual service reservations.</p>
+
+            <h6>2. Booking Process</h6>
+            <p>Technician bookings are subject to admin approval. You will receive a simulated confirmation once your
+              booking is processed in the system.</p>
+
+            <h6>3. Cancellation & Refund Policy</h6>
+            <p>Free cancellation up to 4 hours before service time. Late cancellations may be subject to charges.</p>
+
+            <h6>4. Service Timing</h6>
+            <p>• Please be available at the service location during the scheduled time<br>
+              • The technician will wait for a maximum of 15 minutes<br>
+              • Rescheduling requires 2 hours notice</p>
+
+            <h6>5. Additional Charges</h6>
+            <p>• Additional parts or materials may incur extra charges<br>
+              • Extra charges require customer approval before service<br>
+              • All prices include standard service fees</p>
+
+            <h6>6. Customer Responsibility</h6>
+            <p>Customers are responsible for providing accurate information, ensuring access to the service area, and
+              having necessary permissions for the service location.</p>
+
+            <h6>7. Privacy & Data Protection</h6>
+            <p>Your personal information is protected and will not be shared with third parties. All data is stored
+              securely in accordance with privacy regulations.</p>
+
+            <h6>8. Service Quality & Guarantee</h6>
+            <p>All technicians are verified and trained. Services come with a 30-day warranty on labor. Parts may have
+              separate manufacturer warranties.</p>
+
+            <div class="text-center mt-4">
+              <button type="button" class="btn btn-primary" data-bs-dismiss="modal">
+                <i class="fas fa-check"></i> I Understand & Accept
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="technician-data" data-technician-count="{{ technicians|length }}" style="display:none;"></div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+    integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+    crossorigin="anonymous"></script>
+  <!-- Socket.IO client -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+  <script>
+    // ===== Global Variables =====
+    let currentTechnician = null;
+    let currentTechnicianName = null;
+    let currentPrice = null;
+    let currentServiceType = null;
+    let currentLocation = null;
+    let currentServiceDate = null;
+    let currentServiceTime = null;
+    let currentDescription = null;
+    let currentUrgency = null;
+    let bookingId = null;
+    let currentBookingType = 'technician';
+
+    // ===== Custom Success Alert Functions =====
+    function showCustomSuccessAlert(message) {
+      const alert = document.getElementById('customSuccessAlert');
+      const messageSpan = document.getElementById('customSuccessMessage');
+      if (alert && messageSpan) {
+        messageSpan.innerHTML = message;
+        alert.style.display = 'block';
+        
+        // Add animation class
+        setTimeout(() => {
+          alert.classList.add('show');
+        }, 10);
+        
+        // Auto-hide after 15 seconds
+        setTimeout(() => {
+          closeCustomAlert();
+        }, 15000);
+      }
+    }
+
+    function closeCustomAlert() {
+      const alert = document.getElementById('customSuccessAlert');
+      if (alert) {
+        alert.classList.remove('show');
+        setTimeout(() => {
+          alert.style.display = 'none';
+        }, 300);
+      }
+    }
+
+    function copyBookingIdToClipboard() {
+      if (bookingId) {
+        navigator.clipboard.writeText(bookingId).then(() => {
+          showToast('Booking ID copied to clipboard!', 'success');
+        }).catch(err => {
+          console.error('Failed to copy:', err);
+          showToast('Failed to copy Booking ID', 'error');
+        });
+      }
+    }
+
+    // ===== Helpers =====
+    function generateBookingId() {
+      const prefix = 'TECH';
+      const timestamp = Date.now().toString().slice(-6);
+      const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+      return `${prefix}-${timestamp}-${random}`;
+    }
+
+    function showToast(message, type = 'info') {
+      const t = document.createElement('div');
+      t.style.cssText = `position:fixed;bottom:20px;right:20px;z-index:10000;background:${type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#007bff'};color:white;padding:12px 20px;border-radius:8px;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.3);opacity:0;transition:opacity .3s`;
+      t.textContent = message;
+      document.body.appendChild(t);
+      setTimeout(() => t.style.opacity = '1', 100);
+      setTimeout(() => {
+        t.style.opacity = '0';
+        setTimeout(() => t.remove(), 300);
+      }, 3000);
+    }
+
+    // ===== Success Alert =====
+    function showSuccessAlert(message) {
+      const alert = document.getElementById('successAlert');
+      const messageSpan = document.getElementById('successMessage');
+      if (alert && messageSpan) {
+        messageSpan.textContent = message;
+        alert.style.display = 'block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setTimeout(() => {
+          alert.style.display = 'none';
+        }, 10000);
+      }
+    }
+
+    function hideSuccessAlert() {
+      const successAlert = document.getElementById('successAlert');
+      if (successAlert) successAlert.style.display = 'none';
+    }
+
+    // ===== DOM Elements =====
+    const CURRENT_USER_ID = "{{ current_user_id }}";
+
+    // ===== Socket.IO: join user room & wait for approval =====
+    const socket = io({ transports: ['websocket'] });
+
+    socket.on('connect', () => {
+      try {
+        if (CURRENT_USER_ID) {
+          socket.emit('join', { user_id: CURRENT_USER_ID });
+        }
+      } catch (e) {
+        console.error('Socket join error:', e);
+      }
+    });
+
+    socket.on('payment_approved', (data) => {
+      if (!data) return;
+      if (data.service_type === 'Technician Booking') {
+        showToast('Booking approved! Opening your e-ticket...', 'success');
+        if (data.ticket_url) window.open(data.ticket_url, '_blank');
+      }
+    });
+
+    socket.on('payment_confirmed', () => {
+      showToast('Request submitted. Waiting for admin approval...', 'info');
+    });
+
+    // ===== Search Panel Functions =====
+    function toggleModifyPanel() {
+      const panel = document.getElementById("modifyPanel");
+      if (panel) {
+        panel.classList.toggle("active");
+        document.body.classList.toggle("modify-search-open");
+      }
+    }
+
+    function validateModifyForm() {
+      const btn = document.querySelector(".btn-primary");
+      btn.innerHTML = '<span class="loading"></span> Applying...';
+      btn.disabled = true;
+      return true;
+    }
+
+    // ===== Booking Modal Functions =====
+    function showBookingModalForButton(btn) {
+      showBookingModal(
+        btn.dataset.technicianId,
+        btn.dataset.name,
+        btn.dataset.serviceType,
+        btn.dataset.location,
+        btn.dataset.serviceTime,
+        btn.dataset.price,
+        btn.dataset.serviceDate,
+        btn.dataset.description,
+        btn.dataset.urgency
+      );
+    }
+
+    function showBookingModal(technicianId, name, serviceType, location, serviceTime, price, serviceDate, description, urgency) {
+      try {
+        currentTechnician = technicianId;
+        currentTechnicianName = name;
+        currentPrice = parseFloat(price) || 0;
+        currentServiceType = serviceType;
+        currentLocation = location;
+        currentServiceDate = serviceDate;
+        currentServiceTime = serviceTime;
+        currentDescription = description;
+        currentUrgency = urgency;
+
+        // Set modal values
+        document.getElementById('bookingModalLabel').textContent = `Book Technician: ${name}`;
+        document.getElementById('booking-technician-name').value = name;
+        document.getElementById('booking-service-type').value = serviceType;
+        document.getElementById('booking-location').value = location;
+        document.getElementById('booking-service-time').value = serviceTime;
+        document.getElementById('booking-service-date').value = serviceDate;
+        document.getElementById('booking-urgency').value = urgency === 'urgent' ? 'Urgent (Within 4 hours)' : 'Normal (Within 24 hours)';
+        document.getElementById('booking-description').value = description;
+
+        // Calculate and display price
+        calculateAndDisplayPrice();
+
+        // Enable continue button if terms are checked
+        updateContinueButton();
+
+        const modalElement = document.getElementById('booking-modal');
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+      } catch (error) {
+        console.error('Error opening modal:', error);
+        showToast('Error: Unable to open booking modal. Check console for details.', 'error');
+      }
+    }
+
+    function calculateAndDisplayPrice() {
+      try {
+        const basePrice = currentPrice || 0;
+        const urgencyMultiplier = currentUrgency === 'urgent' ? 1.5 : 1;
+        const totalBase = basePrice * urgencyMultiplier;
+        const urgencySurcharge = totalBase - basePrice;
+        const tax = totalBase * 0.18;
+        const grandTotal = totalBase + tax;
+
+        document.getElementById('base-fare').textContent = `₹${basePrice.toFixed(2)}`;
+        document.getElementById('urgency-surcharge').textContent = `₹${urgencySurcharge.toFixed(2)}`;
+        document.getElementById('tax-amount').textContent = `₹${tax.toFixed(2)}`;
+        document.getElementById('grand-total').textContent = `₹${grandTotal.toFixed(2)}`;
+
+        return grandTotal;
+      } catch (error) {
+        console.error('Error calculating price:', error);
+        return 0;
+      }
+    }
+
+    function updateContinueButton() {
+      const continueBtn = document.getElementById('continue-booking-btn');
+      const termsCheckbox = document.getElementById('terms-checkbox');
+      if (continueBtn && termsCheckbox) {
+        continueBtn.disabled = !termsCheckbox.checked;
+      }
+    }
+
+    function confirmBooking() {
+      try {
+        // Validate terms acceptance
+        const termsCheckbox = document.getElementById('terms-checkbox');
+        if (!termsCheckbox || !termsCheckbox.checked) {
+          showToast('Please accept the Terms & Conditions to continue', 'error');
+          return;
+        }
+
+        // Validate form
+        const customerName = document.getElementById('customer-name').value.trim();
+        const email = document.getElementById('email').value.trim();
+        const mobile = document.getElementById('mobile').value.trim();
+        const address = document.getElementById('customer-address').value.trim();
+
+        if (!customerName) {
+          showToast('Please enter customer name');
+          document.getElementById('customer-name').classList.add('is-invalid');
+          return;
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          showToast('Please enter a valid email address');
+          document.getElementById('email').classList.add('is-invalid');
+          return;
+        }
+
+        const mobileRegex = /^[0-9]{10}$/;
+        if (!mobileRegex.test(mobile)) {
+          showToast('Please enter a valid 10-digit mobile number');
+          document.getElementById('mobile').classList.add('is-invalid');
+          return;
+        }
+
+        if (!address) {
+          showToast('Please enter service address');
+          document.getElementById('customer-address').classList.add('is-invalid');
+          return;
+        }
+
+        // Remove invalid classes
+        document.getElementById('customer-name').classList.remove('is-invalid');
+        document.getElementById('email').classList.remove('is-invalid');
+        document.getElementById('mobile').classList.remove('is-invalid');
+        document.getElementById('customer-address').classList.remove('is-invalid');
+
+        // Update confirmation modal with current technician data
+        const confirmTechnicianName = document.getElementById('confirm-technician-name');
+        const confirmServiceType = document.getElementById('confirm-service-type');
+        const confirmTechnicianPrice = document.getElementById('confirm-technician-price');
+        const confirmServiceDate = document.getElementById('confirm-service-date');
+        const confirmLocation = document.getElementById('confirm-location');
+
+        if (confirmTechnicianName) confirmTechnicianName.textContent = currentTechnicianName || 'Unknown Technician';
+        if (confirmServiceType) confirmServiceType.textContent = currentServiceType || '';
+        if (confirmTechnicianPrice) confirmTechnicianPrice.textContent = `₹${calculateTotalPrice().toFixed(2)}`;
+        if (confirmServiceDate) confirmServiceDate.textContent = currentServiceDate || '';
+        if (confirmLocation) confirmLocation.textContent = currentLocation || '';
+
+        // Close booking modal
+        const bookingModal = bootstrap.Modal.getInstance(document.getElementById('booking-modal'));
+        if (bookingModal) {
+          bookingModal.hide();
+        }
+
+        // Show confirmation modal
+        const confirmModal = new bootstrap.Modal(document.getElementById('confirm-modal'));
+        confirmModal.show();
+
+      } catch (error) {
+        console.error('Error confirming booking:', error);
+        showToast('Error: Unable to process booking.', 'error');
+      }
+    }
+
+    function calculateTotalPrice() {
+      try {
+        const basePrice = currentPrice || 0;
+        const urgencyMultiplier = currentUrgency === 'urgent' ? 1.5 : 1;
+        const totalBase = basePrice * urgencyMultiplier;
+        const tax = totalBase * 0.18;
+        return totalBase + tax;
+      } catch {
+        return 0;
+      }
+    }
+
+    // ===== Enhanced fetch with timeout and better error handling =====
+    async function makeBookingRequest(bookingData) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      try {
+        const response = await fetch('/technician/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bookingData),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Server error: ${response.status} - ${errorText}`);
+        }
+
+        return await response.json();
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          throw new Error('Request timeout. Please try again.');
+        }
+        throw error;
+      }
+    }
+
+    function resetBookingState() {
+      currentTechnician = null;
+      currentTechnicianName = null;
+      currentPrice = null;
+      currentServiceType = null;
+      currentLocation = null;
+      currentServiceDate = null;
+      currentServiceTime = null;
+      currentDescription = null;
+      currentUrgency = null;
+
+      const modals = document.querySelectorAll('.modal');
+      modals.forEach(modal => {
+        const bsModal = bootstrap.Modal.getInstance(modal);
+        if (bsModal) bsModal.hide();
+      });
+    }
+
+    // ===== Simulated payment -> create Pending request =====
+    async function initiatePayment() {
+      try {
+        const totalAmount = calculateTotalPrice();
+
+        // Generate booking ID
+        bookingId = generateBookingId();
+
+        // Close confirmation modal
+        const confirmModal = bootstrap.Modal.getInstance(document.getElementById('confirm-modal'));
+        if (confirmModal) {
+          confirmModal.hide();
+        }
+
+        showToast('Submitting booking request...', 'info');
+
+        if (!currentTechnician || !currentPrice) {
+          throw new Error('Missing technician information');
+        }
+
+        const bookingData = {
+          technician_id: currentTechnician,
+          technician_name: currentTechnicianName,
+          service_type: currentServiceType,
+          location: currentLocation,
+          service_date: currentServiceDate,
+          service_time: currentServiceTime,
+          description: currentDescription,
+          urgency: currentUrgency,
+          total_price: totalAmount,
+          email: document.getElementById('email')?.value || '',
+          mobile: document.getElementById('mobile')?.value || '',
+          customer_name: document.getElementById('customer-name')?.value || '',
+          alternate_phone: document.getElementById('alternate-phone')?.value || '',
+          customer_address: document.getElementById('customer-address')?.value || '',
+          booking_id: bookingId
+        };
+
+        console.log('Submitting booking:', bookingData);
+
+        const data = await makeBookingRequest(bookingData);
+
+        if (!data.success) {
+          throw new Error(data.message || 'Booking failed on server');
+        }
+
+        if (data.booking_id) {
+          bookingId = data.booking_id || bookingId;
+          
+          // Show custom success alert
+          showCustomSuccessAlert(`Your technician service has been confirmed! Booking ID: ${bookingId}. You can track it in your dashboard.`);
+          
+          showToast(`Booking submitted successfully! ID: ${bookingId}`, 'success');
+          resetBookingState();
+
+        } else {
+          throw new Error('No booking ID received from server');
+        }
+
+      } catch (error) {
+        console.error('Booking Error:', error);
+        showToast('Error creating booking request. Please try again.', 'error');
+        hideSuccessAlert();
+      }
+    }
+
+    // ===== Terms & Conditions Modal =====
+    function showTermsModal() {
+      const termsModalElement = document.getElementById('terms-modal');
+      if (termsModalElement) {
+        const termsModal = new bootstrap.Modal(termsModalElement);
+        termsModal.show();
+      }
+    }
+
+    // ===== Initialize =====
+    document.addEventListener('DOMContentLoaded', () => {
+      flatpickr(".date-input", {
+        altInput: true,
+        altFormat: "F j, Y",
+        dateFormat: "Y-m-d",
+        minDate: "today"
+      });
+
+      // Add event listener for terms checkbox
+      document.getElementById('terms-checkbox')?.addEventListener('change', function () {
+        updateContinueButton();
+      });
+
+      // Prefill user details from session
+      prefillUserDetails();
+    });
+
+    // Function to prefill user details from session
+    function prefillUserDetails() {
+      // These would ideally come from your Flask session/user data
+      // For now, we'll leave them empty for the user to fill
+      document.getElementById('customer-name').value = '';
+      document.getElementById('email').value = '';
+      document.getElementById('mobile').value = '';
+      document.getElementById('alternate-phone').value = '';
+      document.getElementById('customer-address').value = '';
+    }
+
+    // Close modify panel when clicking outside
+    document.addEventListener('click', function (event) {
+      const panel = document.getElementById("modifyPanel");
+      if (panel && panel.classList.contains("active") && !panel.contains(event.target) &&
+        !event.target.closest('.modify-search-btn')) {
+        panel.classList.remove("active");
+        document.body.classList.remove("modify-search-open");
+      }
+    });
+  </script>
+</body>
+
+</html>

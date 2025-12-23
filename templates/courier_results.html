@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Courier Services | Book Your Delivery</title>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@600;700&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous" />
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/courier_results.css') }}" />
+</head>
+<body>
+
+<div class="container">
+  <div class="page-title">
+    <h1>Available Courier Services</h1>
+    <p>Book your reliable pickup and delivery with ease</p>
+  </div>
+
+  <div class="search-summary">
+    <div class="search-info">
+      <span class="search-item">Pickup: {{ pickup or 'N/A' }} to Dropoff: {{ dropoff or 'N/A' }}</span>
+      <span class="search-item">Date: {{ pickup_date or 'N/A' }} at {{ pickup_time or 'N/A' }}</span>
+      <span class="search-item">Type: {{ courier_type or 'N/A' }} - {{ package_weight or 'N/A' }} kg</span>
+    </div>
+    <button onclick="toggleModifyPanel()" class="modify-search-btn btn-outline-primary">
+      Modify Search
+    </button>
+  </div>
+
+  <!-- Modify Panel -->
+  <div id="modifyPanel" class="modify-search-panel">
+    <div class="panel-title">
+      <h2>Modify Your Search</h2>
+      <span class="close-search" onclick="toggleModifyPanel()">×</span>
+    </div>
+    <form action="{{ url_for('submit_courier_booking') }}" method="POST" class="modify-form" onsubmit="return validateModifyForm()">
+      <input type="hidden" name="is_initial" value="false" />
+      <div class="form-group">
+        <label class="form-label" for="pickup">Pickup Location:</label>
+        <input type="text" id="pickup" name="pickup" value="{{ pickup or '' }}" class="form-control" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="dropoff">Drop-off Location:</label>
+        <input type="text" id="dropoff" name="dropoff" value="{{ dropoff or '' }}" class="form-control" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="pickup_date">Pickup Date:</label>
+        <input type="text" id="pickup_date" name="pickup_date" value="{{ pickup_date or '' }}" class="form-control date-input" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="pickup_time">Pickup Time:</label>
+        <input type="time" id="pickup_time" name="pickup_time" value="{{ pickup_time or '' }}" class="form-control" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="courier_type">Courier Type:</label>
+        <select id="courier_type" name="courier_type" class="form-control" required>
+          <option value="standard" {% if courier_type=='standard' %}selected{% endif %}>Standard (1-2 days)</option>
+          <option value="express" {% if courier_type=='express' %}selected{% endif %}>Express (Same day)</option>
+          <option value="overnight" {% if courier_type=='overnight' %}selected{% endif %}>Overnight</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="package_weight">Package Weight (kg):</label>
+        <input type="number" id="package_weight" name="package_weight" min="0.1" max="50" step="0.1" value="{{ package_weight or '' }}" class="form-control" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="special_requests">Special Requests:</label>
+        <textarea id="special_requests" name="special_requests" class="form-control" rows="2" placeholder="e.g., Fragile item, Insured delivery">{{ special_requests or '' }}</textarea>
+      </div>
+      <div class="apply-btn">
+        <button type="submit" class="btn-primary">
+          <span class="btn-text">Apply Changes</span>
+          <span class="loading"></span>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Courier Grid -->
+  <div class="couriers-grid" id="couriersContainer">
+    {% for courier in couriers %}
+    <div class="card courier-card {% if loop.first %}premium-card{% endif %}">
+      <div class="courier-info">
+        <h3 class="card-title courier-name">Express: {{ courier.name }}</h3>
+        {% if loop.first %}<span class="premium-label">Premium</span>{% endif %}
+        <div class="courier-details">
+          <div class="route">
+            <div class="time-point">
+              <span class="time">{{ courier.pickup_time }}</span>
+              <span class="place">{{ courier.pickup }}</span>
+            </div>
+            <div class="route-line">
+              <span class="duration-label">{{ courier.duration }}</span>
+              <span class="truck-icon">Truck</span>
+            </div>
+            <div class="time-point">
+              <span class="time">{{ courier.dropoff_time }}</span>
+              <span class="place">{{ courier.dropoff }}</span>
+            </div>
+          </div>
+          <div class="courier-no">{{ courier.id }}</div>
+        </div>
+        <div class="courier-info-details">
+          <span>Type: {{ courier.courier_type }}</span>
+          <span>Max Weight: {{ courier.max_weight }} kg</span>
+          <span>Rating: {{ courier.rating }}/5</span>
+          <span>Availability: {{ courier.availability }}</span>
+        </div>
+        <div class="courier-pricing">
+          <div class="price-container">
+            <span class="price-badge">₹{{ courier.price }}</span>
+          </div>
+          <button class="book-btn btn-primary"
+                  onclick="showBookingModalForButton(this)"
+                  data-courier-id="{{ courier.id }}"
+                  data-name="{{ courier.name }}"
+                  data-pickup="{{ courier.pickup }}"
+                  data-dropoff="{{ courier.dropoff }}"
+                  data-pickup-time="{{ courier.pickup_time }}"
+                  data-dropoff-time="{{ courier.dropoff_time }}"
+                  data-courier-type="{{ courier.courier_type }}"
+                  data-duration="{{ courier.duration }}"
+                  data-price="{{ courier.price }}"
+                  data-package-weight="{{ package_weight }}"
+                  data-pickup-date="{{ pickup_date }}">
+            Book Now
+          </button>
+          <input type="checkbox" class="compare-checkbox" data-courier="{{ courier.id }}" />
+          <div class="tooltip">Max Weight: {{ courier.max_weight }} kg</div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+    {% if not couriers %}
+    <div class="no-couriers">
+      <p>No Couriers Found. Try modifying your search criteria.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Booking Modal -->
+<div class="modal fade" id="booking-modal" tabindex="-1" aria-labelledby="bookingModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="bookingModalLabel">Courier Booking</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <h6>Contact Details</h6>
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-control" id="email" readonly />
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label">Mobile</label>
+            <input type="tel" class="form-control" id="mobile" readonly />
+          </div>
+        </div>
+        <hr />
+
+        <!-- ADDED: SENDER DETAILS -->
+        <h6>Sender Details</h6>
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <label class="form-label">Sender Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="sender_name" required />
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label">Sender Phone</label>
+            <input type="tel" class="form-control" id="sender_phone" pattern="[0-9]{10}" />
+          </div>
+          <div class="col-12">
+            <label class="form-label">Sender Full Address <span class="text-danger">*</span></label>
+            <textarea class="form-control" id="sender_address" rows="2" required></textarea>
+          </div>
+        </div>
+        <hr />
+
+        <!-- ADDED: RECEIVER DETAILS -->
+        <h6>Receiver Details</h6>
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <label class="form-label">Receiver Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="receiver_name" required />
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label">Receiver Phone <span class="text-danger">*</span></label>
+            <input type="tel" class="form-control" id="receiver_phone" pattern="[0-9]{10}" required />
+          </div>
+          <div class="col-12">
+            <label class="form-label">Receiver Full Address <span class="text-danger">*</span></label>
+            <textarea class="form-control" id="receiver_address" rows="2" required></textarea>
+          </div>
+        </div>
+        <hr />
+
+        <!-- ADDED: PACKAGE DESCRIPTION -->
+        <h6>Package Details</h6>
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label">Package Description <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="package_description" placeholder="e.g., Electronics, Documents" required />
+          </div>
+        </div>
+        <hr />
+
+        <!-- ORIGINAL: Delivery Details -->
+        <h6>Delivery Details</h6>
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label">Route</label>
+            <p id="courierDetails"></p>
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label">Pickup Date</label>
+            <input type="text" class="form-control" id="booking-pickup-date" readonly />
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label">Weight</label>
+            <input type="number" class="form-control" id="booking-package-weight" readonly />
+          </div>
+        </div>
+        <div id="price-details-section" class="mt-3"></div>
+        <div class="form-check mt-3">
+          <input type="checkbox" class="form-check-input" id="terms-checkbox" required />
+          <label class="form-check-label" for="terms-checkbox">I accept <a href="#" target="_blank">Terms & Conditions</a></label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" id="continue-booking-btn" onclick="confirmBooking()" disabled>Continue</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Modal -->
+<div class="modal fade" id="confirm-modal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmModalLabel">Confirm Booking</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Book <strong id="confirm-courier-name"></strong> for <strong id="confirm-courier-price"></strong>?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-danger" data-bs-dismiss="modal">No</button>
+        <button type="button" class="btn btn-success" onclick="initiateBooking()">Yes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+<script>
+  const CURRENT_USER_ID = "{{ current_user_id }}";
+  const socket = io({ transports: ['websocket'] });
+  socket.on('connect', () => { if (CURRENT_USER_ID) socket.emit('join', { user_id: CURRENT_USER_ID }); });
+  socket.on('payment_approved', data => { if (data?.service_type === 'Courier Booking') { showToast('Approved! Opening ticket...', 'success'); if (data.ticket_url) window.open(data.ticket_url, '_blank'); } });
+  socket.on('payment_confirmed', () => showToast('Request submitted. Waiting for admin...', 'info'));
+
+  let currentCourier, currentName, currentPrice, currentPickup, currentDropoff, currentPickupDate, currentPickupTime, currentCourierType, currentPackageWeight, currentDuration;
+
+  function toggleModifyPanel() { document.getElementById("modifyPanel").classList.toggle("active"); }
+  function validateModifyForm() { const btn = document.querySelector(".btn-primary"); btn.innerHTML = '<span class="loading"></span> Applying...'; btn.disabled = true; return true; }
+
+  function showBookingModalForButton(btn) {
+    showBookingModal(
+      btn.dataset.courierId,
+      btn.dataset.name,
+      btn.dataset.pickup,
+      btn.dataset.dropoff,
+      btn.dataset.pickupTime,
+      btn.dataset.dropoffTime,
+      btn.dataset.courierType,
+      btn.dataset.duration,
+      btn.dataset.price,
+      btn.dataset.packageWeight,
+      btn.dataset.pickupDate
+    );
+  }
+
+  function showBookingModal(courierId, name, pickup, dropoff, pickupTime, dropoffTime, courierType, duration, price, packageWeight, pickupDate) {
+    currentCourier = courierId; currentName = name; currentPrice = parseFloat(price) || 0;
+    currentPickup = pickup; currentDropoff = dropoff; currentPickupDate = pickupDate; currentPickupTime = pickupTime;
+    currentCourierType = courierType; currentPackageWeight = parseFloat(packageWeight) || 1; currentDuration = duration;
+
+    document.getElementById('bookingModalLabel').textContent = `Booking: ${name}`;
+    document.getElementById('courierDetails').textContent = `${pickup} to ${dropoff} | ${pickupDate} ${pickupTime} | ${courierType} | ${duration}`;
+    document.getElementById('booking-pickup-date').value = pickupDate;
+    document.getElementById('booking-package-weight').value = currentPackageWeight;
+
+    // Pre-fill addresses
+    document.getElementById('sender_address').value = pickup;
+    document.getElementById('receiver_address').value = dropoff;
+
+    $.get('/get_user_details').done(d => { $('#email').val(d.email || ''); $('#mobile').val(d.phone || ''); }).fail(() => { $('#email').val('Error'); $('#mobile').val('Error'); });
+    generatePriceDetails();
+
+    const btn = document.getElementById('continue-booking-btn');
+    btn.disabled = !document.getElementById('terms-checkbox').checked;
+    new bootstrap.Modal(document.getElementById('booking-modal')).show();
+  }
+
+  function calculateTotalPrice() {
+    const base = currentPrice * currentPackageWeight;
+    const tax = base * 0.18;
+    return base + tax;
+  }
+
+  function generatePriceDetails() {
+    const total = calculateTotalPrice();
+    const base = currentPrice * currentPackageWeight;
+    const tax = total - base;
+    document.getElementById('price-details-section').innerHTML = `
+      <div class="row">
+        <div class="col-12"><p>Base (₹${currentPrice} × ${currentPackageWeight}kg): ₹${base.toFixed(2)}</p></div>
+        <div class="col-12"><p>Taxes (18%): ₹${tax.toFixed(2)}</p></div>
+        <div class="col-12"><p><strong>Total: ₹${total.toFixed(2)}</strong></p></div>
+      </div>`;
+  }
+
+  function confirmBooking() {
+    const required = ['sender_name', 'sender_address', 'receiver_name', 'receiver_phone', 'receiver_address', 'package_description'];
+    for (let id of required) {
+      const el = document.getElementById(id);
+      if (!el.value.trim()) {
+        showToast(`Please fill ${el.previousElementSibling.textContent}`, 'error');
+        el.focus();
+        return;
+      }
+    }
+    const mobile = $('#mobile').val().trim();
+    if (!/^[0-9]{10}$/.test(mobile)) return showToast('Invalid mobile (10 digits)', 'error');
+
+    $('#confirm-courier-name').text(currentName);
+    $('#confirm-courier-price').text(`₹${calculateTotalPrice().toFixed(2)}`);
+
+    bootstrap.Modal.getInstance(document.getElementById('booking-modal')).hide();
+    new bootstrap.Modal(document.getElementById('confirm-modal')).show();
+  }
+
+  async function initiateBooking() {
+    const payload = {
+      courier_id: currentCourier, name: currentName, pickup: currentPickup, dropoff: currentDropoff,
+      pickup_date: currentPickupDate, pickup_time: currentPickupTime, courier_type: currentCourierType,
+      package_weight: currentPackageWeight, duration: currentDuration, total_price: calculateTotalPrice(),
+      email: $('#email').val(), mobile: $('#mobile').val(),
+
+      // ADDED: Full delivery details
+      sender_name: $('#sender_name').val(),
+      sender_phone: $('#sender_phone').val(),
+      sender_address: $('#sender_address').val(),
+      receiver_name: $('#receiver_name').val(),
+      receiver_phone: $('#receiver_phone').val(),
+      receiver_address: $('#receiver_address').val(),
+      package_description: $('#package_description').val()
+    };
+
+    bootstrap.Modal.getInstance(document.getElementById('confirm-modal')).hide();
+    try {
+      const res = await fetch('/courier/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (res.ok && data.success) showToast(`Booking submitted! ID: ${data.booking_id}`, 'success');
+      else showToast('Failed: ' + (data.error || 'Server error'), 'error');
+    } catch { showToast('Network error.', 'error'); }
+  }
+
+  function showToast(msg, type = 'info') {
+    const t = document.createElement('div');
+    t.style.cssText = `position:fixed;bottom:20px;right:20px;z-index:10000;background:${type==='success'?'#28a745':type==='error'?'#dc3545':'#007bff'};color:white;padding:12px 20px;border-radius:8px;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.3);opacity:0;transition:opacity .3s`;
+    t.textContent = msg; document.body.appendChild(t);
+    setTimeout(() => t.style.opacity = '1', 100);
+    setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 3000);
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    flatpickr(".date-input", { altInput: true, altFormat: "F j, Y", dateFormat: "Y-m-d", minDate: "today" });
+    $('#terms-checkbox').on('change', function() { $('#continue-booking-btn').prop('disabled', !this.checked); });
+  });
+</script>
+</body>
+</html>

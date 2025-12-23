@@ -1,0 +1,158 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Inter:wght@300;400;500&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body, html {
+  height: 100%;
+  font-family: 'Inter', sans-serif;
+  color: #e8e8e8;
+  background: #0f0f0f;
+  overflow: hidden;
+}
+
+.hero {
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  text-align: center;
+  padding: 20px;
+  background: linear-gradient(to bottom, #0f0f0f 0%, #1a1a1a 100%);
+}
+
+.content {
+  z-index: 2;
+  animation: fadeInUp 1.8s ease-out;
+  max-width: 1000px;
+}
+
+/* Fixed: Always one line + responsive */
+.content h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: 4.8rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+  letter-spacing: 1.5px;
+  color: #f5f0e8;
+  white-space: nowrap;        /* Forces single line */
+  line-height: 1.1;
+  display: block;
+}
+
+.content h1 span {
+  color: #d4af37;
+  font-style: italic;
+}
+
+.content p {
+  font-size: 1.35rem;
+  line-height: 1.7;
+  margin-bottom: 40px;
+  color: #b0b0b0;
+  font-weight: 300;
+}
+
+/* Clean, elegant buttons – no flash */
+.buttons a {
+  margin: 0 18px;
+  padding: 14px 38px;
+  border: 1.5px solid #d4af37;
+  color: #d4af37;
+  background: transparent;
+  text-decoration: none;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  font-size: 0.95rem;
+  transition: all 0.45s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.buttons a:hover {
+  background: #d4af37;
+  color: #0f0f0f;
+  transform: translateY(-4px);
+  box-shadow: 0 15px 40px rgba(212, 175, 55, 0.25);
+}
+
+/* Subtle inner glow on hover (no white flash) */
+.buttons a::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width 0.7s ease, height 0.7s ease;
+  pointer-events: none;
+}
+
+.buttons a:hover::after {
+  width: 320px;
+  height: 320px;
+}
+
+/* Elegant subtle background animation */
+.background-animation {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 25% 65%, rgba(212, 175, 55, 0.09) 0%, transparent 50%),
+              radial-gradient(circle at 75% 35%, rgba(212, 175, 55, 0.07) 0%, transparent 50%);
+  animation: gentlePulse 22s ease-in-out infinite;
+  z-index: 1;
+  opacity: 0.7;
+}
+
+@keyframes gentlePulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.03); }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+#typing-text {
+  color: #d4af37;
+  font-style: italic;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 920px) {
+  .content h1 { font-size: 4.2rem; }
+  .buttons a { padding: 13px 32px; margin: 0 14px; }
+}
+
+@media (max-width: 768px) {
+  .content h1 { font-size: 3.6rem; }
+}
+
+@media (max-width: 640px) {
+  .content h1 { font-size: 3.1rem; letter-spacing: 1px; }
+  .content p { font-size: 1.2rem; }
+  .buttons a { 
+    display: block;
+    width: 200px;
+    margin: 12px auto;
+  }
+}

@@ -1,0 +1,205 @@
+
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Ticket TECH-7289 - Concierge Lifestyle</title>
+        <style>
+            body {
+                font-family: 'Arial', sans-serif;
+                margin: 0;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+            }
+            .ticket-container {
+                max-width: 600px;
+                margin: 0 auto;
+                background: white;
+                border-radius: 15px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                overflow: hidden;
+            }
+            .ticket-header {
+                background: linear-gradient(135deg, #2c3e50, #34495e);
+                color: white;
+                padding: 30px;
+                text-align: center;
+                position: relative;
+            }
+            .ticket-header::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 5px;
+                background: linear-gradient(90deg, #00c6ff, #0072ff);
+            }
+            .ticket-header h2 {
+                margin: 0 0 10px 0;
+                font-size: 28px;
+                font-weight: 300;
+            }
+            .ticket-header h3 {
+                margin: 0;
+                font-size: 18px;
+                opacity: 0.9;
+                font-weight: 400;
+            }
+            .booking-id {
+                background: rgba(255,255,255,0.2);
+                padding: 8px 15px;
+                border-radius: 20px;
+                display: inline-block;
+                margin-top: 10px;
+                font-size: 14px;
+            }
+            .ticket-content {
+                padding: 30px;
+            }
+            .section {
+                margin-bottom: 25px;
+                padding: 20px;
+                background: #f8f9fa;
+                border-radius: 10px;
+                border-left: 4px solid #0072ff;
+            }
+            .section h4 {
+                margin: 0 0 15px 0;
+                color: #2c3e50;
+                font-size: 16px;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+            .info-row {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 8px;
+                padding: 5px 0;
+                border-bottom: 1px solid #e9ecef;
+            }
+            .info-label {
+                font-weight: 600;
+                color: #495057;
+            }
+            .info-value {
+                color: #212529;
+                text-align: right;
+            }
+            .otp-section {
+                background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+                color: white;
+                padding: 25px;
+                border-radius: 10px;
+                text-align: center;
+                margin: 25px 0;
+            }
+            .otp-code {
+                font-size: 42px;
+                font-weight: bold;
+                letter-spacing: 8px;
+                margin: 15px 0;
+                font-family: 'Courier New', monospace;
+            }
+            .price-section {
+                background: linear-gradient(135deg, #00b09b, #96c93d);
+                color: white;
+                padding: 20px;
+                border-radius: 10px;
+                text-align: center;
+                margin: 20px 0;
+            }
+            .price {
+                font-size: 36px;
+                font-weight: bold;
+                margin: 10px 0;
+            }
+            .ticket-footer {
+                background: #2c3e50;
+                color: white;
+                padding: 20px;
+                text-align: center;
+                font-size: 12px;
+            }
+            .barcode {
+                text-align: center;
+                margin: 20px 0;
+                padding: 15px;
+                background: white;
+                border-radius: 8px;
+            }
+            .barcode-text {
+                font-family: 'Courier New', monospace;
+                letter-spacing: 3px;
+                font-size: 16px;
+                font-weight: bold;
+                color: #2c3e50;
+            }
+            @media print {
+                body {
+                    background: white !important;
+                }
+                .ticket-container {
+                    box-shadow: none !important;
+                    margin: 0 !important;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="ticket-container">
+            <div class="ticket-header">
+                <h2>CONCIERGE LIFESTYLE</h2>
+                <h3>Technician Booking Ticket</h3>
+                <div class="booking-id">Booking ID: TECH-7289</div>
+            </div>
+            
+            <div class="ticket-content">
+    
+        <div class="price-section">
+            <div>Service Charge</div>
+            <div class="price">₹0</div>
+            <div>Plumbing</div>
+        </div>
+        
+        <div class="section">
+            <h4>Service Details</h4>
+            <div class="info-row">
+                <span class="info-label">Service Type:</span>
+                <span class="info-value">Plumbing</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Location:</span>
+                <span class="info-value">Andheri</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Service Date:</span>
+                <span class="info-value">2025-12-10</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Service Time:</span>
+                <span class="info-value">18:17</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Technician:</span>
+                <span class="info-value">Assigned Technician</span>
+            </div>
+        </div>
+    
+            </div>
+            
+            <div class="barcode">
+                <div class="barcode-text">TECH-7289</div>
+            </div>
+            
+            <div class="ticket-footer">
+                <p>Thank you for choosing Concierge Lifestyle</p>
+                <p>For support: support@conciergelifestyle.com | Phone: +91-9876543210</p>
+                <p>Generated on: 2025-12-04 16:43:20</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    

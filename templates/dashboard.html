@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Dashboard - Concierge Lifestyle</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+
+<body>
+  <!-- Hamburger Menu for Mobile -->
+  <div class="hamburger" onclick="toggleSidebar()">☰</div>
+
+  <!-- Notification Bell Icon -->
+  <div class="notification-bell" onclick="toggleNotifications()">
+    <i class="material-icons">notifications</i>
+    <span id="notification-count" class="notification-count"
+      style="display: {{ 'block' if unread_count > 0 else 'none' }};">
+      {{ unread_count if unread_count <= 99 else '99+' }} </span>
+  </div>
+  <div id="notification-dropdown" class="notification-dropdown">
+    <div class="notification-header">
+      <h3>Notifications</h3>
+      <div class="notification-actions">
+        <button onclick="markAllAsRead()" title="Mark all as read">Mark all as read</button>
+        <button onclick="clearAllNotifications()" title="Clear all" class="clear-all-btn">Clear All</button>
+      </div>
+    </div>
+    <div id="notification-list" class="notification-list">
+      {% if notifications %}
+      {% for notif in notifications %}
+      <div class="notification-item {{ 'unread' if not notif.is_read else '' }}" data-id="{{ notif.id }}">
+        <i class="material-icons">{{ notif.icon }}</i>
+        <div class="notification-content">
+          <p><strong>{{ notif.title }}</strong></p>
+          <p>{{ notif.message }}</p>
+          <span class="notification-time">{{ notif.time_ago }}</span>
+        </div>
+        <button class="delete-notification-btn" onclick="deleteNotification({{ notif.id }})" title="Delete">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="notification-item empty">
+        <div class="notification-content">
+          <p>No notifications yet.</p>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="dashboard-container">
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+      <h2 class="logo">Concierge</h2>
+      <ul class="sidebar-menu">
+        <li><a href="javascript:void(0)" onclick="showSection('welcome-section'); setActive(this)" class="active">🏠
+            Home</a></li>
+        <li><a href="javascript:void(0)" onclick="showSection('requests-section'); setActive(this)">📅 My Requests</a>
+        </li>
+        <li><a href="javascript:void(0)" onclick="showSection('services-section'); setActive(this)">💼 Services</a>
+        </li>
+        <li><a href="javascript:void(0)" onclick="showSection('contact-section'); setActive(this)">📩 My Contact</a>
+        </li>
+      </ul>
+
+      <!-- Logout Button at Bottom -->
+      <div class="sidebar-footer">
+        <a href="/logout" class="logout-btn">🔓 Logout</a>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main">
+      <!-- Welcome Section -->
+      <div id="welcome-section" class="main-content-section active">
+        <div class="welcome-wrapper">
+          <div class="welcome-section">
+            <h2 class="fade-in">Welcome back, {{ user }} 👋</h2>
+            <p class="fade-in">How can I assist you today?</p>
+            <p class="fade-in">Use the left menu to navigate.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- My Requests Section -->
+      <div id="requests-section" class="main-content-section">
+        <div class="requests-container">
+          <h2>My Requests</h2>
+          <div class="requests-controls">
+            <button class="btn refresh-btn" onclick="refreshRequests()">
+              <i class="material-icons">refresh</i> Refresh
+            </button>
+          </div>
+          <div id="requests-table-container">
+            {% if requests %}
+            <div class="requests-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Booking ID</th>
+                    <th>Service</th>
+                    <th>Details</th>
+                    <th>Payment Status</th>
+                    <th>Admin Confirmation</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for request in requests %}
+                  <tr data-request-id="{{ request.id }}">
+                    <td>{{ request.booking_id }}</td>
+                    <td>{{ request.service_type }}</td>
+                    <td>
+                      {% if request.service_type == 'Hotel Booking' %}
+                      {{ request.details.hotel_name }}<br>
+                      Check-in: {{ request.details.checkin }}<br>
+                      Check-out: {{ request.details.checkout }}<br>
+                      Rooms: {{ request.details.rooms }}<br>
+                      Guests: {{ request.details.guests }}
+                      {% elif request.service_type == 'Flight Booking' %}
+                      {% if request.details.airline %}
+                      {{ request.details.airline }}
+                      {% if request.details.flight_no and request.details.flight_no != 'N/A' %}
+                      ({{ request.details.flight_no }})
+                      {% elif request.details.flight and request.details.flight.flight_no %}
+                      ({{ request.details.flight.flight_no }})
+                      {% else %}
+                      (Flight Number: Pending)
+                      {% endif %}
+                      <br>
+                      {{ request.details.origin or request.details.flight.origin or 'N/A' }} to
+                      {{ request.details.destination or request.details.flight.destination or 'N/A' }}<br>
+                      Departure: {{ request.details.departure_time or request.details.flight.departure_time or 'N/A'
+                      }}<br>
+                      Arrival: {{ request.details.arrival_time or request.details.flight.arrival_time or 'N/A' }}<br>
+                      Class: {{ request.details.travel_class or request.details.flight.travel_class or 'N/A' }}
+                      {% else %}
+                      Flight Booking #{{ request.booking_id }}
+                      {% endif %}
+                      {% elif request.service_type == 'Car Booking' %}
+                      {{ request.details.cab_class or 'N/A' }}<br>
+                      Pickup: {{ request.details.pickup or 'N/A' }} to {{ request.details.dropoff or 'N/A' }}<br>
+                      Pickup Time: {{ request.details.pickup_time or 'N/A' }}<br>
+                      Dropoff Time: {{ request.details.dropoff_time or 'N/A' }}<br>
+                      Passengers: {{ request.details.passengers or 'N/A' }}
+                      {% elif request.service_type == 'Courier Booking' %}
+                      Pickup: {{ request.details.pickup_location or request.details.pickup or 'N/A' }} to {{
+                      request.details.dropoff_location or request.details.dropoff or 'N/A' }}<br>
+                      Pickup Date: {{ request.details.pickup_date or 'N/A' }}<br>
+                      Pickup Time: {{ request.details.pickup_time or 'N/A' }}<br>
+                      Package Weight: {{ request.details.package_weight_kg or request.details.weight or 'N/A' }}
+                      kg<br>
+                      {% elif request.service_type == 'Technician Booking' %}
+                      Service: {{ request.details.service_type or 'N/A' }}<br>
+                      Location: {{ request.details.location or 'N/A' }}<br>
+                      Date: {{ request.details.service_date or 'N/A' }}<br>
+                      Time: {{ request.details.service_time or 'N/A' }}<br>
+                      Description: {{ request.details.description or 'No details provided' }}
+                      {% else %}
+                      {{ request.details.description or 'No details provided' }}
+                      {% endif %}
+                    </td>
+                    <td class="{{ 'confirmed' if request.payment_status == 'Confirmed' else 'pending' }}">
+                      {{ request.payment_status }}
+                    </td>
+                    <td>{{ request.admin_confirmation or 'Pending' }}</td>
+                    <td>
+                      {% if request.payment_status == 'Confirmed' %}
+                      {% if request.details and request.details.ticket_pdf_url %}
+                      <button class="btn btn-success download-btn"
+                        onclick="downloadPDFTicket('{{ request.details.ticket_pdf_url }}')">
+                        <i class="material-icons">picture_as_pdf</i> PDF Ticket
+                      </button>
+                      {% else %}
+                      <!-- Show Request Ticket button for all confirmed bookings without PDF -->
+                      <button class="btn btn-warning download-btn"
+                        onclick="requestTicket('{{ request.booking_id }}', '{{ request.service_type }}')">
+                        <i class="material-icons">confirmation_number</i> Request Ticket
+                      </button>
+                      {% endif %}
+                      {% else %}
+                      <span class="no-action">No action available</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            <p class="no-requests">No requests found. Book a service to see it here!</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Services Section -->
+      <div id="services-section" class="main-content-section">
+        <div class="card-grid">
+          <div class="card" onclick="openModal('hotel')">
+            <h3>🏨 Hotel Booking</h3>
+            <p>Luxury, Budget, International</p>
+          </div>
+          <div class="card" onclick="openModal('travel')">
+            <h3>🛫 Flight Booking & Visa</h3>
+            <p>Personalized itinerary with visa, flight, hotel</p>
+          </div>
+          <div class="card" onclick="openModal('car')">
+            <h3>🚗 Luxury Cabs</h3>
+            <p>BMW, Audi, Limousine Cabs</p>
+          </div>
+          <div class="card" onclick="openModal('event')">
+            <h3>🛠️ On-Demand Handyman / Technician</h3>
+            <p>AC repair, plumber, electrician — quick & verified</p>
+          </div>
+          <div class="card" onclick="openModal('courier')">
+            <h3>📦 Courier & Delivery</h3>
+            <p>Pickup-drop anything in your city</p>
+          </div>
+        </div>
+
+        <!-- Hotel Booking Modal -->
+        <div id="hotel-modal" class="modal">
+          <div class="modal-content">
+            <span class="close" onclick="closeModal('hotel')">&times;</span>
+            <h2>🏨 Book Your Stay</h2>
+            <form action="{{ url_for('submit_hotel_booking') }}" method="POST" class="booking-form">
+              <div class="field">
+                <label><i class="material-icons">location_city</i> Destination</label>
+                <input type="text" name="destination" placeholder="Enter City" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">calendar_today</i> Check-In</label>
+                <input type="text" name="checkin" class="date-input" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">calendar_today</i> Check-Out</label>
+                <input type="text" name="checkout" class="date-input" required>
+              </div>
+              <div class="field guests">
+                <label><i class="material-icons">group</i> Room & Guests</label>
+                <div class="guests-container">
+                  <div class="counter">
+                    <label>Rooms</label>
+                    <div class="count-control">
+                      <button type="button" onclick="updateCount('room', -1)">−</button>
+                      <input type="number" name="rooms" id="roomCount" value="1" min="1" readonly>
+                      <button type="button" onclick="updateCount('room', 1)">+</button>
+                    </div>
+                  </div>
+                  <div class="counter">
+                    <label>Guests</label>
+                    <div class="count-control">
+                      <button type="button" onclick="updateCount('guests', -1)">−</button>
+                      <input type="number" name="guests" id="guestCount" value="1" min="1" readonly>
+                      <button type="button" onclick="updateCount('guests', 1)">+</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <button type="submit" class="btn" data-type="search" onclick="showLoading(this)">SEARCH HOTELS</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Travel Modal -->
+        <div id="travel-modal" class="modal">
+          <div class="modal-content">
+            <span class="close" onclick="closeModal('travel')">&times;</span>
+            <h2>🛫 Book Your Flight</h2>
+            <form action="{{ url_for('submit_travel_booking') }}" method="POST" id="travel-booking-form">
+              <div class="field">
+                <label><i class="material-icons">flight_takeoff</i> From</label>
+                <input type="text" name="origin" placeholder="Enter Origin City" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">flight_land</i> To</label>
+                <input type="text" name="destination" placeholder="Enter Destination City" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">calendar_today</i> Departure Date</label>
+                <input type="text" name="departure_date" class="date-input" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">calendar_today</i> Return Date</label>
+                <input type="text" name="return_date" class="date-input">
+              </div>
+              <div class="field guests">
+                <label><i class="material-icons">group</i> Passengers</label>
+                <div class="guests-container">
+                  <div class="counter">
+                    <label>Adults</label>
+                    <div class="count-control">
+                      <button type="button" onclick="updateCount('adults', -1)">−</button>
+                      <input type="number" name="adults" id="adultCount" value="1" min="1" readonly>
+                      <button type="button" onclick="updateCount('adults', 1)">+</button>
+                    </div>
+                  </div>
+                  <div class="counter">
+                    <label>Children</label>
+                    <div class="count-control">
+                      <button type="button" onclick="updateCount('children', -1)">−</button>
+                      <input type="number" name="children" id="childCount" value="0" min="0" readonly>
+                      <button type="button" onclick="updateCount('children', 1)">+</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">flight_class</i> Travel Class</label>
+                <select name="class" class="select-input">
+                  <option value="economy">Economy</option>
+                  <option value="premium_economy">Premium Economy</option>
+                  <option value="business">Business</option>
+                  <option value="first">First Class</option>
+                </select>
+              </div>
+              <button type="submit" class="btn" data-type="search" onclick="showLoading(this)">SEARCH FLIGHTS</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Car Booking Modal -->
+        <div id="car-modal" class="modal">
+          <div class="modal-content">
+            <span class="close" onclick="closeModal('car')">&times;</span>
+            <h2>🚗 Book Your Luxury Cab</h2>
+            <form action="{{ url_for('submit_car_booking') }}" method="POST" class="booking-form">
+              <div class="field">
+                <label><i class="material-icons">pin_drop</i> Pickup Location</label>
+                <input type="text" name="pickup" placeholder="Enter Pickup Location" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">location_on</i> Drop-off Location</label>
+                <input type="text" name="dropoff" placeholder="Enter Drop-off Location" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">calendar_today</i> Pickup Date</label>
+                <input type="text" name="pickup_date" class="date-input" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">access_time</i> Pickup Time</label>
+                <input type="time" name="pickup_time" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">calendar_today</i> Return Date (Optional)</label>
+                <input type="text" name="return_date" class="date-input">
+              </div>
+              <div class="field">
+                <label><i class="material-icons">access_time</i> Return Time (Optional)</label>
+                <input type="time" name="return_time">
+              </div>
+              <div class="field guests">
+                <label><i class="material-icons">group</i> Passengers</label>
+                <div class="guests-container">
+                  <div class="counter">
+                    <label>Persons</label>
+                    <div class="count-control">
+                      <button type="button" onclick="updateCount('passengers', -1)">−</button>
+                      <input type="number" name="passengers" id="passengerCount" value="1" min="1" max="9" readonly>
+                      <button type="button" onclick="updateCount('passengers', 1)">+</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">local_taxi</i> Cab Class</label>
+                <select name="cab_class" class="select-input" required>
+                  <option value="standard">Standard</option>
+                  <option value="luxury">Luxury</option>
+                  <option value="suv">SUV</option>
+                </select>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">note_add</i> Special Requests (Optional)</label>
+                <textarea name="special_requests" rows="2" class="textarea-input"
+                  placeholder="e.g., Child seat, Extra luggage"></textarea>
+              </div>
+              <button type="submit" class="btn" data-type="search" onclick="showLoading(this)">BOOK CAB</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Technician Booking Modal -->
+        <div id="event-modal" class="modal">
+          <div class="modal-content">
+            <span class="close" onclick="closeModal('event')">&times;</span>
+            <h2>🛠️ Book Your Technician</h2>
+            <form action="{{ url_for('submit_technician_booking') }}" method="POST" class="booking-form">
+              <input type="hidden" name="is_initial" value="true">
+              <div class="field">
+                <label><i class="material-icons">build</i> Service Type</label>
+                <select name="service_type" class="select-input" required>
+                  <option value="" disabled selected>Select a service</option>
+                  <option value="ac_repair">AC Repair</option>
+                  <option value="plumbing">Plumbing</option>
+                  <option value="electrical">Electrical</option>
+                  <option value="carpentry">Carpentry</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">pin_drop</i> Service Location</label>
+                <input type="text" name="location" placeholder="Enter service address" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">calendar_today</i> Preferred Date</label>
+                <input type="text" name="service_date" class="date-input" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">access_time</i> Preferred Time</label>
+                <input type="time" name="service_time" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">priority_high</i> Urgency</label>
+                <select name="urgency" class="select-input" required>
+                  <option value="normal">Normal (Within 24 hours)</option>
+                  <option value="urgent">Urgent (Within 4 hours)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">description</i> Issue Description</label>
+                <textarea name="description" rows="4" class="textarea-input"
+                  placeholder="Describe the issue (e.g., AC not cooling, leaking pipe)" required></textarea>
+              </div>
+              <button type="submit" class="btn" data-type="search" onclick="showLoading(this)">SEARCH
+                TECHNICIANS</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Courier & Delivery Modal -->
+        <div id="courier-modal" class="modal">
+          <div class="modal-content">
+            <span class="close" onclick="closeModal('courier')">&times;</span>
+            <h2>📦 Courier & Delivery</h2>
+            <form action="{{ url_for('submit_courier_booking') }}" method="POST" class="booking-form">
+              <input type="hidden" name="is_initial" value="true">
+              <div class="field">
+                <label><i class="material-icons">pin_drop</i> Pickup Location</label>
+                <input type="text" name="pickup" placeholder="Enter Pickup Location" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">location_on</i> Drop-off Location</label>
+                <input type="text" name="dropoff" placeholder="Enter Drop-off Location" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">calendar_today</i> Pickup Date</label>
+                <input type="text" name="pickup_date" class="date-input" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">access_time</i> Pickup Time</label>
+                <input type="time" name="pickup_time" required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">local_shipping</i> Courier Type</label>
+                <select name="courier_type" class="select-input" required>
+                  <option value="standard">Standard (1-2 days)</option>
+                  <option value="express">Express (Same day)</option>
+                  <option value="overnight">Overnight</option>
+                </select>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">balance</i> Package Weight (kg)</label>
+                <input type="number" name="package_weight" min="0.1" max="50" step="0.1" placeholder="e.g., 2.5"
+                  required>
+              </div>
+              <div class="field">
+                <label><i class="material-icons">note_add</i> Special Requests (Optional)</label>
+                <textarea name="special_requests" rows="2" class="textarea-input"
+                  placeholder="e.g., Fragile item, Insured delivery"></textarea>
+              </div>
+              <button type="submit" class="btn" data-type="search" onclick="showLoading(this)">SEARCH
+                COURIERS</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- My Contact Section -->
+      <div id="contact-section" class="main-content-section">
+        <div class="contact-container">
+          <h2>My Contact Details</h2>
+          <form action="{{ url_for('save_contact') }}" method="POST">
+            <div class="form-group">
+              <label>Full Name:</label>
+              <input type="text" name="name" value="{{ contact.name or '' }}" required>
+            </div>
+            <div class="form-group">
+              <label>Address:</label>
+              <input type="text" name="address" value="{{ contact.address or '' }}">
+            </div>
+            <div class="form-group">
+              <label>Phone:</label>
+              <input type="text" name="phone" value="{{ contact.phone or '' }}" required pattern="[0-9]{10}"
+                title="10-digit phone number">
+            </div>
+            <div class="form-group">
+              <label>WhatsApp:</label>
+              <input type="text" name="whatsapp" value="{{ contact.whatsapp or '' }}">
+            </div>
+            <div class="form-group">
+              <label>Email:</label>
+              <input type="email" name="email" value="{{ contact.email or '' }}" required>
+            </div>
+            <div class="form-group">
+              <label>Instagram:</label>
+              <input type="text" name="instagram" value="{{ contact.instagram or '' }}">
+            </div>
+            <div class="form-group">
+              <label>Facebook:</label>
+              <input type="text" name="facebook" value="{{ contact.facebook or '' }}">
+            </div>
+            <div class="form-group">
+              <button type="submit" class="btn" data-type="save" onclick="showLoading(this)">Save Details</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Popup HTML -->
+  <div id="toast-container"></div>
+
+  <!-- Flash Messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-messages">
+    {% for category, message in messages %}
+    <div class="toast {{ category }}">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endwith %}
+
+</body>
+<script>
+  // Global variables
+  let socket;
+  const currentUserId = "{{ current_user_id }}";
+  let unreadNotifications = 0;
+
+  // Initialize WebSocket connection
+  function initSocket() {
+    socket = io();
+
+    socket.on('connect', function () {
+      console.log('Connected to server');
+      socket.emit('user_connect', { user_id: currentUserId });
+    });
+
+    // Receive real-time notifications
+    socket.on('booking_confirmed', function (data) {
+      showToast(data.message || 'Booking confirmed!', 'success');
+      addNotification(data.message || 'Booking confirmed!', 'check_circle');
+      refreshRequests();
+    });
+
+    socket.on('ticket_ready', function (data) {
+      showToast('Your PDF ticket is ready!', 'success');
+      addNotification('PDF Ticket Ready', 'picture_as_pdf');
+      refreshRequests();
+    });
+
+    socket.on('payment_confirmed', function (data) {
+      showToast('Payment confirmed!', 'success');
+      addNotification('Payment Confirmed', 'payment');
+      refreshRequests();
+    });
+  }
+
+  function addNotification(title, message, icon = 'notifications', type = 'info') {
+    const notificationList = document.getElementById('notification-list');
+    const notificationId = Date.now(); // Generate unique ID
+
+    const div = document.createElement('div');
+    div.className = 'notification-item unread';
+    div.setAttribute('data-id', notificationId);
+
+    div.innerHTML = `
+        <i class="material-icons">${icon}</i>
+        <div class="notification-content">
+            <p><strong>${title}</strong></p>
+            <p>${message}</p>
+            <span class="notification-time">Just now</span>
+        </div>
+        <button class="delete-notification-btn" onclick="deleteNotification(${notificationId})" title="Delete">
+            <i class="material-icons">close</i>
+        </button>
+    `;
+
+    notificationList.insertBefore(div, notificationList.firstChild);
+    unreadNotifications++;
+    updateNotificationCount();
+  }
+  function deleteNotification(notificationId) {
+    if (confirm('Are you sure you want to delete this notification?')) {
+      const notification = document.querySelector(`.notification-item[data-id="${notificationId}"]`);
+      if (notification) {
+        // Send delete request via socket
+        socket.emit('delete_notification', {
+          notification_id: notificationId,
+          user_id: currentUserId
+        });
+
+        // Remove from UI immediately
+        notification.remove();
+
+        // Update count if it was unread
+        if (notification.classList.contains('unread')) {
+          unreadNotifications = Math.max(0, unreadNotifications - 1);
+          updateNotificationCount();
+        }
+      }
+    }
+  }
+
+  function markAllAsRead() {
+    socket.emit('mark_all_read', { user_id: currentUserId });
+  }
+
+  // Close notification dropdown when clicking outside
+  document.addEventListener('click', function (event) {
+    const bell = document.querySelector('.notification-bell');
+    const dropdown = document.getElementById('notification-dropdown');
+    if (!bell.contains(event.target) && dropdown.style.display === 'block') {
+      dropdown.style.display = 'none';
+    }
+  });
+
+  function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.style.display = sidebar.style.display === 'none' ? 'block' : 'none';
+  }
+
+  function showSection(sectionId) {
+    document.querySelectorAll('.main-content-section').forEach(section => {
+      section.classList.remove('active');
+    });
+    document.getElementById(sectionId).classList.add('active');
+    document.querySelector('.main').scrollTo(0, 0);
+  }
+
+  function setActive(el) {
+    document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
+    el.classList.add('active');
+  }
+
+  function openModal(id) {
+    document.getElementById(id + '-modal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeModal(id) {
+    document.getElementById(id + '-modal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+  }
+
+  window.onclick = function (event) {
+    document.querySelectorAll('.modal').forEach(modal => {
+      if (event.target == modal) {
+        modal.style.display = "none";
+        document.body.style.overflow = 'auto';
+      }
+    });
+  }
+
+  function showLoading(btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner"></div> Loading...';
+    showToast('Processing request...', 'success');
+    const form = btn.closest('form');
+    if (form) {
+      form.submit();
+    }
+    return true;
+  }
+
+  function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    document.getElementById('toast-container').appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+
+  function updateCount(field, change) {
+    const inputId = {
+      "room": "roomCount",
+      "guests": "guestCount",
+      "adults": "adultCount",
+      "children": "childCount",
+      "passengers": "passengerCount"
+    }[field];
+    const input = document.getElementById(inputId);
+    let current = parseInt(input.value);
+    const min = parseInt(input.min);
+    const max = parseInt(input.max) || Infinity;
+    let newValue = current + change;
+    input.value = Math.max(min, Math.min(max, newValue));
+  }
+
+  function downloadPDFTicket(pdfUrl) {
+    if (pdfUrl) {
+      // Create a temporary anchor element
+      const link = document.createElement('a');
+      link.href = pdfUrl;
+      link.download = pdfUrl.split('/').pop();
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('Downloading PDF ticket...', 'success');
+    } else {
+      showToast('PDF ticket not available yet.', 'error');
+    }
+  }
+
+  function requestTicket(bookingId, serviceType) {
+    showToast('Requesting PDF ticket from admin...', 'info');
+
+    // Emit socket event to request ticket
+    if (typeof socket !== 'undefined' && socket.connected) {
+      socket.emit('request_ticket', {
+        booking_id: bookingId,
+        service_type: serviceType,
+        user_id: currentUserId
+      });
+
+      // Show success message
+      setTimeout(() => {
+        showToast('Ticket request sent to admin! You will be notified when ready.', 'success');
+      }, 1000);
+    } else {
+      // Fallback to AJAX request
+      fetch(`/admin/send-ticket`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          booking_id: bookingId,
+          user_id: currentUserId
+        })
+      })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            showToast('PDF ticket request sent to admin!', 'success');
+          } else {
+            showToast('Error requesting ticket: ' + data.error, 'error');
+          }
+        })
+        .catch(error => {
+          showToast('Error requesting ticket', 'error');
+        });
+    }
+  }
+  function refreshRequests() {
+    const container = document.getElementById('requests-table-container');
+    const refreshBtn = document.querySelector('.refresh-btn');
+
+    // Show loading state
+    refreshBtn.innerHTML = '<div class="spinner small"></div> Refreshing...';
+    refreshBtn.disabled = true;
+
+    // Fetch updated requests
+    fetch('/user/requests')
+      .then(response => response.json())
+      .then(data => {
+        if (data.requests && data.requests.length > 0) {
+          // You would need to update the table here with new data
+          // For now, just reload the page
+          window.location.reload();
+        } else {
+          container.innerHTML = '<p class="no-requests">No requests found. Book a service to see it here!</p>';
+        }
+      })
+      .catch(error => {
+        showToast('Error refreshing requests', 'error');
+      })
+      .finally(() => {
+        // Reset button state after 2 seconds
+        setTimeout(() => {
+          refreshBtn.innerHTML = '<i class="material-icons">refresh</i> Refresh';
+          refreshBtn.disabled = false;
+        }, 2000);
+      });
+  }
+
+  function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+  }
+  function clearAllNotifications() {
+    if (confirm('Are you sure you want to clear all notifications? This action cannot be undone.')) {
+      // Get all notification IDs
+      const notificationItems = document.querySelectorAll('.notification-item:not(.empty)');
+      const notificationIds = Array.from(notificationItems).map(item => item.getAttribute('data-id'));
+
+      // Delete each notification via socket
+      notificationIds.forEach(id => {
+        socket.emit('delete_notification', {
+          notification_id: id,
+          user_id: currentUserId
+        });
+      });
+
+      // Clear the notification list in UI
+      const notificationList = document.getElementById('notification-list');
+      notificationList.innerHTML = '<div class="notification-item empty"><div class="notification-content"><p>No notifications yet.</p></div></div>';
+
+      // Reset count
+      unreadNotifications = 0;
+      updateNotificationCount();
+    }
+  }
+  function toggleNotifications() {
+    const dropdown = document.getElementById('notification-dropdown');
+    if (dropdown.style.display === 'block') {
+      dropdown.style.display = 'none';
+    } else {
+      dropdown.style.display = 'block';
+      // Refresh notifications when dropdown is opened
+      refreshNotifications();
+    }
+  }
+
+  function refreshNotifications() {
+    fetch('/get-unread-count')
+      .then(response => response.json())
+      .then(data => {
+        unreadNotifications = data.unread_count || 0;
+        updateNotificationCount();
+      });
+  }
+
+  function updateNotificationCount() {
+    const countElement = document.getElementById('notification-count');
+    if (unreadNotifications > 0) {
+      countElement.style.display = 'block';
+      countElement.textContent = unreadNotifications > 99 ? '99+' : unreadNotifications;
+    } else {
+      countElement.style.display = 'none';
+    }
+  }
+  // Initialize when page loads
+  window.onload = function () {
+    flatpickr(".date-input", {
+      altInput: true,
+      altFormat: "F j, Y",
+      dateFormat: "Y-m-d",
+      minDate: "today"
+    });
+
+    // Initialize WebSocket
+    initSocket();
+  };
+</script>
+
+</html>

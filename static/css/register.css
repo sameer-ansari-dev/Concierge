@@ -1,0 +1,211 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Inter:wght@300;400;500;600&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  height: 100vh;
+  background: linear-gradient(to bottom, #0f0f0f 0%, #1a1a1a 100%);
+  font-family: 'Inter', sans-serif;
+  color: #e8e8e8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.register-container {
+  width: 100%;
+  max-width: 460px;
+  padding: 20px;
+  position: relative;
+  z-index: 2;
+}
+
+/* Luxury register card — same feel as login */
+.register-box {
+  background: rgba(20, 20, 20, 0.95);
+  padding: 50px 45px;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6),
+              0 0 40px rgba(212, 175, 55, 0.15);
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  backdrop-filter: blur(12px);
+  animation: fadeInUp 1.3s ease-out;
+}
+
+.register-box h2 {
+  text-align: center;
+  font-family: 'Playfair Display', serif;
+  font-size: 2.6rem;
+  font-weight: 600;
+  color: #f5f0e8;
+  margin-bottom: 35px;
+  letter-spacing: 1.2px;
+}
+
+/* Flash messages — elegant & subtle */
+.flash-msg {
+  list-style: none;
+  padding: 14px;
+  background: rgba(220, 60, 60, 0.2);
+  border: 1px solid rgba(220, 60, 60, 0.4);
+  color: #ff7a7a;
+  border-radius: 8px;
+  margin-bottom: 22px;
+  text-align: center;
+  font-size: 0.95rem;
+}
+
+/* Floating labels — gold accent */
+.input-group {
+  position: relative;
+  margin-bottom: 30px;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 14px 0;
+  font-size: 1rem;
+  color: #e8e8e8;
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid #555;
+  outline: none;
+  transition: all 0.4s ease;
+}
+
+.input-group label {
+  position: absolute;
+  top: 14px;
+  left: 0;
+  color: #999;
+  pointer-events: none;
+  transition: all 0.4s ease;
+  font-weight: 400;
+}
+
+.input-group input:focus,
+.input-group input:valid {
+  border-bottom-color: #d4af37;
+}
+
+.input-group input:focus ~ label,
+.input-group input:valid ~ label {
+  top: -14px;
+  font-size: 0.85rem;
+  color: #d4af37;
+  font-weight: 500;
+}
+
+/* Elegant gold button */
+.btn-neon {
+  width: 100%;
+  padding: 16px;
+  background: transparent;
+  border: 1.8px solid #d4af37;
+  color: #d4af37;
+  font-size: 1.05rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.5s ease;
+  position: relative;
+  overflow: hidden;
+  margin-top: 15px;
+}
+
+.btn-neon:hover {
+  background: #d4af37;
+  color: #0f0f0f;
+  transform: translateY(-4px);
+  box-shadow: 0 18px 40px rgba(212, 175, 55, 0.3);
+}
+
+/* Subtle inner glow on hover (no flash) */
+.btn-neon::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width 0.7s ease, height 0.7s ease;
+}
+
+.btn-neon:hover::after {
+  width: 380px;
+  height: 380px;
+}
+
+/* Bottom link */
+.bottom-link {
+  text-align: center;
+  margin-top: 32px;
+  font-size: 0.98rem;
+  color: #b0b0b0;
+}
+
+.bottom-link a {
+  color: #d4af37;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.3s;
+}
+
+.bottom-link a:hover {
+  color: #f0d28a;
+}
+
+/* Very subtle background glow — same as login */
+.register-container::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 650px;
+  height: 650px;
+  background: radial-gradient(circle, rgba(212, 175, 55, 0.09) 0%, transparent 70%);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  animation: pulseGlow 20s ease-in-out infinite;
+  z-index: 1;
+  pointer-events: none;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 0.7; transform: translate(-50%, -50%) scale(1.1); }
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .register-box {
+    padding: 40px 30px;
+  }
+  .register-box h2 {
+    font-size: 2.3rem;
+  }
+  .input-group {
+    margin-bottom: 26px;
+  }
+}

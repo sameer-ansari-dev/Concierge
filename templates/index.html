@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Concierge Lifestyle</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const element = document.getElementById("typing-text");
+    const secondWord = "Luxury";
+    let i = element.textContent.length; // starting with "Concierge"
+
+    function deleteWord(callback) {
+        if (i > 0) {
+            element.textContent = element.textContent.substring(0, i - 1);
+            i--;
+            setTimeout(() => deleteWord(callback), 100);
+        } else {
+            if (callback) setTimeout(callback, 300);
+        }
+    }
+
+    function typeWord(word) {
+        let j = 0;
+        function type() {
+            if (j < word.length) {
+                element.textContent += word.charAt(j);
+                j++;
+                setTimeout(type, 150);
+            }
+        }
+        type();
+    }
+
+    // Increase starting pause to 3 seconds
+    setTimeout(() => {
+        deleteWord(() => {
+            typeWord(secondWord);
+        });
+    }, 3000); // <-- changed from 1000 to 3000
+});
+</script>
+
+</head>
+<body>
+  <div class="hero">
+    <div class="content animate">
+      <h1>Welcome to <span id="typing-text">Concierge</span> Lifestyle</h1>
+      <p>Your personal assistant for modern luxury living.</p>
+      <div class="buttons">
+        <a href="{{ url_for('login') }}" class="btn-neon">Login</a>
+        <a href="{{ url_for('register') }}" class="btn-neon">Register</a>
+      </div>
+    </div>
+    <div class="background-animation"></div>
+  </div>
+</body>
+</html>
