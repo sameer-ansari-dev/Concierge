@@ -4,6 +4,7 @@ from flask import (
 )
 from flask_socketio import SocketIO, emit, join_room
 import random
+from db import save_user_profile, get_user_profile
 from datetime import datetime, date, timedelta
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from db import get_db_connection
@@ -63,6 +64,160 @@ def load_user(user_id):
         conn.close()
     return None
 
+@app.context_processor
+def inject_common_variables():
+    """Inject common variables into all templates automatically"""
+    if current_user.is_authenticated:
+        user_id = current_user.get_id()
+        
+        # Get user data
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT username, full_name FROM users WHERE id = %s", (user_id,))
+            user_data = cur.fetchone()
+            username = user_data[1] if user_data and user_data[1] else (user_data[0] if user_data else 'User')
+        except:
+            username = 'User'
+        finally:
+            cur.close()
+            conn.close()
+        
+        # Get notifications and counts
+        notifications = get_user_notifications(user_id)
+        unread_count = get_unread_count(user_id)
+        
+        # Get requests
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                SELECT id, booking_id, service_type, details, payment_status, admin_confirmation, created_at
+                FROM requests 
+                WHERE user_id = %s 
+                ORDER BY created_at DESC
+            """, (user_id,))
+            user_requests_raw = cur.fetchall()
+            
+            requests = []
+            for req in user_requests_raw:
+                try:
+                    details = json.loads(req[3]) if isinstance(req[3], str) else req[3]
+                except:
+                    details = {}
+                
+                requests.append({
+                    "id": req[0],
+                    "booking_id": req[1],
+                    "service_type": req[2],
+                    "details": details,
+                    "payment_status": req[4],
+                    "admin_confirmation": req[5],
+                })
+        except:
+            requests = []
+        finally:
+            cur.close()
+            conn.close()
+        
+        # Check lifestyle profile
+        profile = get_user_profile(user_id)
+        has_profile = profile is not None and profile.get('interests')
+        
+        # Get contact info
+        conn = get_db_connection()
+        cur = conn.cursor()
+        contact = {}
+        try:
+            cur.execute("""
+                SELECT full_name, email, phone, address, whatsapp, instagram, facebook
+                FROM users WHERE id = %s
+            """, (user_id,))
+            contact_data = cur.fetchone()
+            if contact_data:
+                contact = {
+                    'name': contact_data[0] or '',
+                    'email': contact_data[1] or '',
+                    'phone': contact_data[2] or '',
+                    'address': contact_data[3] or '',
+                    'whatsapp': contact_data[4] or '',
+                    'instagram': contact_data[5] or '',
+                    'facebook': contact_data[6] or ''
+                }
+        except:
+            pass
+        finally:
+            cur.close()
+            conn.close()
+        
+        return {
+            'current_user_id': user_id,
+            'user': username,
+            'unread_count': unread_count,
+            'notifications': notifications,
+            'has_lifestyle_profile': has_profile,
+            'contact': contact,
+            'requests': requests,
+            'request_count': len(requests)
+        }
+    
+    # Not authenticated
+    return {
+        'current_user_id': None,
+        'user': 'Guest',
+        'unread_count': 0,
+        'notifications': [],
+        'has_lifestyle_profile': False,
+        'contact': {},
+        'requests': [],
+        'request_count': 0
+    }
+
+# ---------------------- Lifestyle Profile Routes ----------------------
+@app.route('/lifestyle_form')
+@login_required
+def lifestyle_form():
+    """Display the lifestyle form"""
+    profile = get_user_profile(current_user.get_id())
+    return render_template('lifestyle_form.html', profile=profile)
+
+@app.route('/save_lifestyle', methods=['POST'])
+@login_required
+def save_lifestyle():
+    """Save lifestyle data to database"""
+    try:
+        user_id = current_user.get_id()
+        
+        interests = request.form.getlist('interests')
+        travel_style = request.form.get('travel_style', '')
+        dietary = request.form.get('dietary', 'none')
+        group_size = request.form.get('group_size', 1, type=int)
+        cab_type = request.form.get('cab_type', 'economy')
+        home_owner = request.form.get('home_owner') == 'yes'
+        
+        interests_str = ','.join(interests) if interests else ''
+        
+        success = save_user_profile(
+            user_id=user_id,
+            interests=interests_str,
+            travel_style=travel_style,
+            dietary=dietary,
+            group_size=group_size,
+            cab_type=cab_type,
+            home_owner=home_owner
+        )
+        
+        if success:
+            flash('✅ Your lifestyle profile has been saved! You will now get personalized suggestions.', 'success')
+        else:
+            flash('❌ Error saving profile. Please try again.', 'error')
+            
+    except Exception as e:
+        print(f"Error in save_lifestyle: {e}")
+        flash('⚠️ An unexpected error occurred.', 'error')
+    
+    return redirect(url_for('dashboard'))
+
 # ---------------------- Static dirs ----------------------
 
 def get_tickets_dir():
@@ -91,7 +246,6 @@ def admin_generate_ticket():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # Get request details
         cur.execute("SELECT details FROM requests WHERE id = %s", (request_id,))
         request_data = cur.fetchone()
         
@@ -104,10 +258,8 @@ def admin_generate_ticket():
         except:
             details_obj = {"raw": str(details)}
         
-        # Generate PDF ticket
         pdf_filename = create_pdf_ticket_for_booking(booking_id, service_type, details_obj, user_id)
         
-        # Update request details with ticket URL
         details_obj["ticket_pdf_url"] = f"/static/tickets/{pdf_filename}"
         details_obj["ticket_generated_at"] = datetime.now().isoformat()
         
@@ -134,12 +286,10 @@ def generate_pdf_ticket(booking_id, service_type, details, user_id):
     filename = f"ticket_{booking_id}.pdf"
     filepath = TICKETS_DIR / filename
     
-    # Create PDF
     doc = SimpleDocTemplate(str(filepath), pagesize=A4)
     story = []
     styles = getSampleStyleSheet()
     
-    # Custom styles
     title_style = ParagraphStyle(
         'TitleStyle',
         parent=styles['Heading1'],
@@ -164,12 +314,10 @@ def generate_pdf_ticket(booking_id, service_type, details, user_id):
         textColor=colors.HexColor('#2c3e50')
     )
     
-    # Title
     story.append(Paragraph("CONCIERGE LIFESTYLE", title_style))
     story.append(Paragraph(f"{service_type} - Booking Ticket", header_style))
     story.append(Spacer(1, 20))
     
-    # Booking ID section
     booking_data = [
         ["Booking ID:", booking_id],
         ["Generated On:", datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
@@ -190,7 +338,6 @@ def generate_pdf_ticket(booking_id, service_type, details, user_id):
     story.append(booking_table)
     story.append(Spacer(1, 30))
     
-    # Service-specific details
     story.append(Paragraph("Booking Details", header_style))
     story.append(Spacer(1, 10))
     
@@ -223,7 +370,6 @@ def generate_pdf_ticket(booking_id, service_type, details, user_id):
         ]))
         story.append(table)
         
-        # Generate OTP
         otp = random.randint(1000, 9999)
         story.append(Spacer(1, 30))
         story.append(Paragraph("Driver Verification", header_style))
@@ -350,7 +496,6 @@ def generate_pdf_ticket(booking_id, service_type, details, user_id):
         ]))
         story.append(table)
     
-    # Terms and Conditions
     story.append(Spacer(1, 30))
     story.append(Paragraph("Terms & Conditions", header_style))
     terms = [
@@ -365,7 +510,6 @@ def generate_pdf_ticket(booking_id, service_type, details, user_id):
         story.append(Paragraph(f"• {term}", normal_style))
         story.append(Spacer(1, 3))
     
-    # Footer
     story.append(Spacer(1, 20))
     footer = Paragraph(
         "Thank you for choosing Concierge Lifestyle<br/>"
@@ -376,17 +520,14 @@ def generate_pdf_ticket(booking_id, service_type, details, user_id):
     )
     story.append(footer)
     
-    # Build PDF
     doc.build(story)
     
     return filename
 
-# ---------------------- Generate PDF Ticket for booking ----------------------
 def create_pdf_ticket_for_booking(booking_id, service_type, details, user_id):
     """Create PDF ticket and return the filename"""
     filename = generate_pdf_ticket(booking_id, service_type, details, user_id)
     
-    # Update the details to include PDF ticket URL
     details['ticket_pdf_url'] = f"/static/tickets/{filename}"
     details['ticket_generated_at'] = datetime.now().isoformat()
     
@@ -511,7 +652,6 @@ def get_unread_count(user_id):
         cur.close()
         conn.close()
 
-import time as time_module
 def time_ago(dt):
     if not dt:
         return "Just now"
@@ -621,14 +761,12 @@ def get_analytics_data():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # Get user stats
         cur.execute("SELECT COUNT(*) FROM users")
         total_users = cur.fetchone()[0]
         
         cur.execute("SELECT COUNT(*) FROM users WHERE DATE(created_at) = CURRENT_DATE")
         new_users_today = cur.fetchone()[0]
         
-        # Get request stats
         cur.execute("SELECT COUNT(*) FROM requests")
         total_requests = cur.fetchone()[0]
         
@@ -641,11 +779,9 @@ def get_analytics_data():
         cur.execute("SELECT COUNT(*) FROM requests WHERE DATE(created_at) = CURRENT_DATE")
         active_requests_today = cur.fetchone()[0]
         
-        # Active users (users with activity today)
         cur.execute("SELECT COUNT(DISTINCT user_id) FROM requests WHERE DATE(created_at) = CURRENT_DATE")
         active_users_today = cur.fetchone()[0]
         
-        # Service distribution
         cur.execute("""
             SELECT service_type, COUNT(*) 
             FROM requests 
@@ -654,7 +790,6 @@ def get_analytics_data():
         """)
         service_data = cur.fetchall()
         
-        # Timeline data (last 7 days)
         timeline_labels = []
         timeline_data = []
         for i in range(6, -1, -1):
@@ -700,7 +835,6 @@ def schedule_live_updates():
                         'timestamp': datetime.now().isoformat()
                     })
                     
-                    # Also send user activity
                     active_users = get_active_users()
                     socketio.emit('user_activity', {
                         'active_users': active_users,
@@ -709,9 +843,8 @@ def schedule_live_updates():
                     })
             except Exception as e:
                 logger.error(f"Error in live update: {e}")
-            time.sleep(10)  # Update every 10 seconds
+            time.sleep(10)
     
-    # Start the background thread
     thread = threading.Thread(target=send_live_update, daemon=True)
     thread.start()
     logger.info("Live updates scheduler started")
@@ -830,11 +963,9 @@ def handle_connect(auth):
     try:
         if session.get('is_admin'):
             emit('update_requests', {'requests': get_requests_json()}, broadcast=True)
-            # Send initial analytics data
             analytics_data = get_analytics_data()
             emit('analytics_update', {'analytics': analytics_data})
             
-            # Send active users
             active_users = get_active_users()
             emit('user_activity', {
                 'active_users': active_users,
@@ -843,7 +974,6 @@ def handle_connect(auth):
     except Exception as e:
         logger.error(f"connect error: {e}")
 
-# Socket event for user notifications
 @socketio.on('user_connect')
 def handle_user_connect(data):
     """Handle user connection for real-time updates"""
@@ -852,7 +982,6 @@ def handle_user_connect(data):
         join_room(f"user_{user_id}")
         emit('user_connected', {'user_id': user_id, 'status': 'connected'})
 
-# the approve_request function to send better notifications
 @socketio.on('approve_request')
 def handle_approve_request(data):
     request_id = data.get('request_id')
@@ -863,7 +992,6 @@ def handle_approve_request(data):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # Update admin confirmation status only (don't generate PDF yet)
         cur.execute("""
             UPDATE requests 
             SET admin_confirmation = 'Confirmed' 
@@ -879,7 +1007,6 @@ def handle_approve_request(data):
         booking_id, service_type, user_id = result
         conn.commit()
 
-        # Send notification to user that request is approved
         save_notification(
             user_id=user_id,
             title=f"{service_type} Approved!",
@@ -888,7 +1015,6 @@ def handle_approve_request(data):
             type="success"
         )
 
-        # Emit real-time update
         socketio.emit('request_approved', {
             'request_id': request_id,
             'booking_id': booking_id,
@@ -896,7 +1022,6 @@ def handle_approve_request(data):
             'message': f'Your {service_type} has been approved!'
         }, room=f"user_{user_id}")
 
-        # Refresh admin panel
         emit('update_requests', {'requests': get_requests_json()}, broadcast=True)
         
         emit('approve_success', {
@@ -941,7 +1066,6 @@ def handle_send_ticket(data):
         except Exception:
             details_obj = {"raw": str(details)}
 
-        # Generate PDF ticket
         pdf_filename = create_pdf_ticket_for_booking(booking_id, service_type, details_obj, user_id)
         details_obj["ticket_pdf_url"] = f"/static/tickets/{pdf_filename}"
         cur.execute("UPDATE requests SET details = %s::jsonb WHERE id = %s",
@@ -949,7 +1073,6 @@ def handle_send_ticket(data):
 
         conn.commit()
 
-        # Send ticket to user
         emit('ticket_received', {
             'booking_id': booking_id,
             'service_type': service_type,
@@ -998,7 +1121,6 @@ def handle_delete_request(data):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # First get request details before deletion
         cur.execute("""
             SELECT user_id, booking_id, service_type 
             FROM requests 
@@ -1012,7 +1134,6 @@ def handle_delete_request(data):
 
         user_id, booking_id, service_type = request_data
         
-        # Delete associated files (PDF tickets if exists)
         try:
             ticket_file = TICKETS_DIR / f"ticket_{booking_id}.pdf"
             if ticket_file.exists():
@@ -1020,11 +1141,9 @@ def handle_delete_request(data):
         except Exception as e:
             logger.warning(f"Could not delete ticket file: {e}")
 
-        # Delete the request
         cur.execute("DELETE FROM requests WHERE id = %s", (request_id,))
         conn.commit()
 
-        # Send notification to user
         save_notification(
             user_id=user_id,
             title=f"{service_type} Cancelled",
@@ -1033,7 +1152,6 @@ def handle_delete_request(data):
             type="error"
         )
 
-        # Emit events to update all clients
         emit('request_deleted', {
             'request_id': request_id,
             'booking_id': booking_id,
@@ -1041,7 +1159,6 @@ def handle_delete_request(data):
             'message': f'Request #{request_id} deleted successfully'
         }, broadcast=True)
         
-        # Also update the requests list
         emit('update_requests', {'requests': get_requests_json()}, broadcast=True)
 
     except Exception as e:
@@ -1074,14 +1191,12 @@ def admin_users():
         """)
         users = cur.fetchall()
         
-        # Get user stats
         cur.execute("SELECT COUNT(*) FROM users")
         total_users = cur.fetchone()[0]
         
         cur.execute("SELECT COUNT(*) FROM users WHERE DATE(created_at) = CURRENT_DATE")
         new_users_today = cur.fetchone()[0]
         
-        # Get active users (users with requests today)
         cur.execute("""
             SELECT COUNT(DISTINCT user_id) 
             FROM requests 
@@ -1124,7 +1239,6 @@ def admin_user_details(user_id):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # Get user basic info
         cur.execute("""
             SELECT id, full_name, email, username, phone, address, whatsapp, instagram, facebook, created_at
             FROM users WHERE id = %s
@@ -1134,7 +1248,6 @@ def admin_user_details(user_id):
         if not user:
             return jsonify({"error": "User not found"}), 404
         
-        # Get user requests stats
         cur.execute("""
             SELECT 
                 COUNT(*) as total_requests,
@@ -1208,16 +1321,13 @@ def admin_send_ticket():
         
         booking_id, service_type, details = request_data
         
-        # Parse details
         try:
             details_obj = json.loads(details) if isinstance(details, str) else details
         except:
             details_obj = {"raw": str(details)}
         
-        # Generate PDF ticket
         pdf_filename = create_pdf_ticket_for_booking(booking_id, service_type, details_obj, user_id)
         
-        # Send notification to user
         socketio.emit('ticket_ready', {
             'booking_id': booking_id,
             'service_type': service_type,
@@ -1232,7 +1342,6 @@ def admin_send_ticket():
         cur.close()
         conn.close()
 
-# Socket event for sending ticket
 @socketio.on('send_ticket_to_user')
 def handle_send_ticket_to_user(data):
     request_id = data.get('request_id')
@@ -1259,10 +1368,8 @@ def handle_send_ticket_to_user(data):
         except:
             details_obj = {"raw": str(details)}
         
-        # Generate PDF ticket
         pdf_filename = create_pdf_ticket_for_booking(booking_id, service_type, details_obj, user_id)
         
-        # Send notification to user
         emit('ticket_sent_to_user', {
             'user_id': user_id,
             'booking_id': booking_id,
@@ -1282,7 +1389,6 @@ def handle_send_ticket_to_user(data):
         cur.close()
         conn.close()
 
-# Socket event for sending report
 @socketio.on('send_report_to_user')
 def handle_send_report_to_user(data):
     user_id = data.get('user_id')
@@ -1291,7 +1397,6 @@ def handle_send_report_to_user(data):
         emit('error', {'message': 'Missing user_id'})
         return
     
-    # Get user details
     conn = get_db_connection()
     cur = conn.cursor()
     try:
@@ -1304,7 +1409,6 @@ def handle_send_report_to_user(data):
         
         full_name, email = user_data
         
-        # Get user stats
         cur.execute("""
             SELECT 
                 COUNT(*) as total_requests,
@@ -1314,7 +1418,6 @@ def handle_send_report_to_user(data):
         """, (user_id,))
         stats = cur.fetchone()
         
-        # Send notification to user
         emit('report_sent', {
             'user_id': user_id,
             'message': f'Your activity report has been generated and sent to {email}',
@@ -1346,7 +1449,6 @@ def admin_requests():
         """)
         requests = cur.fetchall()
         
-        # Get request stats
         cur.execute("SELECT COUNT(*) FROM requests")
         total_requests = cur.fetchone()[0]
         
@@ -1549,17 +1651,14 @@ def user_request_details(request_id):
         cur.close()
         conn.close()
 
-# Socket event for live data
 @socketio.on('get_live_data')
 def handle_get_live_data():
     if not session.get('is_admin'):
         return
     
-    # Send initial live data
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # Get active users (users with requests in last 24 hours)
         cur.execute("""
             SELECT DISTINCT user_id 
             FROM requests 
@@ -1578,7 +1677,6 @@ def handle_get_live_data():
         cur.close()
         conn.close()
     
-    # Add this socket event handler for broadcast notifications
 @socketio.on('send_broadcast')
 def handle_send_broadcast(data):
     """Handle broadcast notifications from admin"""
@@ -1595,15 +1693,12 @@ def handle_send_broadcast(data):
             return
             
         if target == 'specific':
-            # Send to specific user
             if not user_id:
                 emit('broadcast_error', {'message': 'User ID is required for specific user'})
                 return
             
-            # Save notification to database
             save_notification(user_id, title, message, icon, notification_type)
             
-            # Send real-time notification
             emit('broadcast_notification', {
                 'title': title,
                 'message': message,
@@ -1613,20 +1708,16 @@ def handle_send_broadcast(data):
             }, room=f"user_{user_id}")
             
         else:
-            # Send to all users
             conn = get_db_connection()
             cur = conn.cursor()
             try:
-                # Get all user IDs
                 cur.execute("SELECT id FROM users")
                 all_users = cur.fetchall()
                 
                 for user in all_users:
                     user_id = user[0]
-                    # Save notification to database for each user
                     save_notification(user_id, title, message, icon, notification_type)
                     
-                    # Send real-time notification
                     emit('broadcast_notification', {
                         'title': title,
                         'message': message,
@@ -1645,7 +1736,6 @@ def handle_send_broadcast(data):
         logger.error(f"Error in broadcast: {e}")
         emit('broadcast_error', {'message': str(e)})
 
-# Add this socket event handler for deleting notifications
 @socketio.on('delete_notification')
 def handle_delete_notification(data):
     """Handle deletion of a specific notification"""
@@ -1669,7 +1759,6 @@ def handle_delete_notification(data):
         logger.error(f"Error deleting notification: {e}")
         emit('notification_error', {'message': str(e)})
 
-# Update the mark all as read functionality
 @socketio.on('mark_all_read')
 def handle_mark_all_read(data):
     """Mark all notifications as read for a user"""
@@ -1769,19 +1858,17 @@ def confirm_booking():
 def confirm_car_booking():
     data = request.get_json(silent=True) or {}
     
-    # --- Data Extraction (Sanity Check) ---
     car_model = data.get('car_model', 'N/A')
     total_price = data.get('total_price', 0)
     pickup_date = data.get('pickup_date')
     pickup_time = data.get('pickup_time')
     email = data.get('email')
     mobile = data.get('mobile')
-    booking_id = data.get('booking_id', f"CAR-{random.randint(1000, 9999)}") # Use client generated ID
+    booking_id = data.get('booking_id', f"CAR-{random.randint(1000, 9999)}")
 
     if not all([car_model, total_price, pickup_date, email, mobile]):
         return jsonify({"success": False, "error": "Missing essential booking data."}), 400
 
-    # --- Prepare Details JSON ---
     details_obj = {
         "car_model": car_model,
         "cab_class": data.get('cab_class'),
@@ -1814,16 +1901,15 @@ def confirm_car_booking():
             booking_id,
             'Car Booking',
             json.dumps(details_obj),
-            'Confirmed',  # Assuming payment is confirmed client-side
+            'Confirmed',
             'Pending'
         ))
         new_id = cur.fetchone()[0]
         conn.commit()
 
-        # --- Push Real-time Update to Admin Panel ---
-        last_row = get_last_request_json() # Assumes this fetches the request by current_user, limit 1 DESC
+        last_row = get_last_request_json()
         if last_row:
-            socketio.emit('new_request', {'request': last_row}, to=None) # Broadcast to all admins
+            socketio.emit('new_request', {'request': last_row}, to=None)
 
         return jsonify({"success": True, "booking_id": booking_id, "request_id": new_id})
     except Exception as e:
@@ -1842,7 +1928,6 @@ def confirm_car_booking():
 @login_required
 def submit_car_booking():
     try:
-        # === GET & CLEAN DATA ===
         pickup = request.form.get('pickup', '').strip().title()
         dropoff = request.form.get('dropoff', '').strip().title()
         pickup_date = request.form.get('pickup_date', '').strip()
@@ -1852,12 +1937,10 @@ def submit_car_booking():
         special_requests = request.form.get('special_requests', '').strip()
         is_initial = request.form.get('is_initial', 'false') == 'true'
 
-        # === VALIDATION ===
         if not all([pickup, dropoff, pickup_date, pickup_time]):
             flash("Please fill all required fields.", "danger")
             return redirect(url_for('dashboard'))
 
-        # Time format handling
         if len(pickup_time.split(':')) == 3:
             time_format = '%H:%M:%S'
         else:
@@ -1881,7 +1964,6 @@ def submit_car_booking():
             flash("Passengers must be 1–9.", "danger")
             return redirect(url_for('dashboard'))
 
-        # === MAP CAR CLASS ===
         class_map = {
             'economy': 'Standard',
             'standard': 'Standard', 
@@ -1890,42 +1972,32 @@ def submit_car_booking():
         }
         target_class = class_map.get(car_class, 'Standard')
 
-        # === FILTER CARS BASED ON CLASS AND PASSENGERS ===
         filtered_cars = []
         for car in cars_data:
-            # Check class first
             cab_class = car.get('cab_class', '').lower()
             if target_class.lower() == 'standard' and cab_class == 'standard':
-                # For standard class, also filter by passengers
                 if car.get('seats', 4) >= passengers:
                     filtered_cars.append(car)
             elif cab_class == target_class.lower():
-                # For other classes, check passengers
                 if car.get('seats', 4) >= passengers:
                     filtered_cars.append(car)
 
-        # If no cars found with enough seats, show all cars in the class
         if not filtered_cars:
             filtered_cars = [car for car in cars_data 
                            if car.get('cab_class', '').lower() == target_class.lower()]
             
-            # If still no cars, show fallback
             if not filtered_cars:
                 flash(f"No {target_class} cars available right now – showing popular options!", "info")
                 filtered_cars = [c for c in cars_data if c.get('cab_class') in ['Standard', 'SUV', 'Luxury']]
 
-        # Select cars (limit to 6)
-        import random
-        selected = filtered_cars[:6]  # Take first 6 matching cars
+        selected = filtered_cars[:6]
         if len(filtered_cars) > 6:
             selected = random.sample(filtered_cars, 6)
 
-        # Add missing data (transmission, id) and enhance with booking details
         enhanced_cars = []
         for idx, car in enumerate(selected):
             enhanced_car = car.copy()
             
-            # Add transmission based on car type
             if car.get('cab_class') == 'Luxury':
                 transmission = 'Automatic'
             elif car.get('model', '').lower().__contains__('premium'):
@@ -1945,7 +2017,6 @@ def submit_car_booking():
             })
             enhanced_cars.append(enhanced_car)
 
-        # === RENDER RESULTS ===
         return render_template(
             'car_results.html',
             cars=enhanced_cars,
@@ -1976,12 +2047,10 @@ def submit_technician_booking():
     description = request.form.get('description', '').strip()
     is_initial = request.form.get('is_initial', 'false') == 'true'
 
-    # Basic validation
     if not all([service_type, location, service_date, service_time, description]):
         flash("Please provide valid technician booking details.", "danger")
         return redirect(url_for('dashboard'))
 
-    # Validate datetime
     try:
         service_datetime = datetime.strptime(f"{service_date} {service_time}", '%Y-%m-%d %H:%M')
         if service_datetime < datetime.now():
@@ -1991,18 +2060,15 @@ def submit_technician_booking():
         flash("Invalid date or time format. Use YYYY-MM-DD and HH:MM.", "danger")
         return redirect(url_for('dashboard'))
 
-    # Normalise location (match data keys like 'Mumbai', 'Pune', 'Nashik')
     normalized_location = location.strip()
     if normalized_location:
         normalized_location = normalized_location.title()
 
-    # Filter technicians
     filtered_technicians = [
         tech for tech in technicians_data
         if tech.get('service_type', '').lower() == service_type and tech.get('location', '').lower() == normalized_location.lower()
     ]
 
-    # Fallback logic
     fallback_reason = None
     if not filtered_technicians:
         fallback_reason = "no_exact_location"
@@ -2016,19 +2082,16 @@ def submit_technician_booking():
         sorted_by_rating = sorted(technicians_data, key=lambda t: t.get('rating', 0), reverse=True)
         filtered_technicians = sorted_by_rating[:6]
 
-    # Prepare a sample size between 5 and available length
     num_to_show = min(max(5, len(filtered_technicians)), len(filtered_technicians))
     if len(filtered_technicians) > num_to_show:
         selected_technicians = random.sample(filtered_technicians, num_to_show)
     else:
         selected_technicians = filtered_technicians
 
-    # Attach service_time to each returned technician for display consistency
     for tech in selected_technicians:
         tech['service_time'] = service_time
         tech['location'] = normalized_location
 
-    # If this was the initial booking attempt, save the request row
     if is_initial:
         booking_id = f"TECH-{random.randint(1000, 9999)}"
         conn = get_db_connection()
@@ -2064,7 +2127,6 @@ def submit_technician_booking():
             cur.close()
             conn.close()
     else:
-        # If not initial, we show results as a "modified search"
         if fallback_reason == "no_exact_location":
             flash("No technicians found in that exact location. Showing technicians for the selected service type.", "info")
         elif fallback_reason == "no_service_type":
@@ -2084,10 +2146,6 @@ def submit_technician_booking():
 @app.route('/technician/confirm', methods=['POST'])
 @login_required
 def confirm_technician():
-    """
-    Client posts here after clicking Yes in the confirm modal (no Razorpay).
-    We record the request as payment 'Confirmed' and admin will approve later.
-    """
     data = request.get_json(silent=True) or {}
 
     booking_id = f"TECH-{random.randint(1000, 9999)}"
@@ -2115,8 +2173,8 @@ def confirm_technician():
             booking_id,
             'Technician Booking',
             payload,
-            'Confirmed',   # user has "paid" / confirmed on client
-            'Pending',     # admin still needs to approve
+            'Confirmed',
+            'Pending',
             datetime.now()
         ))
         conn.commit()
@@ -2147,7 +2205,6 @@ def confirm_technician():
 @app.route('/submit_courier_booking', methods=['POST'])
 @login_required
 def submit_courier_booking():
-    # ---------- 1. READ FORM ----------
     pickup          = request.form.get('pickup', '').strip().title()
     dropoff         = request.form.get('dropoff', '').strip().title()
     pickup_date     = request.form.get('pickup_date', '').strip()
@@ -2157,7 +2214,6 @@ def submit_courier_booking():
     special_requests = request.form.get('special_requests', '').strip()
     is_initial      = request.form.get('is_initial', 'false') == 'true'
 
-    # ---------- 2. VALIDATION ----------
     try:
         weight = float(package_weight)
         if weight < 0.1:
@@ -2179,7 +2235,6 @@ def submit_courier_booking():
         flash("Invalid date or time format.", "danger")
         return redirect(url_for('dashboard'))
 
-    # ---------- 3. PRICE ----------
     services = {
         "standard":   {"price_per_kg": 50,  "delivery_time": "2–3 days"},
         "express":    {"price_per_kg": 100, "delivery_time": "Same day"},
@@ -2189,7 +2244,6 @@ def submit_courier_booking():
     price_per_kg = svc["price_per_kg"]
     delivery_time = svc["delivery_time"]
 
-    # ---------- 4. OPTIONAL INITIAL SAVE ----------
     if is_initial:
         booking_id = f"COURIER-{random.randint(1000, 9999)}"
         payload = json.dumps({
@@ -2217,7 +2271,6 @@ def submit_courier_booking():
     else:
         flash("Search updated – showing 5–6 couriers.", "info")
 
-    # ---------- 5. GENERATE COURIERS ----------
     all_couriers = []
     base_names = [
         "SwiftFly", "NinjaPost", "TurboShip", "SpeedyWing", "FlashCargo",
@@ -2246,11 +2299,9 @@ def submit_courier_booking():
             "price": 100 if is_express else price_per_kg
         })
 
-    # ---------- 6. PICK 5 OR 6 RANDOMLY ----------
     display_count = random.choice([5, 6])
     couriers = random.sample(all_couriers, display_count)
 
-    # ---------- 7. RENDER ----------
     return render_template(
         'courier_results.html',
         pickup=pickup,
@@ -2401,7 +2452,6 @@ def dashboard():
     cur = conn.cursor()
     
     try:
-        # First, check what columns actually exist in your users table
         cur.execute("""
             SELECT column_name 
             FROM information_schema.columns 
@@ -2410,10 +2460,8 @@ def dashboard():
         """)
         existing_columns = [row[0] for row in cur.fetchall()]
         
-        # Build query based on available columns
-        select_fields = ["full_name", "email", "username"]  # Basic fields that should exist
+        select_fields = ["full_name", "email", "username"]
         
-        # Add optional fields if they exist in the table
         optional_fields = ['address', 'phone', 'whatsapp', 'instagram', 'facebook']
         for field in optional_fields:
             if field in existing_columns:
@@ -2424,7 +2472,6 @@ def dashboard():
         cur.execute(query, (user_id,))
         user_data = cur.fetchone()
 
-        # 1. Fetch User Requests
         cur.execute("""
             SELECT id, booking_id, service_type, details, payment_status, admin_confirmation, created_at
             FROM requests 
@@ -2437,11 +2484,10 @@ def dashboard():
         for req in user_requests_raw:
             req_id, booking_id, service_type, details_json, payment_status, admin_confirmation, created_at = req
             
-            # Safely parse the JSON details
             try:
                 details = json.loads(details_json) if isinstance(details_json, str) else details_json
             except Exception:
-                details = {"raw": str(details_json)} # Fallback for corrupted data
+                details = {"raw": str(details_json)}
 
             requests.append({
                 "id": req_id,
@@ -2454,7 +2500,6 @@ def dashboard():
             })
         
         if user_data:
-            # Create contact dictionary with available data
             contact = {}
             field_mapping = {
                 'full_name': 'name',
@@ -2482,8 +2527,6 @@ def dashboard():
                        notifications=notifications,
                        unread_count=unread_count,
                        current_user_id=user_id)
-            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-            return response
         else:
             flash("User data not found.", "danger")
             return redirect(url_for('login'))
@@ -2501,7 +2544,6 @@ def dashboard():
 def save_contact():
     user_id = current_user.get_id()
     
-    # Get form data
     name = request.form.get('name', '').strip()
     address = request.form.get('address', '').strip()
     phone = request.form.get('phone', '').strip()
@@ -2510,7 +2552,6 @@ def save_contact():
     instagram = request.form.get('instagram', '').strip()
     facebook = request.form.get('facebook', '').strip()
 
-    # Basic validation
     if not name or not email:
         flash("Name and email are required fields.", "danger")
         return redirect(url_for('dashboard'))
@@ -2519,7 +2560,6 @@ def save_contact():
     cur = conn.cursor()
     
     try:
-        # First check what columns exist
         cur.execute("""
             SELECT column_name 
             FROM information_schema.columns 
@@ -2528,7 +2568,6 @@ def save_contact():
         """)
         existing_columns = [row[0] for row in cur.fetchall()]
         
-        # Build update query dynamically based on available columns
         update_fields = []
         values = []
         
@@ -2551,7 +2590,7 @@ def save_contact():
             flash("No valid fields to update.", "danger")
             return redirect(url_for('dashboard'))
         
-        values.append(user_id)  # For WHERE clause
+        values.append(user_id)
         
         query = f"UPDATE users SET {', '.join(update_fields)} WHERE id = %s"
         
@@ -2623,7 +2662,6 @@ def submit_travel_booking():
     logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger(__name__)
 
-    # Get form data
     origin = request.form.get('origin', '').strip().title()
     destination = request.form.get('destination', '').strip().title()
     departure_date = request.form.get('departure_date')
@@ -2637,7 +2675,6 @@ def submit_travel_booking():
     logger.debug(f"Received form data: origin={origin}, destination={destination}, departure_date={departure_date}, "
                  f"return_date={return_date}, adults={adults}, children={children}, infants={infants}, travel_class={travel_class}, is_initial={is_initial}")
 
-    # Validation
     if not all([origin, destination, departure_date]):
         logger.warning("Validation failed: Missing required fields")
         flash("Please provide valid travel details.", "danger")
@@ -2679,20 +2716,16 @@ def submit_travel_booking():
         flash("Invalid date format. Use YYYY-MM-DD.", "danger")
         return redirect(url_for('dashboard'))
 
-    # Generate flight data
     flights = generate_flight_data(origin, destination, travel_class)
     
-    # Randomly select flights to display (5-6 flights)
     display_count = random.choice([5, 6])
     if len(flights) > display_count:
         displayed_flights = random.sample(flights, display_count)
     else:
         displayed_flights = flights
 
-    # Calculate arrival date for display
-    arrival_date = departure_date  # Simplified for display purposes
+    arrival_date = departure_date
 
-    # Save initial request if this is the first search
     if is_initial:
         booking_id = f"FLIGHT-{random.randint(1000, 9999)}"
         conn = get_db_connection()
@@ -2752,7 +2785,6 @@ def generate_flight_data(origin, destination, travel_class):
     """Generate realistic flight data"""
     flights = []
     
-    # Airline data - add more airlines for variety
     airlines = [
         {'name': 'IndiGo', 'code': '6E', 'hub': 'DEL'},
         {'name': 'Global Airlines', 'code': 'GA', 'hub': 'BOM'},
@@ -2766,7 +2798,6 @@ def generate_flight_data(origin, destination, travel_class):
         {'name': 'Crystal Jets', 'code': 'CJ', 'hub': 'HYD'}
     ]
     
-    # Airport codes for common cities - make them consistent
     airport_codes = {
         'Mumbai': 'BOM',
         'Delhi': 'DEL',
@@ -2780,33 +2811,26 @@ def generate_flight_data(origin, destination, travel_class):
         'Ahmedabad': 'AMD'
     }
     
-    # Generate 10-12 flights with consistent flight numbers
     for i in range(random.randint(10, 12)):
         airline = random.choice(airlines)
         origin_code = airport_codes.get(origin, 'XXX')
         destination_code = airport_codes.get(destination, 'YYY')
 
-        # Generate flight number with airline code and 3-digit number
         flight_number = f"{airline['code']}{random.randint(100, 999)}"
 
-        # Generate consistent flight name
         flight_name = f"{airline['name']} {flight_number}"
         
-        # Generate realistic departure time (6 AM to 10 PM)
         departure_hour = random.randint(6, 22)
         departure_minute = random.choice([0, 15, 30, 45])
         
-        # Flight duration: 1-6 hours
         duration_hours = random.randint(1, 6)
         duration_minutes = random.randint(0, 59)
         
-        # Calculate arrival time
         arrival_hour = (departure_hour + duration_hours) % 24
         arrival_minute = (departure_minute + duration_minutes) % 60
         if departure_minute + duration_minutes >= 60:
             arrival_hour = (arrival_hour + 1) % 24
         
-        # Base price based on travel class
         base_price = {
             'economy': random.randint(3000, 8000),
             'premium_economy': random.randint(6000, 12000),
@@ -2814,7 +2838,6 @@ def generate_flight_data(origin, destination, travel_class):
             'first': random.randint(25000, 50000)
         }.get(travel_class, random.randint(3000, 8000))
         
-        # Baggage allowance based on class
         baggage_allowance = {
             'economy': f"{random.choice([15, 20])}kg",
             'premium_economy': f"{random.choice([20, 25])}kg",
@@ -2822,8 +2845,7 @@ def generate_flight_data(origin, destination, travel_class):
             'first': f"{random.choice([40, 50])}kg"
         }.get(travel_class, "20kg")
         
-        # Number of stops
-        stops = random.choice([0, 0, 0, 1, 1, 2])  # Mostly non-stop, some with stops
+        stops = random.choice([0, 0, 0, 1, 1, 2])
         
         flight_data = {
             'airline': airline['name'],
@@ -2846,11 +2868,10 @@ def generate_flight_data(origin, destination, travel_class):
             'stops': stops,
             'refundable': random.choice([True, False]),
             'deal': random.choice(['', '', '', 'Fastest', 'Cheapest', 'Best Deal']),
-            'seats': random.randint(5, 40)  # For display in card
+            'seats': random.randint(5, 40)
         }
         flights.append(flight_data)
     
-    # Sort by price (cheapest first)
     flights.sort(key=lambda x: x['price'])
     
     return flights
@@ -2872,10 +2893,8 @@ def download_ticket(booking_id):
 def confirm_flight():
     data = request.get_json(silent=True) or {}
     
-    # Log incoming data for debugging
     logger.info(f"Received flight booking data: {json.dumps(data, indent=2)}")
     
-    # Extract flight data - it could be an object or just flight number
     flight_data = data.get('flight')
     amount = data.get('amount')
     departure_date = data.get('departure_date')
@@ -2886,9 +2905,7 @@ def confirm_flight():
         logger.error(f"Missing flight data: {data}")
         return jsonify({"success": False, "error": "Missing essential booking data."}), 400
     
-    # Build details object
     details_obj = {
-        # Flight information
         "airline": None,
         "flight_no": None,
         "origin": data.get('origin', 'N/A'),
@@ -2900,7 +2917,6 @@ def confirm_flight():
         "baggage_allowance": None,
         "seats_available": None,
         
-        # Booking information
         "price": amount,
         "departure_date": departure_date,
         "return_date": data.get('return_date'),
@@ -2915,15 +2931,12 @@ def confirm_flight():
         "status": "Confirmed",
         "booking_id": booking_id,
         
-        # Additional details
         "traveller_details": data.get('traveller_details', []),
         "seat_preference": data.get('seat_preference', 'no_preference'),
         "special_requests": data.get('special_requests', '')
     }
     
-    # Handle flight_data which could be a string or object
     if isinstance(flight_data, dict):
-        # Flight data is an object with all details
         details_obj.update({
             "airline": flight_data.get('airline', 'N/A'),
             "flight_no": flight_data.get('flight_no', f"FL-{random.randint(1000, 9999)}"),
@@ -2940,21 +2953,17 @@ def confirm_flight():
             "refundable": flight_data.get('refundable', False)
         })
     elif isinstance(flight_data, str):
-        # Flight data is just a flight number string
         details_obj.update({
             "flight_no": flight_data,
             "airline": data.get('airline', 'Unknown Airline')
         })
     else:
-        # Generate default flight details
         details_obj.update({
             "flight_no": f"FL-{random.randint(1000, 9999)}",
             "airline": "Airline"
         })
     
-    # Ensure flight_no is never empty
     if not details_obj['flight_no'] or details_obj['flight_no'] == 'N/A':
-        # Generate a flight number based on airline
         airline = details_obj['airline']
         airline_codes = {
             'IndiGo': '6E',
@@ -2989,7 +2998,6 @@ def confirm_flight():
         new_id = cur.fetchone()[0]
         conn.commit()
         
-        # Return success with flight number
         return jsonify({
             "success": True, 
             "booking_id": booking_id, 
@@ -3056,7 +3064,6 @@ def debug_db():
     cur = conn.cursor()
     
     try:
-        # Check users table structure
         cur.execute("""
             SELECT column_name, data_type, is_nullable 
             FROM information_schema.columns 
@@ -3066,7 +3073,6 @@ def debug_db():
         """)
         columns = cur.fetchall()
         
-        # Check if we have any data
         cur.execute("SELECT id, username, email FROM users LIMIT 5")
         sample_data = cur.fetchall()
         
@@ -3090,7 +3096,6 @@ def fix_existing_flight_numbers():
     cur = conn.cursor()
     
     try:
-        # Get all flight bookings
         cur.execute("""
             SELECT id, details 
             FROM requests 
@@ -3103,22 +3108,18 @@ def fix_existing_flight_numbers():
             request_id, details_json = row
             
             try:
-                # Parse the details
                 if isinstance(details_json, str):
                     details = json.loads(details_json)
                 else:
                     details = details_json or {}
                 
-                # Check if flight_no is missing or N/A
                 if not details.get('flight_no') or details.get('flight_no') == 'N/A':
-                    # Generate a realistic flight number
                     airline_codes = ['6E', 'SG', 'AI', 'UK', 'GA', 'SW', 'RS', 'GR', 'IX', 'CJ']
                     airline = random.choice(airline_codes)
                     flight_no = f"{airline}{random.randint(100, 999)}"
                     
                     details['flight_no'] = flight_no
                     
-                    # Update the record
                     cur.execute("""
                         UPDATE requests 
                         SET details = %s::jsonb 
@@ -3140,8 +3141,538 @@ def fix_existing_flight_numbers():
         cur.close()
         conn.close()
 
+# ---------------------- AI Recommendations API ----------------------
+
+@app.route('/api/save-location', methods=['POST'])
+@login_required
+def api_save_location():
+    """Save user location"""
+    data = request.json
+    user_id = current_user.get_id()
+    
+    city = data.get('city')
+    state = data.get('state')
+    country = data.get('country')
+    latitude = data.get('latitude')
+    longitude = data.get('longitude')
+    
+    # Save to session for now (can be saved to database later)
+    session['user_location'] = {
+        'city': city,
+        'state': state,
+        'country': country,
+        'latitude': latitude,
+        'longitude': longitude,
+        'updated_at': datetime.now().isoformat()
+    }
+    
+    logger.info(f"Saved location for user {user_id}: {city}, {state}, {country}")
+    
+    return jsonify({'success': True, 'message': 'Location saved successfully'})
+
+
+@app.route('/api/dismiss-recommendation', methods=['POST'])
+@login_required
+def api_dismiss_recommendation():
+    """Dismiss a recommendation"""
+    data = request.json
+    recommendation_id = data.get('recommendation_id')
+    user_id = current_user.get_id()
+    
+    # In production, save dismissed recommendations to database
+    # For now, just acknowledge
+    logger.info(f"User {user_id} dismissed recommendation {recommendation_id}")
+    
+    return jsonify({'success': True, 'message': 'Recommendation dismissed'})
+
+# ---------------------- IMPROVED AI Recommendations API ----------------------
+@app.route('/api/lifestyle-recommendations')
+@login_required
+def api_lifestyle_recommendations():
+    """Get AI-powered recommendations for user - FIXED VERSION"""
+    try:
+        user_id = current_user.get_id()
+        
+        # Get user's lifestyle profile
+        profile = get_user_profile(user_id)
+        
+        if not profile or not profile.get('interests'):
+            return jsonify({
+                'success': True,
+                'recommendations': [],
+                'message': 'Please complete your lifestyle profile to get recommendations',
+                'has_profile': False
+            })
+        
+        # Generate recommendations based on profile
+        recommendations = []
+        interests = profile.get('interests', '').split(',') if profile.get('interests') else []
+        travel_style = profile.get('travel_style', 'comfort')
+        group_size = profile.get('group_size', 1)
+        cab_type = profile.get('cab_type', 'economy')
+        home_owner = profile.get('home_owner', False)
+        
+        logger.info(f"Generating recommendations for user {user_id} with profile: {profile}")
+        
+        # Hotel recommendations
+        if any(interest in ['travel', 'luxury', 'business'] for interest in interests):
+            recommendations.append({
+                'id': 1,
+                'service_type': 'Hotel Booking',
+                'reason': f'Based on your {travel_style} travel style, we recommend luxury hotels with premium amenities',
+                'match_score': 95,
+                'metadata': {
+                    'price': '₹5,000-15,000/night',
+                    'location': 'Major Cities',
+                    'amenities': 'Pool, Spa, Restaurant'
+                }
+            })
+        
+        # Flight recommendations
+        if any(interest in ['travel', 'adventure', 'business'] for interest in interests):
+            recommendations.append({
+                'id': 2,
+                'service_type': 'Flight Booking',
+                'reason': 'Frequent traveler? Get the best flight deals for your next adventure',
+                'match_score': 90,
+                'metadata': {
+                    'price': '₹3,000-20,000',
+                    'duration': 'Domestic & International',
+                    'class': travel_style.title()
+                }
+            })
+        
+        # Car recommendations
+        if cab_type in ['luxury', 'premium', 'suv'] or group_size > 4:
+            recommendations.append({
+                'id': 3,
+                'service_type': 'Car Booking',
+                'reason': f'Perfect for groups of {group_size}. {cab_type.title()} cabs available',
+                'match_score': 88,
+                'metadata': {
+                    'price': '₹1,500-3,000/trip',
+                    'vehicle': cab_type.title(),
+                    'capacity': f'{group_size}+ passengers'
+                }
+            })
+        
+        # Technician recommendations
+        if home_owner:
+            recommendations.append({
+                'id': 4,
+                'service_type': 'Technician Booking',
+                'reason': 'As a homeowner, get verified technicians for AC, plumbing, electrical work',
+                'match_score': 85,
+                'metadata': {
+                    'price': '₹500-1,500',
+                    'availability': 'Same Day Service',
+                    'verified': 'Yes'
+                }
+            })
+        
+        # Courier recommendations
+        if any(interest in ['business', 'shopping'] for interest in interests):
+            recommendations.append({
+                'id': 5,
+                'service_type': 'Courier Booking',
+                'reason': 'Fast and reliable courier services for your needs',
+                'match_score': 82,
+                'metadata': {
+                    'price': '₹50-200/kg',
+                    'delivery': 'Same Day Available',
+                    'tracking': 'Real-time'
+                }
+            })
+        
+        logger.info(f"Generated {len(recommendations)} recommendations for user {user_id}")
+        
+        return jsonify({
+            'success': True,
+            'recommendations': recommendations[:5],  # Limit to top 5
+            'new_recommendations': len(recommendations) > 0,
+            'has_profile': True
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating recommendations: {str(e)}")
+        import traceback
+        traceback.print_exc()  # Print full error for debugging
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'recommendations': [],
+            'message': 'Error generating recommendations. Please try again.'
+        }), 500
+
+
+# ---------------------- IMPROVED Nearby Services API ----------------------
+@app.route('/api/nearby-services', methods=['POST'])
+@login_required
+def api_nearby_services():
+    """Get services near user location with PROPER booking data"""
+    try:
+        data = request.json
+        lat = data.get('lat')
+        lng = data.get('lng')
+        
+        if not lat or not lng:
+            return jsonify({'success': False, 'error': 'Location required'}), 400
+        
+        logger.info(f"Finding services near: {lat}, {lng}")
+        
+        # Get user location from OpenStreetMap (reverse geocode)
+        try:
+            import requests
+            response = requests.get(
+                f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lng}&zoom=10",
+                headers={'User-Agent': 'ConciergeLifestyle/1.0'}
+            )
+            location_data = response.json()
+            city = location_data.get('address', {}).get('city') or location_data.get('address', {}).get('town') or 'Mumbai'
+        except:
+            city = 'Mumbai'  # Fallback
+        
+        services = []
+        
+        # Hotels - with actual booking data
+        hotels = [
+            {
+                'id': 1,
+                'name': 'The Taj Majestic',
+                'type': 'Hotel Booking',
+                'description': 'Luxury 5-star hotel with world-class amenities and spa',
+                'distance': round(random.uniform(0.5, 3.0), 1),
+                'lat': lat + random.uniform(-0.02, 0.02),
+                'lng': lng + random.uniform(-0.02, 0.02),
+                'rating': 4.8,
+                'price': '₹8,000/night',
+                'address': f'{city} Downtown',
+                'booking_data': {
+                    'destination': city,
+                    'hotel_name': 'The Taj Majestic',
+                    'price_per_night': 8000,
+                    'available_rooms': 15
+                }
+            },
+            {
+                'id': 2,
+                'name': 'Grand Plaza Hotel',
+                'type': 'Hotel Booking',
+                'description': 'Business hotel with conference facilities',
+                'distance': round(random.uniform(1.0, 4.0), 1),
+                'lat': lat + random.uniform(-0.03, 0.03),
+                'lng': lng + random.uniform(-0.03, 0.03),
+                'rating': 4.4,
+                'price': '₹4,500/night',
+                'address': f'{city} City Center',
+                'booking_data': {
+                    'destination': city,
+                    'hotel_name': 'Grand Plaza Hotel',
+                    'price_per_night': 4500,
+                    'available_rooms': 20
+                }
+            }
+        ]
+        
+        # Technicians - with booking data
+        technicians = [
+            {
+                'id': 3,
+                'name': 'QuickFix Home Services',
+                'type': 'Technician Booking',
+                'description': 'AC repair, plumbing, electrical - Available 24/7',
+                'distance': round(random.uniform(0.3, 2.0), 1),
+                'lat': lat + random.uniform(-0.015, 0.015),
+                'lng': lng + random.uniform(-0.015, 0.015),
+                'rating': 4.6,
+                'price': '₹500-1,200',
+                'address': f'{city} Residential Area',
+                'booking_data': {
+                    'technician_id': 'TECH-001',
+                    'service_types': ['AC Repair', 'Plumbing', 'Electrical'],
+                    'location': f'{city} Area',
+                    'hourly_rate': 800
+                }
+            },
+            {
+                'id': 4,
+                'name': 'Expert Repairs',
+                'type': 'Technician Booking',
+                'description': 'Professional technicians for all home repairs',
+                'distance': round(random.uniform(0.5, 2.5), 1),
+                'lat': lat + random.uniform(-0.02, 0.02),
+                'lng': lng + random.uniform(-0.02, 0.02),
+                'rating': 4.7,
+                'price': '₹600-1,500',
+                'address': f'{city} Service Area',
+                'booking_data': {
+                    'technician_id': 'TECH-002',
+                    'service_types': ['Carpentry', 'Painting', 'General Repair'],
+                    'location': f'{city} Area',
+                    'hourly_rate': 900
+                }
+            }
+        ]
+        
+        # Cars - with booking data
+        cars = [
+            {
+                'id': 5,
+                'name': 'Premium Cab Services',
+                'type': 'Car Booking',
+                'description': 'Luxury cabs with professional drivers',
+                'distance': round(random.uniform(1.0, 5.0), 1),
+                'lat': lat + random.uniform(-0.04, 0.04),
+                'lng': lng + random.uniform(-0.04, 0.04),
+                'rating': 4.7,
+                'price': '₹1,500-3,000',
+                'address': f'{city} Main Road',
+                'booking_data': {
+                    'cab_class': 'luxury',
+                    'vehicle_model': 'BMW 5 Series',
+                    'pickup_location': f'{city}',
+                    'base_fare': 1500
+                }
+            }
+        ]
+        
+        # Couriers - with booking data
+        couriers = [
+            {
+                'id': 6,
+                'name': 'Express Courier Hub',
+                'type': 'Courier Booking',
+                'description': 'Same-day delivery across the city',
+                'distance': round(random.uniform(0.8, 3.5), 1),
+                'lat': lat + random.uniform(-0.025, 0.025),
+                'lng': lng + random.uniform(-0.025, 0.025),
+                'rating': 4.5,
+                'price': '₹100-500',
+                'address': f'{city} Commercial District',
+                'booking_data': {
+                    'courier_type': 'express',
+                    'max_weight': 20,
+                    'pickup_location': f'{city}',
+                    'price_per_kg': 50
+                }
+            }
+        ]
+        
+        # Combine all services
+        services = hotels + technicians + cars + couriers
+        
+        # Sort by distance
+        services.sort(key=lambda x: x['distance'])
+        
+        logger.info(f"Found {len(services)} services near {city}")
+        
+        return jsonify({
+            'success': True,
+            'services': services[:8],
+            'user_location': {'lat': lat, 'lng': lng, 'city': city}
+        })
+        
+    except Exception as e:
+        logger.error(f"Error finding nearby services: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'message': 'Error finding nearby services. Please try again.'
+        }), 500
+
+
+# ---------------------- AI CHATBOT API ----------------------
+@app.route('/api/chatbot', methods=['POST'])
+@login_required
+def api_chatbot():
+    """Handle chatbot conversations - IMPROVED VERSION"""
+    try:
+        data = request.json
+        user_message = data.get('message', '').strip()
+        user_id = current_user.get_id()
+        
+        if not user_message:
+            return jsonify({
+                'success': False,
+                'error': 'Message is required'
+            }), 400
+        
+        logger.info(f"Chatbot message from user {user_id}: {user_message}")
+        
+        # Get user profile for context
+        profile = get_user_profile(user_id)
+        
+        # Improved response system
+        message_lower = user_message.lower()
+        
+        # Greeting responses
+        if any(word in message_lower for word in ['hi', 'hello', 'hey', 'greetings', 'good morning', 'good afternoon', 'good evening']):
+            responses = [
+                "Hello! 👋 I'm your Concierge Lifestyle assistant. How can I help you today?",
+                "Hi there! 🌟 Ready to book something amazing? Ask me anything!",
+                "Hey! 😊 I'm here to help with hotels, flights, cabs, and more. What do you need?",
+                "Good day! 🎯 What can I assist you with today?"
+            ]
+            bot_response = random.choice(responses)
+            
+        # Hotel queries
+        elif any(word in message_lower for word in ['hotel', 'accommodation', 'stay', 'room', 'lodge']):
+            bot_response = "🏨 Looking for a hotel? I can help! Which city are you planning to visit? We have luxury and budget options in Mumbai, Pune, and many more cities. Just let me know your destination!"
+            
+        # Flight queries
+        elif any(word in message_lower for word in ['flight', 'fly', 'airplane', 'plane', 'travel', 'trip', 'ticket']):
+            bot_response = "✈️ Planning a trip? Let me help you find the perfect flight! Where would you like to go? I can search domestic and international flights with great deals."
+            
+        # Car/Cab queries
+        elif any(word in message_lower for word in ['cab', 'car', 'taxi', 'ride', 'driver', 'transport']):
+            bot_response = "🚗 Need a ride? We have economy, luxury, and SUV options available. Where would you like to go? I can arrange pickup and drop-off anywhere!"
+            
+        # Technician queries
+        elif any(word in message_lower for word in ['technician', 'repair', 'fix', 'plumb', 'electric', 'ac', 'broken', 'maintenance']):
+            bot_response = "🔧 Having technical issues at home? Our verified technicians can help with AC repair, plumbing, electrical work, carpentry, and more. What needs fixing?"
+            
+        # Courier queries
+        elif any(word in message_lower for word in ['courier', 'delivery', 'send', 'package', 'parcel', 'ship']):
+            bot_response = "📦 Need to send something? Our courier services offer same-day delivery! Where do you want to send your package?"
+            
+        # Price queries
+        elif any(word in message_lower for word in ['price', 'cost', 'expensive', 'cheap', 'rate', 'charge', 'fee']):
+            bot_response = "💰 Prices vary by service:\n• Hotels: ₹2,000-15,000/night\n• Flights: ₹3,000-50,000\n• Cabs: ₹1,000-3,000/trip\n• Technicians: ₹500-2,000\n• Courier: ₹50-500\n\nWhich service interests you?"
+            
+        # Recommendation queries
+        elif any(word in message_lower for word in ['recommend', 'suggest', 'what should', 'advice', 'best']):
+            if profile and profile.get('interests'):
+                bot_response = "💡 Based on your lifestyle profile, I have personalized recommendations for you! Check out the 'AI Suggestions' section for tailored services just for you."
+            else:
+                bot_response = "💡 I'd love to give you personalized recommendations! Please complete your lifestyle profile first in the 'AI Suggestions' section, then I can suggest the best services based on your preferences."
+        
+        # Profile queries
+        elif any(word in message_lower for word in ['profile', 'lifestyle', 'preferences', 'setting', 'account']):
+            if profile and profile.get('interests'):
+                interests = profile.get('interests', '').split(',')
+                bot_response = f"📋 Your profile shows you're interested in: {', '.join(interests)}. You can update it anytime from the 'AI Suggestions' section!"
+            else:
+                bot_response = "📋 You haven't completed your lifestyle profile yet. Click on 'AI Suggestions' and then 'Complete Profile' to get personalized recommendations tailored to your interests!"
+                
+        # Booking status queries
+        elif any(word in message_lower for word in ['booking', 'reservation', 'status', 'order', 'request']):
+            bot_response = "📅 To check your bookings, go to 'My Requests' section. You can see all your active bookings, payment status, and download tickets there!"
+            
+        # Location/Nearby queries
+        elif any(word in message_lower for word in ['near', 'nearby', 'close', 'around', 'location']):
+            bot_response = "📍 Check the 'Nearby' section to find services close to your current location! We'll show you hotels, technicians, and more based on your GPS location."
+            
+        # Payment queries
+        elif any(word in message_lower for word in ['payment', 'pay', 'cash', 'card', 'online']):
+            bot_response = "💳 We accept multiple payment methods! After booking, you'll see payment options. For now, it's a simulated system to demonstrate the booking process."
+            
+        # Cancel queries
+        elif any(word in message_lower for word in ['cancel', 'refund', 'return']):
+            bot_response = "🔄 To cancel a booking, go to 'My Requests' and select your booking. Free cancellation is available up to 48 hours before check-in/service time!"
+            
+        # Help queries
+        elif any(word in message_lower for word in ['help', 'how', 'what can you', 'feature', 'service']):
+            bot_response = """🎯 I can help you with:
+• Hotel bookings in major cities
+• Flight bookings (domestic & international)
+• Luxury cab services
+• Home repair technicians
+• Courier & delivery services
+• Personalized AI recommendations
+• Track your bookings
+
+Just tell me what you need!"""
+            
+        # Thank you / Goodbye
+        elif any(word in message_lower for word in ['thank', 'thanks', 'appreciate', 'bye', 'goodbye']):
+            responses = [
+                "You're welcome! 😊 Anything else I can help with?",
+                "Happy to help! 🌟 Let me know if you need anything else.",
+                "My pleasure! 👍 Feel free to ask if you have more questions.",
+                "Glad I could help! 🎉 Have a great day!"
+            ]
+            bot_response = random.choice(responses)
+            
+        # Yes/No responses
+        elif message_lower in ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay']:
+            bot_response = "Great! 😊 What would you like to do? I can help you book hotels, flights, cabs, technicians, or couriers. Just let me know!"
+            
+        elif message_lower in ['no', 'nope', 'not now']:
+            bot_response = "No problem! 👍 I'm here whenever you need help. Just ask!"
+            
+        # Default - More flexible response
+        else:
+            # Try to extract keywords
+            if len(user_message.split()) <= 3:
+                # Short message - give general help
+                bot_response = f"I see you mentioned '{user_message}'. 🤔 I can help you with:\n• Hotels & Accommodations\n• Flight Bookings\n• Cab Services\n• Technicians & Repairs\n• Courier Services\n\nWhich one interests you?"
+            else:
+                # Longer message - more conversational
+                bot_response = "I understand you're asking about something, but I'm not quite sure what you need. 🤔 Could you rephrase that? I'm here to help with:\n\n✈️ Flights\n🏨 Hotels\n🚗 Cabs\n🔧 Technicians\n📦 Couriers\n\nWhat are you looking for?"
+        
+        return jsonify({
+            'success': True,
+            'response': bot_response,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Chatbot error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'response': "Sorry, I'm having trouble right now. Please try again or go directly to the Services section to make a booking!"
+        }), 500
+
+
+# ---------------------- Book Nearby Service ----------------------
+@app.route('/api/book-nearby-service', methods=['POST'])
+@login_required
+def api_book_nearby_service():
+    """Handle booking from nearby services with PRE-FILLED DATA"""
+    try:
+        data = request.json
+        service_type = data.get('service_type')
+        service_name = data.get('service_name')
+        service_id = data.get('service_id')
+        
+        logger.info(f"Booking nearby service: {service_type} - {service_name} (ID: {service_id})")
+        
+        # Map service type to modal ID
+        service_modal_map = {
+            'Hotel Booking': 'hotel',
+            'Car Booking': 'car',
+            'Technician Booking': 'event',
+            'Courier Booking': 'courier'
+        }
+        
+        modal_id = service_modal_map.get(service_type, 'hotel')
+        
+        # Return pre-fill data along with modal ID
+        return jsonify({
+            'success': True,
+            'modal_id': modal_id,
+            'service_name': service_name,
+            'service_id': service_id,
+            'service_type': service_type,
+            'prefill_data': {
+                'service_name': service_name,
+                'service_id': service_id,
+            },
+            'message': f'Opening {service_type} form with pre-filled details...'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error booking nearby service: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'message': 'Unable to open booking form. Please try again.'
+        }), 500
+
 
 # ---------------------- Run ----------------------
 if __name__ == '__main__':
-    #   packages:  reportlab 
     socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)

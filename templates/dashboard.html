@@ -3,18 +3,37 @@
 
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard - Concierge Lifestyle</title>
+
+  <!-- Fonts -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Cormorant+Garamond:wght@300;400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+  <!-- Date Picker -->
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+
+  <!-- Map Library (Leaflet.js) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- WebSocket -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 </head>
 
 <body>
   <!-- Hamburger Menu for Mobile -->
-  <div class="hamburger" onclick="toggleSidebar()">☰</div>
+  <div class="hamburger" onclick="toggleSidebar()">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
 
   <!-- Notification Bell Icon -->
   <div class="notification-bell" onclick="toggleNotifications()">
@@ -23,18 +42,21 @@
       style="display: {{ 'block' if unread_count > 0 else 'none' }};">
       {{ unread_count if unread_count <= 99 else '99+' }} </span>
   </div>
+
+  <!-- Notification Dropdown -->
   <div id="notification-dropdown" class="notification-dropdown">
     <div class="notification-header">
       <h3>Notifications</h3>
       <div class="notification-actions">
-        <button onclick="markAllAsRead()" title="Mark all as read">Mark all as read</button>
+        <button onclick="markAllAsRead()" title="Mark all as read">Mark all read</button>
         <button onclick="clearAllNotifications()" title="Clear all" class="clear-all-btn">Clear All</button>
       </div>
     </div>
     <div id="notification-list" class="notification-list">
       {% if notifications %}
       {% for notif in notifications %}
-      <div class="notification-item {{ 'unread' if not notif.is_read else '' }}" data-id="{{ notif.id }}">
+      <div class="notification-item {{ 'unread' if not notif.is_read else '' }} {{ notif.type or '' }}"
+        data-id="{{ notif.id }}">
         <i class="material-icons">{{ notif.icon }}</i>
         <div class="notification-content">
           <p><strong>{{ notif.title }}</strong></p>
@@ -61,19 +83,42 @@
     <div class="sidebar" id="sidebar">
       <h2 class="logo">Concierge</h2>
       <ul class="sidebar-menu">
-        <li><a href="javascript:void(0)" onclick="showSection('welcome-section'); setActive(this)" class="active">🏠
-            Home</a></li>
-        <li><a href="javascript:void(0)" onclick="showSection('requests-section'); setActive(this)">📅 My Requests</a>
-        </li>
-        <li><a href="javascript:void(0)" onclick="showSection('services-section'); setActive(this)">💼 Services</a>
-        </li>
-        <li><a href="javascript:void(0)" onclick="showSection('contact-section'); setActive(this)">📩 My Contact</a>
-        </li>
+        <li><a href="javascript:void(0)" onclick="showSection('welcome-section'); setActive(this)" class="active">
+            <i class="material-icons">home</i>
+            <span>Home</span>
+          </a></li>
+        <li><a href="javascript:void(0)" onclick="showSection('recommendations-section'); setActive(this)">
+            <i class="material-icons">star</i>
+            <span>AI Suggestions</span>
+          </a></li>
+        <li><a href="javascript:void(0)" onclick="showSection('requests-section'); setActive(this)">
+            <i class="material-icons">calendar_today</i>
+            <span>My Requests</span>
+          </a></li>
+        <li><a href="javascript:void(0)" onclick="showSection('services-section'); setActive(this)">
+            <i class="material-icons">business_center</i>
+            <span>Services</span>
+          </a></li>
+        <li><a href="javascript:void(0)" onclick="showSection('nearby-section'); setActive(this)">
+            <i class="material-icons">near_me</i>
+            <span>Nearby</span>
+          </a></li>
+        <li><a href="javascript:void(0)" onclick="showSection('contact-section'); setActive(this)">
+            <i class="material-icons">person</i>
+            <span>My Profile</span>
+          </a></li>
       </ul>
 
-      <!-- Logout Button at Bottom -->
+      <!-- Sidebar Footer with Logout -->
       <div class="sidebar-footer">
-        <a href="/logout" class="logout-btn">🔓 Logout</a>
+        <div class="user-location" id="sidebar-location">
+          <i class="material-icons">location_on</i>
+          <span id="location-text">Detecting location...</span>
+        </div>
+        <a href="/logout" class="logout-btn">
+          <i class="material-icons">logout</i>
+          <span>Logout</span>
+        </a>
       </div>
     </div>
 
@@ -83,9 +128,136 @@
       <div id="welcome-section" class="main-content-section active">
         <div class="welcome-wrapper">
           <div class="welcome-section">
-            <h2 class="fade-in">Welcome back, {{ user }} 👋</h2>
-            <p class="fade-in">How can I assist you today?</p>
-            <p class="fade-in">Use the left menu to navigate.</p>
+            <h1 class="fade-in">Welcome back, {{ user }} 👋</h1>
+            <p class="fade-in welcome-subtitle">Your personalized concierge experience awaits</p>
+
+            <div class="quick-stats fade-in">
+              <div class="stat-card">
+                <i class="material-icons">event_available</i>
+                <div class="stat-content">
+                  <h3>{{ request_count or 0 }}</h3>
+                  <p>Active Bookings</p>
+                </div>
+              </div>
+              <div class="stat-card">
+                <i class="material-icons">recommend</i>
+                <div class="stat-content">
+                  <h3 id="recommendation-count">0</h3>
+                  <p>AI Suggestions</p>
+                </div>
+              </div>
+              <div class="stat-card">
+                <i class="material-icons">location_city</i>
+                <div class="stat-content">
+                  <h3 id="nearby-count">0</h3>
+                  <p>Nearby Services</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="quick-actions fade-in">
+              <button class="quick-action-btn"
+                onclick="showSection('services-section'); setActive(document.querySelector('[onclick*=services-section]'))">
+                <i class="material-icons">add_circle</i>
+                Book a Service
+              </button>
+              <button class="quick-action-btn"
+                onclick="showSection('recommendations-section'); setActive(document.querySelector('[onclick*=recommendations-section]'))">
+                <i class="material-icons">lightbulb</i>
+                View Suggestions
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Recommendations Section -->
+      <div id="recommendations-section" class="main-content-section">
+        <div class="recommendations-container">
+          <div class="section-header">
+            <div>
+              <h2>AI-Powered Recommendations</h2>
+              <p class="section-subtitle">Personalized suggestions based on your lifestyle</p>
+            </div>
+            <button class="btn refresh-btn" onclick="refreshRecommendations()">
+              <i class="material-icons">refresh</i> Refresh
+            </button>
+          </div>
+
+          <!-- Lifestyle Profile Status -->
+          <div class="lifestyle-status-card">
+            <div class="status-icon">
+              {% if has_lifestyle_profile %}
+              <i class="material-icons">check_circle</i>
+              {% else %}
+              <i class="material-icons">error_outline</i>
+              {% endif %}
+            </div>
+            <div class="status-content">
+              {% if has_lifestyle_profile %}
+              <h3>Lifestyle Profile Complete</h3>
+              <p>Your AI recommendations are optimized based on your preferences</p>
+              <button class="btn-secondary" onclick="window.location.href='/lifestyle_form'">
+                <i class="material-icons">edit</i> Update Profile
+              </button>
+              {% else %}
+              <h3>Complete Your Lifestyle Profile</h3>
+              <p>Help us personalize your experience with AI-powered recommendations</p>
+              <a href="/lifestyle_form" class="btn-primary">
+                <i class="material-icons">psychology</i> Complete Profile
+              </a>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Recommendations Grid -->
+          <div id="recommendations-grid" class="recommendations-grid">
+            <div class="loading-state">
+              <div class="spinner-large"></div>
+              <p>Generating personalized recommendations...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Nearby Services Section -->
+      <div id="nearby-section" class="main-content-section">
+        <div class="nearby-container">
+          <div class="section-header">
+            <div>
+              <h2>Services Near You</h2>
+              <p class="section-subtitle">Discover local options based on your location</p>
+            </div>
+            <button class="btn refresh-btn" onclick="findNearbyServices()">
+              <i class="material-icons">my_location</i> Update Location
+            </button>
+          </div>
+
+          <!-- Location Status -->
+          <div class="location-card">
+            <div class="location-icon">
+              <i class="material-icons">location_on</i>
+            </div>
+            <div class="location-content">
+              <h3 id="current-location-name">Detecting your location...</h3>
+              <p id="current-location-coords"></p>
+            </div>
+            <button class="btn-icon" onclick="getUserLocation()" title="Refresh location">
+              <i class="material-icons">refresh</i>
+            </button>
+          </div>
+
+          <!-- Map Container -->
+          <div id="map-container" class="map-container">
+            <div id="map"></div>
+          </div>
+
+          <!-- Nearby Services List -->
+          <div id="nearby-services-list" class="nearby-services-list">
+            <div class="loading-state">
+              <div class="spinner-large"></div>
+              <p>Searching for nearby services...</p>
+            </div>
           </div>
         </div>
       </div>
@@ -93,12 +265,16 @@
       <!-- My Requests Section -->
       <div id="requests-section" class="main-content-section">
         <div class="requests-container">
-          <h2>My Requests</h2>
-          <div class="requests-controls">
+          <div class="section-header">
+            <div>
+              <h2>My Requests</h2>
+              <p class="section-subtitle">Track all your bookings in one place</p>
+            </div>
             <button class="btn refresh-btn" onclick="refreshRequests()">
               <i class="material-icons">refresh</i> Refresh
             </button>
           </div>
+
           <div id="requests-table-container">
             {% if requests %}
             <div class="requests-table">
@@ -109,85 +285,81 @@
                     <th>Service</th>
                     <th>Details</th>
                     <th>Payment Status</th>
-                    <th>Admin Confirmation</th>
+                    <th>Admin Status</th>
                     <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for request in requests %}
                   <tr data-request-id="{{ request.id }}">
-                    <td>{{ request.booking_id }}</td>
-                    <td>{{ request.service_type }}</td>
-                    <td>
+                    <td><span class="booking-id">{{ request.booking_id }}</span></td>
+                    <td><span class="service-badge">{{ request.service_type }}</span></td>
+                    <td class="details-cell">
                       {% if request.service_type == 'Hotel Booking' %}
-                      {{ request.details.hotel_name }}<br>
-                      Check-in: {{ request.details.checkin }}<br>
-                      Check-out: {{ request.details.checkout }}<br>
-                      Rooms: {{ request.details.rooms }}<br>
-                      Guests: {{ request.details.guests }}
+                      <div class="detail-item"><i class="material-icons">hotel</i> {{ request.details.hotel_name }}
+                      </div>
+                      <div class="detail-item"><i class="material-icons">event</i> {{ request.details.checkin }} → {{
+                        request.details.checkout }}</div>
+                      <div class="detail-item"><i class="material-icons">people</i> {{ request.details.rooms }} rooms,
+                        {{ request.details.guests }} guests</div>
+
                       {% elif request.service_type == 'Flight Booking' %}
-                      {% if request.details.airline %}
-                      {{ request.details.airline }}
-                      {% if request.details.flight_no and request.details.flight_no != 'N/A' %}
-                      ({{ request.details.flight_no }})
-                      {% elif request.details.flight and request.details.flight.flight_no %}
-                      ({{ request.details.flight.flight_no }})
-                      {% else %}
-                      (Flight Number: Pending)
-                      {% endif %}
-                      <br>
-                      {{ request.details.origin or request.details.flight.origin or 'N/A' }} to
-                      {{ request.details.destination or request.details.flight.destination or 'N/A' }}<br>
-                      Departure: {{ request.details.departure_time or request.details.flight.departure_time or 'N/A'
-                      }}<br>
-                      Arrival: {{ request.details.arrival_time or request.details.flight.arrival_time or 'N/A' }}<br>
-                      Class: {{ request.details.travel_class or request.details.flight.travel_class or 'N/A' }}
-                      {% else %}
-                      Flight Booking #{{ request.booking_id }}
-                      {% endif %}
+                      <div class="detail-item"><i class="material-icons">flight</i> {{ request.details.airline or
+                        'Flight' }}</div>
+                      <div class="detail-item"><i class="material-icons">flight_takeoff</i> {{ request.details.origin or
+                        'N/A' }} → {{ request.details.destination or 'N/A' }}</div>
+                      <div class="detail-item"><i class="material-icons">schedule</i> {{ request.details.departure_time
+                        or 'N/A' }}</div>
+
                       {% elif request.service_type == 'Car Booking' %}
-                      {{ request.details.cab_class or 'N/A' }}<br>
-                      Pickup: {{ request.details.pickup or 'N/A' }} to {{ request.details.dropoff or 'N/A' }}<br>
-                      Pickup Time: {{ request.details.pickup_time or 'N/A' }}<br>
-                      Dropoff Time: {{ request.details.dropoff_time or 'N/A' }}<br>
-                      Passengers: {{ request.details.passengers or 'N/A' }}
+                      <div class="detail-item"><i class="material-icons">directions_car</i> {{ request.details.cab_class
+                        or 'Standard' }}</div>
+                      <div class="detail-item"><i class="material-icons">location_on</i> {{ request.details.pickup or
+                        'N/A' }} → {{ request.details.dropoff or 'N/A' }}</div>
+                      <div class="detail-item"><i class="material-icons">schedule</i> {{ request.details.pickup_time or
+                        'N/A' }}</div>
+
                       {% elif request.service_type == 'Courier Booking' %}
-                      Pickup: {{ request.details.pickup_location or request.details.pickup or 'N/A' }} to {{
-                      request.details.dropoff_location or request.details.dropoff or 'N/A' }}<br>
-                      Pickup Date: {{ request.details.pickup_date or 'N/A' }}<br>
-                      Pickup Time: {{ request.details.pickup_time or 'N/A' }}<br>
-                      Package Weight: {{ request.details.package_weight_kg or request.details.weight or 'N/A' }}
-                      kg<br>
+                      <div class="detail-item"><i class="material-icons">local_shipping</i> {{
+                        request.details.courier_type or 'Standard' }}</div>
+                      <div class="detail-item"><i class="material-icons">location_on</i> {{ request.details.pickup or
+                        'N/A' }} → {{ request.details.dropoff or 'N/A' }}</div>
+                      <div class="detail-item"><i class="material-icons">scale</i> {{ request.details.package_weight_kg
+                        or 'N/A' }} kg</div>
+
                       {% elif request.service_type == 'Technician Booking' %}
-                      Service: {{ request.details.service_type or 'N/A' }}<br>
-                      Location: {{ request.details.location or 'N/A' }}<br>
-                      Date: {{ request.details.service_date or 'N/A' }}<br>
-                      Time: {{ request.details.service_time or 'N/A' }}<br>
-                      Description: {{ request.details.description or 'No details provided' }}
-                      {% else %}
-                      {{ request.details.description or 'No details provided' }}
+                      <div class="detail-item"><i class="material-icons">build</i> {{ request.details.service_type or
+                        'N/A' }}</div>
+                      <div class="detail-item"><i class="material-icons">location_on</i> {{ request.details.location or
+                        'N/A' }}</div>
+                      <div class="detail-item"><i class="material-icons">event</i> {{ request.details.service_date or
+                        'N/A' }} at {{ request.details.service_time or 'N/A' }}</div>
                       {% endif %}
                     </td>
-                    <td class="{{ 'confirmed' if request.payment_status == 'Confirmed' else 'pending' }}">
-                      {{ request.payment_status }}
+                    <td>
+                      <span
+                        class="status-badge {{ 'confirmed' if request.payment_status == 'Confirmed' else 'pending' }}">
+                        {{ request.payment_status }}
+                      </span>
                     </td>
-                    <td>{{ request.admin_confirmation or 'Pending' }}</td>
+                    <td>
+                      <span class="admin-status">{{ request.admin_confirmation or 'Pending' }}</span>
+                    </td>
                     <td>
                       {% if request.payment_status == 'Confirmed' %}
                       {% if request.details and request.details.ticket_pdf_url %}
-                      <button class="btn btn-success download-btn"
+                      <button class="btn-action success"
                         onclick="downloadPDFTicket('{{ request.details.ticket_pdf_url }}')">
-                        <i class="material-icons">picture_as_pdf</i> PDF Ticket
+                        <i class="material-icons">download</i> Download
                       </button>
                       {% else %}
-                      <!-- Show Request Ticket button for all confirmed bookings without PDF -->
-                      <button class="btn btn-warning download-btn"
+                      <button class="btn-action warning"
                         onclick="requestTicket('{{ request.booking_id }}', '{{ request.service_type }}')">
-                        <i class="material-icons">confirmation_number</i> Request Ticket
+                        <i class="material-icons">confirmation_number</i> Request
                       </button>
                       {% endif %}
                       {% else %}
-                      <span class="no-action">No action available</span>
+                      <span class="no-action">Awaiting payment</span>
                       {% endif %}
                     </td>
                   </tr>
@@ -196,7 +368,15 @@
               </table>
             </div>
             {% else %}
-            <p class="no-requests">No requests found. Book a service to see it here!</p>
+            <div class="empty-state">
+              <i class="material-icons">event_busy</i>
+              <h3>No bookings yet</h3>
+              <p>Book your first service to see it here</p>
+              <button class="btn-primary"
+                onclick="showSection('services-section'); setActive(document.querySelector('[onclick*=services-section]'))">
+                Browse Services
+              </button>
+            </div>
             {% endif %}
           </div>
         </div>
@@ -204,118 +384,157 @@
 
       <!-- Services Section -->
       <div id="services-section" class="main-content-section">
-        <div class="card-grid">
-          <div class="card" onclick="openModal('hotel')">
-            <h3>🏨 Hotel Booking</h3>
-            <p>Luxury, Budget, International</p>
+        <div class="services-container">
+          <div class="section-header">
+            <div>
+              <h2>Our Services</h2>
+              <p class="section-subtitle">Book your perfect experience</p>
+            </div>
           </div>
-          <div class="card" onclick="openModal('travel')">
-            <h3>🛫 Flight Booking & Visa</h3>
-            <p>Personalized itinerary with visa, flight, hotel</p>
-          </div>
-          <div class="card" onclick="openModal('car')">
-            <h3>🚗 Luxury Cabs</h3>
-            <p>BMW, Audi, Limousine Cabs</p>
-          </div>
-          <div class="card" onclick="openModal('event')">
-            <h3>🛠️ On-Demand Handyman / Technician</h3>
-            <p>AC repair, plumber, electrician — quick & verified</p>
-          </div>
-          <div class="card" onclick="openModal('courier')">
-            <h3>📦 Courier & Delivery</h3>
-            <p>Pickup-drop anything in your city</p>
+
+          <div class="card-grid">
+            <div class="service-card" onclick="openModal('hotel')">
+              <div class="service-icon">
+                <i class="material-icons">hotel</i>
+              </div>
+              <h3>Hotel Booking</h3>
+              <p>Luxury, budget, and boutique hotels worldwide</p>
+              <span class="service-tag">Popular</span>
+            </div>
+
+            <div class="service-card" onclick="openModal('travel')">
+              <div class="service-icon">
+                <i class="material-icons">flight</i>
+              </div>
+              <h3>Flight Booking</h3>
+              <p>Domestic and international flights with visa assistance</p>
+              <span class="service-tag">Featured</span>
+            </div>
+
+            <div class="service-card" onclick="openModal('car')">
+              <div class="service-icon">
+                <i class="material-icons">directions_car</i>
+              </div>
+              <h3>Luxury Cabs</h3>
+              <p>Premium vehicles: BMW, Audi, Mercedes, Limousine</p>
+            </div>
+
+            <div class="service-card" onclick="openModal('event')">
+              <div class="service-icon">
+                <i class="material-icons">build</i>
+              </div>
+              <h3>Handyman Services</h3>
+              <p>AC repair, plumbing, electrical, and more</p>
+            </div>
+
+            <div class="service-card" onclick="openModal('courier')">
+              <div class="service-icon">
+                <i class="material-icons">local_shipping</i>
+              </div>
+              <h3>Courier & Delivery</h3>
+              <p>Fast and reliable pickup and delivery services</p>
+            </div>
           </div>
         </div>
 
+        <!-- Modals for each service (same as before but with updated styling) -->
         <!-- Hotel Booking Modal -->
         <div id="hotel-modal" class="modal">
           <div class="modal-content">
             <span class="close" onclick="closeModal('hotel')">&times;</span>
-            <h2>🏨 Book Your Stay</h2>
+            <div class="modal-header">
+              <i class="material-icons">hotel</i>
+              <h2>Book Your Stay</h2>
+            </div>
             <form action="{{ url_for('submit_hotel_booking') }}" method="POST" class="booking-form">
               <div class="field">
                 <label><i class="material-icons">location_city</i> Destination</label>
                 <input type="text" name="destination" placeholder="Enter City" required>
               </div>
-              <div class="field">
-                <label><i class="material-icons">calendar_today</i> Check-In</label>
-                <input type="text" name="checkin" class="date-input" required>
+              <div class="field-group">
+                <div class="field">
+                  <label><i class="material-icons">calendar_today</i> Check-In</label>
+                  <input type="text" name="checkin" class="date-input" required>
+                </div>
+                <div class="field">
+                  <label><i class="material-icons">calendar_today</i> Check-Out</label>
+                  <input type="text" name="checkout" class="date-input" required>
+                </div>
               </div>
-              <div class="field">
-                <label><i class="material-icons">calendar_today</i> Check-Out</label>
-                <input type="text" name="checkout" class="date-input" required>
-              </div>
-              <div class="field guests">
-                <label><i class="material-icons">group</i> Room & Guests</label>
-                <div class="guests-container">
-                  <div class="counter">
-                    <label>Rooms</label>
-                    <div class="count-control">
-                      <button type="button" onclick="updateCount('room', -1)">−</button>
-                      <input type="number" name="rooms" id="roomCount" value="1" min="1" readonly>
-                      <button type="button" onclick="updateCount('room', 1)">+</button>
-                    </div>
+              <div class="field-group">
+                <div class="field">
+                  <label><i class="material-icons">meeting_room</i> Rooms</label>
+                  <div class="count-control">
+                    <button type="button" onclick="updateCount('room', -1)">−</button>
+                    <input type="number" name="rooms" id="roomCount" value="1" min="1" readonly>
+                    <button type="button" onclick="updateCount('room', 1)">+</button>
                   </div>
-                  <div class="counter">
-                    <label>Guests</label>
-                    <div class="count-control">
-                      <button type="button" onclick="updateCount('guests', -1)">−</button>
-                      <input type="number" name="guests" id="guestCount" value="1" min="1" readonly>
-                      <button type="button" onclick="updateCount('guests', 1)">+</button>
-                    </div>
+                </div>
+                <div class="field">
+                  <label><i class="material-icons">group</i> Guests</label>
+                  <div class="count-control">
+                    <button type="button" onclick="updateCount('guests', -1)">−</button>
+                    <input type="number" name="guests" id="guestCount" value="1" min="1" readonly>
+                    <button type="button" onclick="updateCount('guests', 1)">+</button>
                   </div>
                 </div>
               </div>
-              <button type="submit" class="btn" data-type="search" onclick="showLoading(this)">SEARCH HOTELS</button>
+              <button type="submit" class="btn-submit" onclick="showLoading(this)">
+                <i class="material-icons">search</i> Search Hotels
+              </button>
             </form>
           </div>
         </div>
 
-        <!-- Travel Modal -->
+        <!-- Flight Booking Modal -->
         <div id="travel-modal" class="modal">
           <div class="modal-content">
             <span class="close" onclick="closeModal('travel')">&times;</span>
-            <h2>🛫 Book Your Flight</h2>
-            <form action="{{ url_for('submit_travel_booking') }}" method="POST" id="travel-booking-form">
-              <div class="field">
-                <label><i class="material-icons">flight_takeoff</i> From</label>
-                <input type="text" name="origin" placeholder="Enter Origin City" required>
+            <div class="modal-header">
+              <i class="material-icons">flight</i>
+              <h2>Book Your Flight</h2>
+            </div>
+            <form action="{{ url_for('submit_travel_booking') }}" method="POST">
+              <div class="field-group">
+                <div class="field">
+                  <label><i class="material-icons">flight_takeoff</i> From</label>
+                  <input type="text" name="origin" placeholder="Origin City" required>
+                </div>
+                <div class="field">
+                  <label><i class="material-icons">flight_land</i> To</label>
+                  <input type="text" name="destination" placeholder="Destination City" required>
+                </div>
               </div>
-              <div class="field">
-                <label><i class="material-icons">flight_land</i> To</label>
-                <input type="text" name="destination" placeholder="Enter Destination City" required>
+              <div class="field-group">
+                <div class="field">
+                  <label><i class="material-icons">calendar_today</i> Departure</label>
+                  <input type="text" name="departure_date" class="date-input" required>
+                </div>
+                <div class="field">
+                  <label><i class="material-icons">calendar_today</i> Return</label>
+                  <input type="text" name="return_date" class="date-input">
+                </div>
               </div>
-              <div class="field">
-                <label><i class="material-icons">calendar_today</i> Departure Date</label>
-                <input type="text" name="departure_date" class="date-input" required>
-              </div>
-              <div class="field">
-                <label><i class="material-icons">calendar_today</i> Return Date</label>
-                <input type="text" name="return_date" class="date-input">
-              </div>
-              <div class="field guests">
-                <label><i class="material-icons">group</i> Passengers</label>
-                <div class="guests-container">
-                  <div class="counter">
-                    <label>Adults</label>
-                    <div class="count-control">
-                      <button type="button" onclick="updateCount('adults', -1)">−</button>
-                      <input type="number" name="adults" id="adultCount" value="1" min="1" readonly>
-                      <button type="button" onclick="updateCount('adults', 1)">+</button>
-                    </div>
+              <div class="field-group">
+                <div class="field">
+                  <label><i class="material-icons">person</i> Adults</label>
+                  <div class="count-control">
+                    <button type="button" onclick="updateCount('adults', -1)">−</button>
+                    <input type="number" name="adults" id="adultCount" value="1" min="1" readonly>
+                    <button type="button" onclick="updateCount('adults', 1)">+</button>
                   </div>
-                  <div class="counter">
-                    <label>Children</label>
-                    <div class="count-control">
-                      <button type="button" onclick="updateCount('children', -1)">−</button>
-                      <input type="number" name="children" id="childCount" value="0" min="0" readonly>
-                      <button type="button" onclick="updateCount('children', 1)">+</button>
-                    </div>
+                </div>
+                <div class="field">
+                  <label><i class="material-icons">child_care</i> Children</label>
+                  <div class="count-control">
+                    <button type="button" onclick="updateCount('children', -1)">−</button>
+                    <input type="number" name="children" id="childCount" value="0" min="0" readonly>
+                    <button type="button" onclick="updateCount('children', 1)">+</button>
                   </div>
                 </div>
               </div>
               <div class="field">
-                <label><i class="material-icons">flight_class</i> Travel Class</label>
+                <label><i class="material-icons">airline_seat_recline_normal</i> Class</label>
                 <select name="class" class="select-input">
                   <option value="economy">Economy</option>
                   <option value="premium_economy">Premium Economy</option>
@@ -323,7 +542,9 @@
                   <option value="first">First Class</option>
                 </select>
               </div>
-              <button type="submit" class="btn" data-type="search" onclick="showLoading(this)">SEARCH FLIGHTS</button>
+              <button type="submit" class="btn-submit" onclick="showLoading(this)">
+                <i class="material-icons">search</i> Search Flights
+              </button>
             </form>
           </div>
         </div>
@@ -332,72 +553,79 @@
         <div id="car-modal" class="modal">
           <div class="modal-content">
             <span class="close" onclick="closeModal('car')">&times;</span>
-            <h2>🚗 Book Your Luxury Cab</h2>
-            <form action="{{ url_for('submit_car_booking') }}" method="POST" class="booking-form">
+            <div class="modal-header">
+              <i class="material-icons">directions_car</i>
+              <h2>Book Luxury Cab</h2>
+            </div>
+            <form action="{{ url_for('submit_car_booking') }}" method="POST">
               <div class="field">
-                <label><i class="material-icons">pin_drop</i> Pickup Location</label>
+                <label><i class="material-icons">my_location</i> Pickup Location</label>
                 <input type="text" name="pickup" placeholder="Enter Pickup Location" required>
               </div>
               <div class="field">
                 <label><i class="material-icons">location_on</i> Drop-off Location</label>
                 <input type="text" name="dropoff" placeholder="Enter Drop-off Location" required>
               </div>
-              <div class="field">
-                <label><i class="material-icons">calendar_today</i> Pickup Date</label>
-                <input type="text" name="pickup_date" class="date-input" required>
+              <div class="field-group">
+                <div class="field">
+                  <label><i class="material-icons">calendar_today</i> Pickup Date</label>
+                  <input type="text" name="pickup_date" class="date-input" required>
+                </div>
+                <div class="field">
+                  <label><i class="material-icons">access_time</i> Pickup Time</label>
+                  <input type="time" name="pickup_time" required>
+                </div>
+              </div>
+              <div class="field-group">
+                <div class="field">
+                  <label><i class="material-icons">calendar_today</i> Return Date</label>
+                  <input type="text" name="return_date" class="date-input">
+                </div>
+                <div class="field">
+                  <label><i class="material-icons">access_time</i> Return Time</label>
+                  <input type="time" name="return_time">
+                </div>
               </div>
               <div class="field">
-                <label><i class="material-icons">access_time</i> Pickup Time</label>
-                <input type="time" name="pickup_time" required>
-              </div>
-              <div class="field">
-                <label><i class="material-icons">calendar_today</i> Return Date (Optional)</label>
-                <input type="text" name="return_date" class="date-input">
-              </div>
-              <div class="field">
-                <label><i class="material-icons">access_time</i> Return Time (Optional)</label>
-                <input type="time" name="return_time">
-              </div>
-              <div class="field guests">
                 <label><i class="material-icons">group</i> Passengers</label>
-                <div class="guests-container">
-                  <div class="counter">
-                    <label>Persons</label>
-                    <div class="count-control">
-                      <button type="button" onclick="updateCount('passengers', -1)">−</button>
-                      <input type="number" name="passengers" id="passengerCount" value="1" min="1" max="9" readonly>
-                      <button type="button" onclick="updateCount('passengers', 1)">+</button>
-                    </div>
-                  </div>
+                <div class="count-control">
+                  <button type="button" onclick="updateCount('passengers', -1)">−</button>
+                  <input type="number" name="passengers" id="passengerCount" value="1" min="1" max="9" readonly>
+                  <button type="button" onclick="updateCount('passengers', 1)">+</button>
                 </div>
               </div>
               <div class="field">
                 <label><i class="material-icons">local_taxi</i> Cab Class</label>
                 <select name="cab_class" class="select-input" required>
                   <option value="standard">Standard</option>
-                  <option value="luxury">Luxury</option>
+                  <option value="luxury">Luxury (BMW, Audi)</option>
                   <option value="suv">SUV</option>
+                  <option value="limousine">Limousine</option>
                 </select>
               </div>
               <div class="field">
-                <label><i class="material-icons">note_add</i> Special Requests (Optional)</label>
-                <textarea name="special_requests" rows="2" class="textarea-input"
-                  placeholder="e.g., Child seat, Extra luggage"></textarea>
+                <label><i class="material-icons">note</i> Special Requests</label>
+                <textarea name="special_requests" rows="2" placeholder="e.g., Child seat, Extra luggage"></textarea>
               </div>
-              <button type="submit" class="btn" data-type="search" onclick="showLoading(this)">BOOK CAB</button>
+              <button type="submit" class="btn-submit" onclick="showLoading(this)">
+                <i class="material-icons">check</i> Book Cab
+              </button>
             </form>
           </div>
         </div>
 
-        <!-- Technician Booking Modal -->
+        <!-- Technician Modal -->
         <div id="event-modal" class="modal">
           <div class="modal-content">
             <span class="close" onclick="closeModal('event')">&times;</span>
-            <h2>🛠️ Book Your Technician</h2>
-            <form action="{{ url_for('submit_technician_booking') }}" method="POST" class="booking-form">
+            <div class="modal-header">
+              <i class="material-icons">build</i>
+              <h2>Book Technician</h2>
+            </div>
+            <form action="{{ url_for('submit_technician_booking') }}" method="POST">
               <input type="hidden" name="is_initial" value="true">
               <div class="field">
-                <label><i class="material-icons">build</i> Service Type</label>
+                <label><i class="material-icons">construction</i> Service Type</label>
                 <select name="service_type" class="select-input" required>
                   <option value="" disabled selected>Select a service</option>
                   <option value="ac_repair">AC Repair</option>
@@ -408,60 +636,68 @@
                 </select>
               </div>
               <div class="field">
-                <label><i class="material-icons">pin_drop</i> Service Location</label>
+                <label><i class="material-icons">location_on</i> Service Location</label>
                 <input type="text" name="location" placeholder="Enter service address" required>
               </div>
-              <div class="field">
-                <label><i class="material-icons">calendar_today</i> Preferred Date</label>
-                <input type="text" name="service_date" class="date-input" required>
-              </div>
-              <div class="field">
-                <label><i class="material-icons">access_time</i> Preferred Time</label>
-                <input type="time" name="service_time" required>
+              <div class="field-group">
+                <div class="field">
+                  <label><i class="material-icons">calendar_today</i> Preferred Date</label>
+                  <input type="text" name="service_date" class="date-input" required>
+                </div>
+                <div class="field">
+                  <label><i class="material-icons">access_time</i> Preferred Time</label>
+                  <input type="time" name="service_time" required>
+                </div>
               </div>
               <div class="field">
                 <label><i class="material-icons">priority_high</i> Urgency</label>
                 <select name="urgency" class="select-input" required>
                   <option value="normal">Normal (Within 24 hours)</option>
                   <option value="urgent">Urgent (Within 4 hours)</option>
+                  <option value="emergency">Emergency (ASAP)</option>
                 </select>
               </div>
               <div class="field">
                 <label><i class="material-icons">description</i> Issue Description</label>
-                <textarea name="description" rows="4" class="textarea-input"
-                  placeholder="Describe the issue (e.g., AC not cooling, leaking pipe)" required></textarea>
+                <textarea name="description" rows="3" placeholder="Describe the issue in detail" required></textarea>
               </div>
-              <button type="submit" class="btn" data-type="search" onclick="showLoading(this)">SEARCH
-                TECHNICIANS</button>
+              <button type="submit" class="btn-submit" onclick="showLoading(this)">
+                <i class="material-icons">search</i> Find Technician
+              </button>
             </form>
           </div>
         </div>
 
-        <!-- Courier & Delivery Modal -->
+        <!-- Courier Modal -->
         <div id="courier-modal" class="modal">
           <div class="modal-content">
             <span class="close" onclick="closeModal('courier')">&times;</span>
-            <h2>📦 Courier & Delivery</h2>
-            <form action="{{ url_for('submit_courier_booking') }}" method="POST" class="booking-form">
+            <div class="modal-header">
+              <i class="material-icons">local_shipping</i>
+              <h2>Courier & Delivery</h2>
+            </div>
+            <form action="{{ url_for('submit_courier_booking') }}" method="POST">
               <input type="hidden" name="is_initial" value="true">
               <div class="field">
-                <label><i class="material-icons">pin_drop</i> Pickup Location</label>
+                <label><i class="material-icons">my_location</i> Pickup Location</label>
                 <input type="text" name="pickup" placeholder="Enter Pickup Location" required>
               </div>
               <div class="field">
                 <label><i class="material-icons">location_on</i> Drop-off Location</label>
                 <input type="text" name="dropoff" placeholder="Enter Drop-off Location" required>
               </div>
-              <div class="field">
-                <label><i class="material-icons">calendar_today</i> Pickup Date</label>
-                <input type="text" name="pickup_date" class="date-input" required>
+              <div class="field-group">
+                <div class="field">
+                  <label><i class="material-icons">calendar_today</i> Pickup Date</label>
+                  <input type="text" name="pickup_date" class="date-input" required>
+                </div>
+                <div class="field">
+                  <label><i class="material-icons">access_time</i> Pickup Time</label>
+                  <input type="time" name="pickup_time" required>
+                </div>
               </div>
               <div class="field">
-                <label><i class="material-icons">access_time</i> Pickup Time</label>
-                <input type="time" name="pickup_time" required>
-              </div>
-              <div class="field">
-                <label><i class="material-icons">local_shipping</i> Courier Type</label>
+                <label><i class="material-icons">speed</i> Courier Type</label>
                 <select name="courier_type" class="select-input" required>
                   <option value="standard">Standard (1-2 days)</option>
                   <option value="express">Express (Same day)</option>
@@ -469,66 +705,74 @@
                 </select>
               </div>
               <div class="field">
-                <label><i class="material-icons">balance</i> Package Weight (kg)</label>
+                <label><i class="material-icons">scale</i> Package Weight (kg)</label>
                 <input type="number" name="package_weight" min="0.1" max="50" step="0.1" placeholder="e.g., 2.5"
                   required>
               </div>
               <div class="field">
-                <label><i class="material-icons">note_add</i> Special Requests (Optional)</label>
-                <textarea name="special_requests" rows="2" class="textarea-input"
+                <label><i class="material-icons">note</i> Special Requests</label>
+                <textarea name="special_requests" rows="2"
                   placeholder="e.g., Fragile item, Insured delivery"></textarea>
               </div>
-              <button type="submit" class="btn" data-type="search" onclick="showLoading(this)">SEARCH
-                COURIERS</button>
+              <button type="submit" class="btn-submit" onclick="showLoading(this)">
+                <i class="material-icons">check</i> Book Courier
+              </button>
             </form>
           </div>
         </div>
       </div>
 
-      <!-- My Contact Section -->
+      <!-- Contact Section -->
       <div id="contact-section" class="main-content-section">
         <div class="contact-container">
-          <h2>My Contact Details</h2>
-          <form action="{{ url_for('save_contact') }}" method="POST">
-            <div class="form-group">
-              <label>Full Name:</label>
-              <input type="text" name="name" value="{{ contact.name or '' }}" required>
+          <div class="section-header">
+            <div>
+              <h2>My Profile</h2>
+              <p class="section-subtitle">Manage your contact information</p>
             </div>
-            <div class="form-group">
-              <label>Address:</label>
-              <input type="text" name="address" value="{{ contact.address or '' }}">
+          </div>
+
+          <form action="{{ url_for('save_contact') }}" method="POST" class="profile-form">
+            <div class="form-grid">
+              <div class="form-group">
+                <label><i class="material-icons">person</i> Full Name</label>
+                <input type="text" name="name" value="{{ contact.name or '' }}" required>
+              </div>
+              <div class="form-group">
+                <label><i class="material-icons">phone</i> Phone</label>
+                <input type="text" name="phone" value="{{ contact.phone or '' }}" required pattern="[0-9]{10}">
+              </div>
+              <div class="form-group full-width">
+                <label><i class="material-icons">email</i> Email</label>
+                <input type="email" name="email" value="{{ contact.email or '' }}" required>
+              </div>
+              <div class="form-group full-width">
+                <label><i class="material-icons">home</i> Address</label>
+                <input type="text" name="address" value="{{ contact.address or '' }}">
+              </div>
+              <div class="form-group">
+                <label><i class="material-icons">chat</i> WhatsApp</label>
+                <input type="text" name="whatsapp" value="{{ contact.whatsapp or '' }}" placeholder="+91 XXXXXXXXXX">
+              </div>
+              <div class="form-group">
+                <label><i class="material-icons">photo_camera</i> Instagram</label>
+                <input type="text" name="instagram" value="{{ contact.instagram or '' }}" placeholder="@username">
+              </div>
+              <div class="form-group">
+                <label><i class="material-icons">facebook</i> Facebook</label>
+                <input type="text" name="facebook" value="{{ contact.facebook or '' }}" placeholder="Profile URL">
+              </div>
             </div>
-            <div class="form-group">
-              <label>Phone:</label>
-              <input type="text" name="phone" value="{{ contact.phone or '' }}" required pattern="[0-9]{10}"
-                title="10-digit phone number">
-            </div>
-            <div class="form-group">
-              <label>WhatsApp:</label>
-              <input type="text" name="whatsapp" value="{{ contact.whatsapp or '' }}">
-            </div>
-            <div class="form-group">
-              <label>Email:</label>
-              <input type="email" name="email" value="{{ contact.email or '' }}" required>
-            </div>
-            <div class="form-group">
-              <label>Instagram:</label>
-              <input type="text" name="instagram" value="{{ contact.instagram or '' }}">
-            </div>
-            <div class="form-group">
-              <label>Facebook:</label>
-              <input type="text" name="facebook" value="{{ contact.facebook or '' }}">
-            </div>
-            <div class="form-group">
-              <button type="submit" class="btn" data-type="save" onclick="showLoading(this)">Save Details</button>
-            </div>
+            <button type="submit" class="btn-submit" onclick="showLoading(this)">
+              <i class="material-icons">save</i> Save Profile
+            </button>
           </form>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Toast Popup HTML -->
+  <!-- Toast Container -->
   <div id="toast-container"></div>
 
   <!-- Flash Messages -->
@@ -536,57 +780,186 @@
   {% if messages %}
   <div class="flash-messages">
     {% for category, message in messages %}
-    <div class="toast {{ category }}">{{ message }}</div>
+    <div class="toast {{ category }}">
+      <i class="material-icons">
+        {% if category == 'success' %}check_circle
+        {% elif category == 'error' or category == 'danger' %}error
+        {% elif category == 'warning' %}warning
+        {% else %}info{% endif %}
+      </i>
+      <span>{{ message }}</span>
+    </div>
     {% endfor %}
   </div>
   {% endif %}
   {% endwith %}
 
-</body>
-<script>
-  // Global variables
-  let socket;
-  const currentUserId = "{{ current_user_id }}";
-  let unreadNotifications = 0;
+  <!-- AI Chatbot - Improved -->
+  <div class="chatbot-container" id="chatbot-container">
+    <!-- Modern Chatbot Avatar -->
+    <div class="chatbot-avatar" onclick="toggleChatbot()">
+      <i class="material-icons">smart_toy</i>
+      <div class="chatbot-notification" id="chatbot-notification" style="display: none;">1</div>
+    </div>
 
-  // Initialize WebSocket connection
-  function initSocket() {
-    socket = io();
+    <!-- Chatbot Window -->
+    <div class="chatbot-window" id="chatbot-window">
+      <!-- Header -->
+      <div class="chatbot-header">
+        <h3>
+          <i class="material-icons">smart_toy</i>
+          AI Assistant
+        </h3>
+        <button class="chatbot-close" onclick="toggleChatbot()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
 
-    socket.on('connect', function () {
-      console.log('Connected to server');
-      socket.emit('user_connect', { user_id: currentUserId });
+      <!-- Messages Container -->
+      <div class="chatbot-messages" id="chatbot-messages">
+        <!-- Welcome Message -->
+        <div class="chat-welcome">
+          <i class="material-icons">psychology</i>
+          <h4>Hello! I'm your AI assistant 👋</h4>
+          <p>I can help you with hotels, flights, cabs, technicians, and more!</p>
+          <div class="chat-quick-actions">
+            <button class="chat-quick-action" onclick="sendQuickMessage('Show me hotels')">🏨 Hotels</button>
+            <button class="chat-quick-action" onclick="sendQuickMessage('Find flights')">✈️ Flights</button>
+            <button class="chat-quick-action" onclick="sendQuickMessage('Book a cab')">🚗 Cabs</button>
+            <button class="chat-quick-action" onclick="sendQuickMessage('I need help')">❓ Help</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input Area -->
+      <div class="chatbot-input-container">
+        <div class="chatbot-input-wrapper">
+          <input type="text" class="chatbot-input" id="chatbot-input" placeholder="Type your message..."
+            onkeypress="if(event.key === 'Enter') sendChatMessage()" />
+          <button class="chatbot-send-btn" id="chatbot-send-btn" onclick="sendChatMessage()">
+            <i class="material-icons">send</i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Main JavaScript -->
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+
+  <!-- Inline critical JavaScript -->
+  <script>
+    // ============================================
+    // CONCIERGE LIFESTYLE - DASHBOARD JAVASCRIPT
+    // Complete functionality for AI-powered dashboard
+    // ============================================
+
+    // Global variables
+    let socket;
+    const currentUserId = document.body.dataset.userId || "{{ current_user_id }}";
+    let unreadNotifications = 0;
+    let userLocation = null;
+    let map = null;
+    let userMarker = null;
+
+    // ============================================
+    // INITIALIZATION
+    // ============================================
+
+    document.addEventListener('DOMContentLoaded', function () {
+      console.log('Dashboard initializing...');
+
+      // Initialize all components
+      initDatePickers();
+      initSidebar();
+      initSocket();
+      getUserLocation();
+
+      // Auto-hide flash messages
+      setTimeout(() => {
+        document.querySelectorAll('.flash-messages .toast').forEach(toast => {
+          toast.style.animation = 'slideOut 0.3s ease forwards';
+          setTimeout(() => toast.remove(), 300);
+        });
+      }, 5000);
     });
 
-    // Receive real-time notifications
-    socket.on('booking_confirmed', function (data) {
-      showToast(data.message || 'Booking confirmed!', 'success');
-      addNotification(data.message || 'Booking confirmed!', 'check_circle');
-      refreshRequests();
-    });
+    // ============================================
+    // WEBSOCKET CONNECTION
+    // ============================================
 
-    socket.on('ticket_ready', function (data) {
-      showToast('Your PDF ticket is ready!', 'success');
-      addNotification('PDF Ticket Ready', 'picture_as_pdf');
-      refreshRequests();
-    });
+    function initSocket() {
+      try {
+        socket = io();
 
-    socket.on('payment_confirmed', function (data) {
-      showToast('Payment confirmed!', 'success');
-      addNotification('Payment Confirmed', 'payment');
-      refreshRequests();
-    });
-  }
+        socket.on('connect', function () {
+          console.log('Connected to server');
+          socket.emit('user_connect', { user_id: currentUserId });
+        });
 
-  function addNotification(title, message, icon = 'notifications', type = 'info') {
-    const notificationList = document.getElementById('notification-list');
-    const notificationId = Date.now(); // Generate unique ID
+        socket.on('booking_confirmed', function (data) {
+          showToast(data.message || 'Booking confirmed!', 'success');
+          addNotification(
+            'Booking Confirmed',
+            data.message || 'Your booking has been confirmed',
+            'check_circle',
+            'success'
+          );
+        });
 
-    const div = document.createElement('div');
-    div.className = 'notification-item unread';
-    div.setAttribute('data-id', notificationId);
+        socket.on('ticket_ready', function (data) {
+          showToast('Your PDF ticket is ready for download!', 'success');
+          addNotification(
+            'PDF Ticket Ready',
+            'Your ticket is now available. Click to download.',
+            'picture_as_pdf',
+            'info'
+          );
+        });
 
-    div.innerHTML = `
+        socket.on('payment_confirmed', function (data) {
+          showToast('Payment confirmed successfully!', 'success');
+          addNotification(
+            'Payment Confirmed',
+            data.message || 'Your payment has been processed',
+            'payment',
+            'success'
+          );
+        });
+
+        socket.on('recommendation_ready', function (data) {
+          showToast('New AI recommendation available!', 'info');
+          addNotification(
+            'AI Recommendation',
+            data.message || 'We have a new suggestion for you',
+            'lightbulb',
+            'recommendation'
+          );
+        });
+
+      } catch (error) {
+        console.error('Socket initialization error:', error);
+      }
+    }
+
+    // ============================================
+    // NOTIFICATION MANAGEMENT
+    // ============================================
+
+    function addNotification(title, message, icon = 'notifications', type = 'info') {
+      const notificationList = document.getElementById('notification-list');
+
+      // Remove empty state if exists
+      const emptyState = notificationList.querySelector('.notification-item.empty');
+      if (emptyState) {
+        emptyState.remove();
+      }
+
+      const notificationId = Date.now();
+      const div = document.createElement('div');
+      div.className = `notification-item unread ${type}`;
+      div.setAttribute('data-id', notificationId);
+
+      div.innerHTML = `
         <i class="material-icons">${icon}</i>
         <div class="notification-content">
             <p><strong>${title}</strong></p>
@@ -598,272 +971,1357 @@
         </button>
     `;
 
-    notificationList.insertBefore(div, notificationList.firstChild);
-    unreadNotifications++;
-    updateNotificationCount();
-  }
-  function deleteNotification(notificationId) {
-    if (confirm('Are you sure you want to delete this notification?')) {
-      const notification = document.querySelector(`.notification-item[data-id="${notificationId}"]`);
-      if (notification) {
-        // Send delete request via socket
-        socket.emit('delete_notification', {
-          notification_id: notificationId,
-          user_id: currentUserId
-        });
+      notificationList.insertBefore(div, notificationList.firstChild);
+      unreadNotifications++;
+      updateNotificationCount();
 
-        // Remove from UI immediately
-        notification.remove();
+      // Auto-scroll to top
+      notificationList.scrollTop = 0;
+    }
 
-        // Update count if it was unread
-        if (notification.classList.contains('unread')) {
-          unreadNotifications = Math.max(0, unreadNotifications - 1);
-          updateNotificationCount();
+    function deleteNotification(notificationId) {
+      if (confirm('Delete this notification?')) {
+        const notification = document.querySelector(`.notification-item[data-id="${notificationId}"]`);
+        if (notification) {
+          // Animate out
+          notification.style.animation = 'slideOut 0.3s ease forwards';
+          setTimeout(() => {
+            notification.remove();
+
+            // Update count if was unread
+            if (notification.classList.contains('unread')) {
+              unreadNotifications = Math.max(0, unreadNotifications - 1);
+              updateNotificationCount();
+            }
+
+            // Check if list is empty
+            const notificationList = document.getElementById('notification-list');
+            if (notificationList.children.length === 0) {
+              notificationList.innerHTML = `
+                        <div class="notification-item empty">
+                            <div class="notification-content">
+                                <p>No notifications yet.</p>
+                            </div>
+                        </div>
+                    `;
+            }
+          }, 300);
         }
       }
     }
-  }
 
-  function markAllAsRead() {
-    socket.emit('mark_all_read', { user_id: currentUserId });
-  }
-
-  // Close notification dropdown when clicking outside
-  document.addEventListener('click', function (event) {
-    const bell = document.querySelector('.notification-bell');
-    const dropdown = document.getElementById('notification-dropdown');
-    if (!bell.contains(event.target) && dropdown.style.display === 'block') {
-      dropdown.style.display = 'none';
-    }
-  });
-
-  function toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    sidebar.style.display = sidebar.style.display === 'none' ? 'block' : 'none';
-  }
-
-  function showSection(sectionId) {
-    document.querySelectorAll('.main-content-section').forEach(section => {
-      section.classList.remove('active');
-    });
-    document.getElementById(sectionId).classList.add('active');
-    document.querySelector('.main').scrollTo(0, 0);
-  }
-
-  function setActive(el) {
-    document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
-    el.classList.add('active');
-  }
-
-  function openModal(id) {
-    document.getElementById(id + '-modal').style.display = 'block';
-    document.body.style.overflow = 'hidden';
-  }
-
-  function closeModal(id) {
-    document.getElementById(id + '-modal').style.display = 'none';
-    document.body.style.overflow = 'auto';
-  }
-
-  window.onclick = function (event) {
-    document.querySelectorAll('.modal').forEach(modal => {
-      if (event.target == modal) {
-        modal.style.display = "none";
-        document.body.style.overflow = 'auto';
-      }
-    });
-  }
-
-  function showLoading(btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<div class="spinner"></div> Loading...';
-    showToast('Processing request...', 'success');
-    const form = btn.closest('form');
-    if (form) {
-      form.submit();
-    }
-    return true;
-  }
-
-  function showToast(message, type = 'success') {
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    document.getElementById('toast-container').appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-  }
-
-  function updateCount(field, change) {
-    const inputId = {
-      "room": "roomCount",
-      "guests": "guestCount",
-      "adults": "adultCount",
-      "children": "childCount",
-      "passengers": "passengerCount"
-    }[field];
-    const input = document.getElementById(inputId);
-    let current = parseInt(input.value);
-    const min = parseInt(input.min);
-    const max = parseInt(input.max) || Infinity;
-    let newValue = current + change;
-    input.value = Math.max(min, Math.min(max, newValue));
-  }
-
-  function downloadPDFTicket(pdfUrl) {
-    if (pdfUrl) {
-      // Create a temporary anchor element
-      const link = document.createElement('a');
-      link.href = pdfUrl;
-      link.download = pdfUrl.split('/').pop();
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showToast('Downloading PDF ticket...', 'success');
-    } else {
-      showToast('PDF ticket not available yet.', 'error');
-    }
-  }
-
-  function requestTicket(bookingId, serviceType) {
-    showToast('Requesting PDF ticket from admin...', 'info');
-
-    // Emit socket event to request ticket
-    if (typeof socket !== 'undefined' && socket.connected) {
-      socket.emit('request_ticket', {
-        booking_id: bookingId,
-        service_type: serviceType,
-        user_id: currentUserId
-      });
-
-      // Show success message
-      setTimeout(() => {
-        showToast('Ticket request sent to admin! You will be notified when ready.', 'success');
-      }, 1000);
-    } else {
-      // Fallback to AJAX request
-      fetch(`/admin/send-ticket`, {
+    function markAllAsRead() {
+      fetch('/mark-notifications-read', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          booking_id: bookingId,
-          user_id: currentUserId
-        })
+        }
       })
         .then(response => response.json())
         .then(data => {
           if (data.success) {
-            showToast('PDF ticket request sent to admin!', 'success');
-          } else {
-            showToast('Error requesting ticket: ' + data.error, 'error');
+            document.querySelectorAll('.notification-item.unread').forEach(item => {
+              item.classList.remove('unread');
+            });
+            unreadNotifications = 0;
+            updateNotificationCount();
+            showToast('All notifications marked as read', 'success');
           }
         })
         .catch(error => {
-          showToast('Error requesting ticket', 'error');
+          console.error('Error marking all as read:', error);
         });
     }
-  }
-  function refreshRequests() {
-    const container = document.getElementById('requests-table-container');
-    const refreshBtn = document.querySelector('.refresh-btn');
 
-    // Show loading state
-    refreshBtn.innerHTML = '<div class="spinner small"></div> Refreshing...';
-    refreshBtn.disabled = true;
+    function clearAllNotifications() {
+      if (!confirm('Clear all notifications? This cannot be undone.')) {
+        return;
+      }
 
-    // Fetch updated requests
-    fetch('/user/requests')
-      .then(response => response.json())
-      .then(data => {
-        if (data.requests && data.requests.length > 0) {
-          // You would need to update the table here with new data
-          // For now, just reload the page
-          window.location.reload();
-        } else {
-          container.innerHTML = '<p class="no-requests">No requests found. Book a service to see it here!</p>';
-        }
-      })
-      .catch(error => {
-        showToast('Error refreshing requests', 'error');
-      })
-      .finally(() => {
-        // Reset button state after 2 seconds
-        setTimeout(() => {
-          refreshBtn.innerHTML = '<i class="material-icons">refresh</i> Refresh';
-          refreshBtn.disabled = false;
-        }, 2000);
-      });
-  }
-
-  function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('open');
-  }
-  function clearAllNotifications() {
-    if (confirm('Are you sure you want to clear all notifications? This action cannot be undone.')) {
-      // Get all notification IDs
       const notificationItems = document.querySelectorAll('.notification-item:not(.empty)');
       const notificationIds = Array.from(notificationItems).map(item => item.getAttribute('data-id'));
 
-      // Delete each notification via socket
-      notificationIds.forEach(id => {
-        socket.emit('delete_notification', {
-          notification_id: id,
-          user_id: currentUserId
-        });
-      });
-
-      // Clear the notification list in UI
+      // Clear UI
       const notificationList = document.getElementById('notification-list');
-      notificationList.innerHTML = '<div class="notification-item empty"><div class="notification-content"><p>No notifications yet.</p></div></div>';
+      notificationList.innerHTML = `
+        <div class="notification-item empty">
+            <div class="notification-content">
+                <p>No notifications yet.</p>
+            </div>
+        </div>
+    `;
 
-      // Reset count
       unreadNotifications = 0;
       updateNotificationCount();
+      showToast('All notifications cleared', 'success');
     }
-  }
-  function toggleNotifications() {
-    const dropdown = document.getElementById('notification-dropdown');
-    if (dropdown.style.display === 'block') {
-      dropdown.style.display = 'none';
-    } else {
-      dropdown.style.display = 'block';
-      // Refresh notifications when dropdown is opened
-      refreshNotifications();
-    }
-  }
 
-  function refreshNotifications() {
-    fetch('/get-unread-count')
-      .then(response => response.json())
-      .then(data => {
-        unreadNotifications = data.unread_count || 0;
-        updateNotificationCount();
-      });
-  }
+    function toggleNotifications() {
+      const dropdown = document.getElementById('notification-dropdown');
+      dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
 
-  function updateNotificationCount() {
-    const countElement = document.getElementById('notification-count');
-    if (unreadNotifications > 0) {
-      countElement.style.display = 'block';
-      countElement.textContent = unreadNotifications > 99 ? '99+' : unreadNotifications;
-    } else {
-      countElement.style.display = 'none';
+      if (dropdown.style.display === 'block') {
+        refreshNotifications();
+      }
     }
-  }
-  // Initialize when page loads
-  window.onload = function () {
-    flatpickr(".date-input", {
-      altInput: true,
-      altFormat: "F j, Y",
-      dateFormat: "Y-m-d",
-      minDate: "today"
+
+    function refreshNotifications() {
+      fetch('/get-unread-count')
+        .then(response => response.json())
+        .then(data => {
+          unreadNotifications = data.unread_count || 0;
+          updateNotificationCount();
+        })
+        .catch(error => {
+          console.error('Error fetching notifications:', error);
+        });
+    }
+
+    function updateNotificationCount() {
+      const countElement = document.getElementById('notification-count');
+      if (unreadNotifications > 0) {
+        countElement.style.display = 'block';
+        countElement.textContent = unreadNotifications > 99 ? '99+' : unreadNotifications;
+      } else {
+        countElement.style.display = 'none';
+      }
+    }
+
+    // Close notification dropdown when clicking outside
+    document.addEventListener('click', function (event) {
+      const bell = document.querySelector('.notification-bell');
+      const dropdown = document.getElementById('notification-dropdown');
+
+      if (bell && dropdown && !bell.contains(event.target) && !dropdown.contains(event.target)) {
+        dropdown.style.display = 'none';
+      }
     });
 
-    // Initialize WebSocket
-    initSocket();
-  };
-</script>
+    // ============================================
+    // GEOLOCATION & MAP
+    // ============================================
+
+    function getUserLocation() {
+      if (!navigator.geolocation) {
+        console.warn('Geolocation not supported');
+        updateLocationDisplay('Geolocation not supported');
+        return;
+      }
+
+      updateLocationDisplay('Detecting location...');
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          userLocation = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+
+          console.log('Location detected:', userLocation);
+          reverseGeocode(userLocation.lat, userLocation.lng);
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          let message = 'Unable to detect location';
+
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              message = 'Location access denied';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              message = 'Location unavailable';
+              break;
+            case error.TIMEOUT:
+              message = 'Location request timeout';
+              break;
+          }
+
+          updateLocationDisplay(message);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    }
+
+    async function reverseGeocode(lat, lng) {
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`
+        );
+
+        if (!response.ok) {
+          throw new Error('Geocoding failed');
+        }
+
+        const data = await response.json();
+        const city = data.address.city || data.address.town || data.address.village || 'Unknown';
+        const state = data.address.state || '';
+        const country = data.address.country || '';
+
+        const locationString = `${city}${state ? ', ' + state : ''}`;
+        updateLocationDisplay(locationString);
+
+        // Save to backend
+        saveUserLocation(city, state, country, lat, lng);
+
+      } catch (error) {
+        console.error('Reverse geocoding error:', error);
+        updateLocationDisplay(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+      }
+    }
+
+    function updateLocationDisplay(text) {
+      // Update sidebar location
+      const sidebarLocation = document.getElementById('location-text');
+      if (sidebarLocation) {
+        sidebarLocation.textContent = text;
+      }
+
+      // Update nearby section location
+      const currentLocationName = document.getElementById('current-location-name');
+      if (currentLocationName) {
+        currentLocationName.textContent = text;
+      }
+
+      const currentLocationCoords = document.getElementById('current-location-coords');
+      if (currentLocationCoords && userLocation) {
+        currentLocationCoords.textContent = `${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}`;
+      }
+    }
+
+    async function saveUserLocation(city, state, country, lat, lng) {
+      try {
+        const response = await fetch('/api/save-location', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            city: city,
+            state: state,
+            country: country,
+            latitude: lat,
+            longitude: lng
+          })
+        });
+
+        if (response.ok) {
+          console.log('Location saved successfully');
+        }
+      } catch (error) {
+        console.error('Error saving location:', error);
+      }
+    }
+
+    function initMap() {
+      if (!userLocation) {
+        getUserLocation();
+        return;
+      }
+
+      const mapElement = document.getElementById('map');
+      if (!mapElement) {
+        console.error('Map element not found');
+        return;
+      }
+
+      // Initialize Leaflet map
+      if (map) {
+        map.remove(); // Remove existing map
+      }
+
+      map = L.map('map').setView([userLocation.lat, userLocation.lng], 13);
+
+      // Add tile layer (OpenStreetMap)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(map);
+
+      // Add user marker
+      const customIcon = L.divIcon({
+        className: 'custom-marker',
+        html: '<div style="background: #d4af37; width: 30px; height: 30px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"></div>',
+        iconSize: [30, 30],
+        iconAnchor: [15, 15]
+      });
+
+      userMarker = L.marker([userLocation.lat, userLocation.lng], { icon: customIcon })
+        .addTo(map)
+        .bindPopup('<b>You are here</b>')
+        .openPopup();
+
+      // Fetch and display nearby services
+      fetchNearbyServices();
+    }
+
+    function findNearbyServices() {
+      if (!userLocation) {
+        showToast('Detecting location...', 'info');
+        getUserLocation();
+        setTimeout(() => {
+          if (userLocation) {
+            findNearbyServices();
+          }
+        }, 2000);
+        return;
+      }
+
+      // Show nearby section
+      showSection('nearby-section');
+      const link = document.querySelector('[onclick*="nearby-section"]');
+      if (link) setActive(link);
+
+      // Initialize map
+      initMap();
+
+      showToast('Searching for nearby services...', 'info');
+    }
+
+    // ============================================
+    // AI RECOMMENDATIONS
+    // ============================================
+
+    async function fetchLifestyleRecommendations() {
+      const grid = document.getElementById('recommendations-grid');
+
+      try {
+        // Show loading state
+        grid.innerHTML = `
+            <div class="loading-state" style="grid-column: 1 / -1;">
+                <div class="spinner-large"></div>
+                <p>Generating personalized recommendations...</p>
+            </div>
+        `;
+
+        const response = await fetch('/api/lifestyle-recommendations');
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.success) {
+          throw new Error(data.message || 'Failed to load recommendations');
+        }
+
+        if (!data.has_profile) {
+          displayEmptyRecommendations();
+          return;
+        }
+
+        if (data.recommendations && data.recommendations.length > 0) {
+          displayRecommendations(data.recommendations);
+
+          // Update count
+          const countElement = document.getElementById('recommendation-count');
+          if (countElement) {
+            countElement.textContent = data.recommendations.length;
+          }
+        } else {
+          displayEmptyRecommendations();
+        }
+      } catch (error) {
+        console.error('Error fetching recommendations:', error);
+        displayErrorRecommendations(error.message);
+      }
+    }
+
+    function displayRecommendations(recommendations) {
+      const grid = document.getElementById('recommendations-grid');
+
+      if (!recommendations || recommendations.length === 0) {
+        displayEmptyRecommendations();
+        return;
+      }
+
+      grid.innerHTML = recommendations.map((rec, index) => `
+        <div class="recommendation-card" style="animation: fadeInUp 0.5s ease ${index * 0.1}s forwards; opacity: 0;">
+            <div class="recommendation-header">
+                <i class="material-icons">${getServiceIcon(rec.service_type)}</i>
+                <h3>${rec.service_type}</h3>
+            </div>
+            <div class="recommendation-score">
+                ${rec.match_score || '95'}% Match
+            </div>
+            <p>${rec.reason || rec.description}</p>
+            ${rec.metadata ? `
+                <div class="recommendation-meta">
+                    ${rec.metadata.price ? `<span><i class="material-icons">payments</i>${rec.metadata.price}</span>` : ''}
+                    ${rec.metadata.duration ? `<span><i class="material-icons">schedule</i>${rec.metadata.duration}</span>` : ''}
+                    ${rec.metadata.location ? `<span><i class="material-icons">location_on</i>${rec.metadata.location}</span>` : ''}
+                </div>
+            ` : ''}
+            <div class="recommendation-actions">
+                <button class="btn-primary" onclick="bookRecommendedService('${rec.service_type}', ${index})">
+                    <i class="material-icons">check</i> Book Now
+                </button>
+                <button class="btn-secondary" onclick="dismissRecommendation(${rec.id})">
+                    <i class="material-icons">close</i> Dismiss
+                </button>
+            </div>
+        </div>
+    `).join('');
+    }
+
+    function displayEmptyRecommendations() {
+      const grid = document.getElementById('recommendations-grid');
+      grid.innerHTML = `
+        <div class="empty-state" style="grid-column: 1 / -1;">
+            <i class="material-icons">psychology</i>
+            <h3>Complete Your Profile</h3>
+            <p>Fill out your lifestyle preferences to get personalized AI recommendations</p>
+            <button class="btn-primary" onclick="window.location.href='/lifestyle_form'">
+                <i class="material-icons">edit</i> Complete Profile
+            </button>
+        </div>
+    `;
+    }
+
+    function displayErrorRecommendations(errorMessage) {
+      const grid = document.getElementById('recommendations-grid');
+      grid.innerHTML = `
+        <div class="empty-state" style="grid-column: 1 / -1;">
+            <i class="material-icons">error_outline</i>
+            <h3>Unable to load recommendations</h3>
+            <p>${errorMessage || 'Please try again later'}</p>
+            <button class="btn-primary" onclick="fetchLifestyleRecommendations()">
+                <i class="material-icons">refresh</i> Retry
+            </button>
+        </div>
+    `;
+    }
+
+    function bookRecommendedService(serviceType, recIndex) {
+      // Map service types to modal IDs
+      const serviceMap = {
+        'Hotel Booking': 'hotel',
+        'Flight Booking': 'travel',
+        'Car Booking': 'car',
+        'Luxury Cabs': 'car',
+        'Technician Booking': 'event',
+        'Handyman Services': 'event',
+        'Courier Booking': 'courier',
+        'Courier & Delivery': 'courier'
+      };
+
+      const modalId = serviceMap[serviceType];
+      if (modalId) {
+        openModal(modalId);
+        showToast(`Opening ${serviceType} booking form`, 'info');
+      } else {
+        showToast('Service not available', 'error');
+      }
+    }
+
+    async function dismissRecommendation(recommendationId) {
+      if (!confirm('Dismiss this recommendation?')) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/dismiss-recommendation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recommendation_id: recommendationId })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          showToast('Recommendation dismissed', 'success');
+          fetchLifestyleRecommendations();
+        } else {
+          showToast('Failed to dismiss recommendation', 'error');
+        }
+      } catch (error) {
+        console.error('Error dismissing recommendation:', error);
+        showToast('Failed to dismiss recommendation', 'error');
+      }
+    }
+
+    function refreshRecommendations() {
+      const btn = document.querySelector('.recommendations-container .refresh-btn');
+      if (btn) {
+        btn.innerHTML = '<div class="spinner"></div> Refreshing...';
+        btn.disabled = true;
+      }
+
+      fetchLifestyleRecommendations()
+        .finally(() => {
+          if (btn) {
+            setTimeout(() => {
+              btn.innerHTML = '<i class="material-icons">refresh</i> Refresh';
+              btn.disabled = false;
+            }, 1000);
+          }
+        });
+    }
+
+    // ============================================
+    // REQUESTS MANAGEMENT
+    // ============================================
+
+    async function refreshRequests() {
+      const container = document.getElementById('requests-table-container');
+      const refreshBtn = document.querySelector('.requests-container .refresh-btn');
+
+      if (refreshBtn) {
+        refreshBtn.innerHTML = '<div class="spinner"></div> Refreshing...';
+        btn.disabled = true;
+      }
+
+      try {
+        const response = await fetch('/user/requests');
+        const data = await response.json();
+
+        if (data.requests && data.requests.length > 0) {
+          // Reload page to update table
+          window.location.reload();
+        } else {
+          container.innerHTML = `
+                <div class="empty-state">
+                    <i class="material-icons">event_busy</i>
+                    <h3>No bookings yet</h3>
+                    <p>Book your first service to see it here</p>
+                    <button class="btn-primary" onclick="showSection('services-section'); setActive(document.querySelector('[onclick*=services-section]'))">
+                        Browse Services
+                    </button>
+                </div>
+            `;
+        }
+
+        showToast('Requests refreshed', 'success');
+
+      } catch (error) {
+        console.error('Error refreshing requests:', error);
+        showToast('Failed to refresh requests', 'error');
+      } finally {
+        if (refreshBtn) {
+          setTimeout(() => {
+            refreshBtn.innerHTML = '<i class="material-icons">refresh</i> Refresh';
+            refreshBtn.disabled = false;
+          }, 1000);
+        }
+      }
+    }
+
+    function downloadPDFTicket(pdfUrl) {
+      if (!pdfUrl) {
+        showToast('PDF ticket not available yet', 'error');
+        return;
+      }
+
+      // Create temporary link and trigger download
+      const link = document.createElement('a');
+      link.href = pdfUrl;
+      link.download = pdfUrl.split('/').pop() || 'ticket.pdf';
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      showToast('Downloading PDF ticket...', 'success');
+    }
+
+    function requestTicket(bookingId, serviceType) {
+      showToast('Requesting PDF ticket from admin...', 'info');
+
+      if (socket && socket.connected) {
+        socket.emit('request_ticket', {
+          booking_id: bookingId,
+          service_type: serviceType,
+          user_id: currentUserId
+        });
+
+        setTimeout(() => {
+          showToast('Ticket request sent! You will be notified when ready.', 'success');
+        }, 1000);
+      } else {
+        // Fallback to HTTP request
+        fetch('/admin/send-ticket', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            booking_id: bookingId,
+            user_id: currentUserId
+          })
+        })
+          .then(response => response.json())
+          .then(data => {
+            if (data.success) {
+              showToast('PDF ticket request sent to admin!', 'success');
+            } else {
+              showToast('Error: ' + (data.error || 'Unknown error'), 'error');
+            }
+          })
+          .catch(error => {
+            console.error('Error requesting ticket:', error);
+            showToast('Error requesting ticket', 'error');
+          });
+      }
+    }
+
+    // ============================================
+    // UI INTERACTIONS
+    // ============================================
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.classList.toggle('active');
+    }
+
+    function showSection(sectionId) {
+      // Hide all sections
+      document.querySelectorAll('.main-content-section').forEach(section => {
+        section.classList.remove('active');
+      });
+
+      // Show selected section
+      const section = document.getElementById(sectionId);
+      if (section) {
+        section.classList.add('active');
+
+        // Scroll to top
+        document.querySelector('.main').scrollTo(0, 0);
+
+        // Special initialization for certain sections
+        if (sectionId === 'nearby-section') {
+          setTimeout(() => {
+            initMap();
+          }, 100);
+        }
+        if (sectionId === 'recommendations-section') {
+          setTimeout(() => {
+            fetchLifestyleRecommendations();
+          }, 100);
+        }
+      }
+    }
+
+    function setActive(element) {
+      document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
+      if (element) {
+        element.classList.add('active');
+      }
+    }
+
+    function initSidebar() {
+      // Close sidebar when clicking outside on mobile
+      document.addEventListener('click', function (event) {
+        const sidebar = document.getElementById('sidebar');
+        const hamburger = document.querySelector('.hamburger');
+
+        if (window.innerWidth <= 768) {
+          if (sidebar && hamburger &&
+            !sidebar.contains(event.target) &&
+            !hamburger.contains(event.target) &&
+            sidebar.classList.contains('active')) {
+            sidebar.classList.remove('active');
+          }
+        }
+      });
+    }
+
+    // ============================================
+    // MODAL MANAGEMENT
+    // ============================================
+
+    function openModal(id) {
+      const modal = document.getElementById(id + '-modal');
+      if (modal) {
+        modal.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+      }
+    }
+
+    function closeModal(id) {
+      const modal = document.getElementById(id + '-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
+    }
+
+    // Close modal when clicking outside
+    window.addEventListener('click', function (event) {
+      if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
+    });
+
+    // ============================================
+    // FORM UTILITIES
+    // ============================================
+
+    function initDatePickers() {
+      flatpickr(".date-input", {
+        altInput: true,
+        altFormat: "F j, Y",
+        dateFormat: "Y-m-d",
+        minDate: "today"
+      });
+    }
+
+    function updateCount(field, change) {
+      const inputId = {
+        "room": "roomCount",
+        "guests": "guestCount",
+        "adults": "adultCount",
+        "children": "childCount",
+        "passengers": "passengerCount"
+      }[field];
+
+      const input = document.getElementById(inputId);
+      if (!input) return;
+
+      let current = parseInt(input.value) || 1;
+      const min = parseInt(input.min) || 0;
+      const max = parseInt(input.max) || Infinity;
+
+      let newValue = current + change;
+      newValue = Math.max(min, Math.min(max, newValue));
+
+      input.value = newValue;
+    }
+
+    function showLoading(btn) {
+      btn.disabled = true;
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML = '<div class="spinner"></div> Loading...';
+
+      // Submit form
+      const form = btn.closest('form');
+      if (form) {
+        setTimeout(() => form.submit(), 100);
+      }
+
+      return false;
+    }
+
+    // ============================================
+    // TOAST NOTIFICATIONS
+    // ============================================
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+
+      const icon = {
+        success: 'check_circle',
+        error: 'error',
+        warning: 'warning',
+        info: 'info'
+      }[type] || 'notifications';
+
+      toast.innerHTML = `
+        <i class="material-icons">${icon}</i>
+        <span>${message}</span>
+    `;
+
+      container.appendChild(toast);
+
+      // Auto-remove after 4 seconds
+      setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease forwards';
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
+    }
+
+    // ============================================
+    // UTILITY FUNCTIONS
+    // ============================================
+
+    function getServiceIcon(serviceType) {
+      const icons = {
+        'Hotel Booking': 'hotel',
+        'Flight Booking': 'flight',
+        'Car Booking': 'directions_car',
+        'Luxury Cabs': 'directions_car',
+        'Technician Booking': 'build',
+        'Handyman Services': 'build',
+        'Courier Booking': 'local_shipping',
+        'Courier & Delivery': 'local_shipping'
+      };
+
+      return icons[serviceType] || 'business_center';
+    }
+
+    // ============================================
+    // NEARBY SERVICES FUNCTIONS
+    // ============================================
+
+    async function fetchNearbyServices() {
+    const listElement = document.getElementById('nearby-services-list');
+
+    if (!userLocation) {
+        displayErrorNearbyServices('Location not detected. Please enable location services.');
+        return;
+    }
+
+    try {
+        // Show loading
+        listElement.innerHTML = `
+            <div class="loading-state" style="grid-column: 1 / -1;">
+                <div class="spinner-large"></div>
+                <p>Searching for nearby services...</p>
+            </div>
+        `;
+
+        const response = await fetch('/api/nearby-services', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userLocation)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        console.log('Nearby services response:', data);
+
+        if (!data.success) {
+            throw new Error(data.message || 'Failed to load services');
+        }
+
+        if (data.services && data.services.length > 0) {
+            displayNearbyServices(data.services);
+            
+            // Update count
+            const countElement = document.getElementById('nearby-count');
+            if (countElement) {
+                countElement.textContent = data.services.length;
+            }
+            
+            // Add markers to map
+            addServiceMarkersToMap(data.services);
+            
+            showToast(`Found ${data.services.length} services nearby`, 'success');
+        } else {
+            displayEmptyNearbyServices();
+        }
+    } catch (error) {
+        console.error('Error fetching nearby services:', error);
+        displayErrorNearbyServices(error.message);
+    }
+}
+
+    function displayNearbyServices(services) {
+    const listElement = document.getElementById('nearby-services-list');
+    const countElement = document.getElementById('nearby-count');
+
+    if (countElement) {
+        countElement.textContent = services.length;
+    }
+
+    listElement.innerHTML = services.map((service, index) => `
+        <div class="nearby-service-card" style="animation: fadeInUp 0.5s ease ${index * 0.1}s forwards; opacity: 0;">
+            <div class="service-distance">
+                <i class="material-icons">near_me</i>
+                ${service.distance} km away
+            </div>
+            <div class="recommendation-header">
+                <i class="material-icons">${getServiceIcon(service.type)}</i>
+                <h3>${service.name}</h3>
+            </div>
+            <p>${service.description}</p>
+            ${service.address ? `<p class="service-address"><i class="material-icons">location_on</i>${service.address}</p>` : ''}
+            ${service.rating ? `
+                <div class="recommendation-meta">
+                    <span><i class="material-icons">star</i>${service.rating}/5</span>
+                    ${service.price ? `<span><i class="material-icons">payments</i>${service.price}</span>` : ''}
+                </div>
+            ` : ''}
+            <div class="recommendation-actions">
+                <button class="btn-primary" onclick="bookNearbyService('${service.type}', '${service.name.replace(/'/g, "\\'")}', ${service.id})">
+                    <i class="material-icons">event</i> Book Now
+                </button>
+                <button class="btn-secondary" onclick="showOnMap(${service.lat}, ${service.lng}, '${service.name.replace(/'/g, "\\'")}')">
+                    <i class="material-icons">location_on</i> Show on Map
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+console.log('✅ Dashboard fixes loaded successfully!');
+
+    function displayEmptyNearbyServices() {
+      const listElement = document.getElementById('nearby-services-list');
+      listElement.innerHTML = `
+        <div class="empty-state" style="grid-column: 1 / -1;">
+            <i class="material-icons">location_off</i>
+            <h3>No nearby services found</h3>
+            <p>We couldn't find any services in your area</p>
+            <button class="btn-primary" onclick="getUserLocation(); setTimeout(fetchNearbyServices, 1000);">
+                <i class="material-icons">refresh</i> Retry
+            </button>
+        </div>
+    `;
+    }
+
+    function displayErrorNearbyServices(errorMessage) {
+      const listElement = document.getElementById('nearby-services-list');
+      listElement.innerHTML = `
+        <div class="empty-state" style="grid-column: 1 / -1;">
+            <i class="material-icons">error_outline</i>
+            <h3>Unable to load nearby services</h3>
+            <p>${errorMessage || 'Please try again later'}</p>
+            <button class="btn-primary" onclick="getUserLocation(); setTimeout(fetchNearbyServices, 1000);">
+                <i class="material-icons">refresh</i> Retry
+            </button>
+        </div>
+    `;
+    }
+
+    function addServiceMarkersToMap(services) {
+      if (!map) {
+        console.warn('Map not initialized');
+        return;
+      }
+
+      // Clear existing markers (except user marker)
+      map.eachLayer(layer => {
+        if (layer instanceof L.Marker && layer !== userMarker) {
+          map.removeLayer(layer);
+        }
+      });
+
+      // Add service markers
+      services.forEach(service => {
+        const iconColor = {
+          'Hotel Booking': '#27ae60',
+          'Car Booking': '#3498db',
+          'Technician Booking': '#e67e22',
+          'Courier Booking': '#1abc9c'
+        }[service.type] || '#9b59b6';
+
+        const serviceIcon = L.divIcon({
+          className: 'service-marker',
+          html: `<div style="background: ${iconColor}; width: 32px; height: 32px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
+                    <i class="material-icons" style="transform: rotate(45deg); color: white; font-size: 16px;">${getServiceIcon(service.type)}</i>
+                </div>`,
+          iconSize: [32, 32],
+          iconAnchor: [16, 32],
+          popupAnchor: [0, -32]
+        });
+
+        L.marker([service.lat, service.lng], { icon: serviceIcon })
+          .addTo(map)
+          .bindPopup(`
+                <div style="text-align: center; min-width: 200px;">
+                    <b>${service.name}</b><br>
+                    <span style="color: #666;">${service.type}</span><br>
+                    <span style="color: #3498db; font-weight: bold;">${service.distance} km away</span><br>
+                    ${service.rating ? `<span style="color: #f39c12;">★ ${service.rating}/5</span><br>` : ''}
+                    ${service.price ? `<span style="color: #27ae60;">${service.price}</span>` : ''}
+                </div>
+            `);
+      });
+
+      // Fit map to show all markers
+      if (services.length > 0) {
+        const bounds = L.latLngBounds(
+          services.map(s => [s.lat, s.lng]).concat([[userLocation.lat, userLocation.lng]])
+        );
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+
+    function showOnMap(lat, lng, serviceName) {
+      if (!map) {
+        showToast('Map not available', 'error');
+        return;
+      }
+
+      // Zoom to location
+      map.setView([lat, lng], 16);
+
+      // Find and open popup
+      map.eachLayer(layer => {
+        if (layer instanceof L.Marker) {
+          const pos = layer.getLatLng();
+          if (Math.abs(pos.lat - lat) < 0.00001 && Math.abs(pos.lng - lng) < 0.00001) {
+            layer.openPopup();
+          }
+        }
+      });
+
+      showToast(`Showing ${serviceName} on map`, 'info');
+    }
+
+    async function bookNearbyService(serviceType, serviceName, serviceId) {
+      try {
+        console.log('Booking nearby service:', serviceType, serviceName, serviceId);
+
+        const response = await fetch('/api/book-nearby-service', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            service_type: serviceType,
+            service_name: serviceName,
+            service_id: serviceId
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // Pre-fill the booking form based on service type
+          if (serviceType === 'Hotel Booking') {
+            prefillHotelForm(data);
+          } else if (serviceType === 'Technician Booking') {
+            prefillTechnicianForm(data);
+          } else if (serviceType === 'Car Booking') {
+            prefillCarForm(data);
+          } else if (serviceType === 'Courier Booking') {
+            prefillCourierForm(data);
+          }
+
+          // Open the modal
+          openModal(data.modal_id);
+          showToast(`Booking form opened for ${serviceName}`, 'info');
+        } else {
+          showToast('Unable to open booking form', 'error');
+        }
+      } catch (error) {
+        console.error('Error booking service:', error);
+
+        // Fallback: Open modal anyway
+        const serviceMap = {
+          'Hotel Booking': 'hotel',
+          'Car Booking': 'car',
+          'Technician Booking': 'event',
+          'Courier Booking': 'courier'
+        };
+
+        const modalId = serviceMap[serviceType] || 'hotel';
+        openModal(modalId);
+        showToast(`Opening ${serviceType} form...`, 'info');
+      }
+    }
+
+    // ============================================
+// PRE-FILL FUNCTIONS FOR EACH SERVICE
+// ============================================
+
+function prefillHotelForm(data) {
+    // Get current date for check-in (today)
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const checkin = today.toISOString().split('T')[0];
+    const checkout = tomorrow.toISOString().split('T')[0];
+    
+    // Pre-fill hotel booking form
+    const destinationInput = document.querySelector('#hotel-modal input[name="destination"]');
+    const checkinInput = document.querySelector('#hotel-modal input[name="checkin"]');
+    const checkoutInput = document.querySelector('#hotel-modal input[name="checkout"]');
+    
+    if (destinationInput) {
+        // Extract city from service name or use user location
+        const userLocation = document.getElementById('location-text')?.textContent || 'Mumbai';
+        destinationInput.value = userLocation.split(',')[0];
+    }
+    
+    if (checkinInput) checkinInput.value = checkin;
+    if (checkoutInput) checkout.value = checkout;
+    
+    // Re-initialize date pickers
+    if (typeof flatpickr !== 'undefined') {
+        flatpickr(checkinInput, {
+            dateFormat: "Y-m-d",
+            minDate: "today",
+            defaultDate: checkin
+        });
+        
+        flatpickr(checkoutInput, {
+            dateFormat: "Y-m-d",
+            minDate: tomorrow,
+            defaultDate: checkout
+        });
+    }
+    
+    showToast('Hotel form pre-filled with location', 'success');
+}
+
+function prefillTechnicianForm(data) {
+    // Pre-fill technician booking form
+    const locationInput = document.querySelector('#event-modal input[name="location"]');
+    const serviceDateInput = document.querySelector('#event-modal input[name="service_date"]');
+    const serviceTimeInput = document.querySelector('#event-modal input[name="service_time"]');
+    
+    if (locationInput) {
+        const userLocation = document.getElementById('location-text')?.textContent || '';
+        locationInput.value = userLocation;
+    }
+    
+    if (serviceDateInput) {
+        const today = new Date().toISOString().split('T')[0];
+        serviceDateInput.value = today;
+    }
+    
+    if (serviceTimeInput) {
+        // Set time to 2 hours from now
+        const now = new Date();
+        now.setHours(now.getHours() + 2);
+        const timeString = now.toTimeString().slice(0, 5);
+        serviceTimeInput.value = timeString;
+    }
+    
+    // Re-initialize date picker
+    if (typeof flatpickr !== 'undefined' && serviceDateInput) {
+        flatpickr(serviceDateInput, {
+            dateFormat: "Y-m-d",
+            minDate: "today"
+        });
+    }
+    
+    showToast('Technician form pre-filled', 'success');
+}
+
+function prefillCarForm(data) {
+    // Pre-fill car booking form
+    const pickupInput = document.querySelector('#car-modal input[name="pickup"]');
+    const dropoffInput = document.querySelector('#car-modal input[name="dropoff"]');
+    const pickupDateInput = document.querySelector('#car-modal input[name="pickup_date"]');
+    const pickupTimeInput = document.querySelector('#car-modal input[name="pickup_time"]');
+    
+    if (pickupInput) {
+        const userLocation = document.getElementById('location-text')?.textContent || '';
+        pickupInput.value = userLocation;
+    }
+    
+    if (pickupDateInput) {
+        const today = new Date().toISOString().split('T')[0];
+        pickupDateInput.value = today;
+    }
+    
+    if (pickupTimeInput) {
+        const now = new Date();
+        now.setHours(now.getHours() + 1);
+        const timeString = now.toTimeString().slice(0, 5);
+        pickupTimeInput.value = timeString;
+    }
+    
+    // Re-initialize date picker
+    if (typeof flatpickr !== 'undefined' && pickupDateInput) {
+        flatpickr(pickupDateInput, {
+            dateFormat: "Y-m-d",
+            minDate: "today"
+        });
+    }
+    
+    showToast('Car booking form pre-filled', 'success');
+}
+
+function prefillCourierForm(data) {
+    // Pre-fill courier booking form
+    const pickupInput = document.querySelector('#courier-modal input[name="pickup"]');
+    const pickupDateInput = document.querySelector('#courier-modal input[name="pickup_date"]');
+    const pickupTimeInput = document.querySelector('#courier-modal input[name="pickup_time"]');
+    
+    if (pickupInput) {
+        const userLocation = document.getElementById('location-text')?.textContent || '';
+        pickupInput.value = userLocation;
+    }
+    
+    if (pickupDateInput) {
+        const today = new Date().toISOString().split('T')[0];
+        pickupDateInput.value = today;
+    }
+    
+    if (pickupTimeInput) {
+        const now = new Date();
+        now.setHours(now.getHours() + 2);
+        const timeString = now.toTimeString().slice(0, 5);
+        pickupTimeInput.value = timeString;
+    }
+    
+    // Re-initialize date picker
+    if (typeof flatpickr !== 'undefined' && pickupDateInput) {
+        flatpickr(pickupDateInput, {
+            dateFormat: "Y-m-d",
+            minDate: "today"
+        });
+    }
+    
+    showToast('Courier form pre-filled', 'success');
+}
+
+    // ============================================
+    // AI CHATBOT FUNCTIONS
+    // ============================================
+
+    let chatbotOpen = false;
+    let chatMessages = [];
+
+    function toggleChatbot() {
+      chatbotOpen = !chatbotOpen;
+      const window = document.getElementById('chatbot-window');
+
+      if (chatbotOpen) {
+        window.classList.add('active');
+        document.getElementById('chatbot-input').focus();
+
+        // Add welcome message if first time
+        if (chatMessages.length === 0) {
+          setTimeout(() => {
+            addBotMessage("Hello! 👋 I'm your Concierge Lifestyle assistant. How can I help you today?");
+          }, 500);
+        }
+      } else {
+        window.classList.remove('active');
+      }
+    }
+
+    function sendChatMessage() {
+      const input = document.getElementById('chatbot-input');
+      const message = input.value.trim();
+
+      if (!message) return;
+
+      // Add user message
+      addUserMessage(message);
+      input.value = '';
+
+      // Show typing indicator
+      showTypingIndicator();
+
+      // Send to backend
+      fetch('/api/chatbot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: message })
+      })
+        .then(response => response.json())
+        .then(data => {
+          removeTypingIndicator();
+
+          if (data.success) {
+            addBotMessage(data.response);
+          } else {
+            addBotMessage("Sorry, I'm having trouble right now. Please try again!");
+          }
+        })
+        .catch(error => {
+          console.error('Chatbot error:', error);
+          removeTypingIndicator();
+          addBotMessage("Oops! Something went wrong. Please try again.");
+        });
+    }
+
+    function sendQuickMessage(message) {
+      document.getElementById('chatbot-input').value = message;
+      sendChatMessage();
+    }
+
+    function addUserMessage(text) {
+      const container = document.getElementById('chatbot-messages');
+
+      // Remove welcome message
+      const welcome = container.querySelector('.chat-welcome');
+      if (welcome) {
+        welcome.remove();
+      }
+
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'chat-message user';
+      messageDiv.innerHTML = `
+        <div class="chat-message-content">
+            <div class="chat-message-bubble">${escapeHtml(text)}</div>
+            <div class="chat-message-time">${getCurrentTime()}</div>
+        </div>
+        <div class="chat-message-avatar">
+            <i class="material-icons">person</i>
+        </div>
+    `;
+
+      container.appendChild(messageDiv);
+      scrollToBottom();
+
+      chatMessages.push({ type: 'user', text: text, time: new Date() });
+    }
+
+    function addBotMessage(text) {
+      const container = document.getElementById('chatbot-messages');
+
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'chat-message bot';
+      messageDiv.innerHTML = `
+        <div class="chat-message-avatar">
+            <i class="material-icons">smart_toy</i>
+        </div>
+        <div class="chat-message-content">
+            <div class="chat-message-bubble">${escapeHtml(text)}</div>
+            <div class="chat-message-time">${getCurrentTime()}</div>
+        </div>
+    `;
+
+      container.appendChild(messageDiv);
+      scrollToBottom();
+
+      chatMessages.push({ type: 'bot', text: text, time: new Date() });
+    }
+
+    function showTypingIndicator() {
+      const container = document.getElementById('chatbot-messages');
+
+      const typingDiv = document.createElement('div');
+      typingDiv.className = 'chat-message bot';
+      typingDiv.id = 'typing-indicator';
+      typingDiv.innerHTML = `
+        <div class="chat-message-avatar">
+            <i class="material-icons">smart_toy</i>
+        </div>
+        <div class="chat-message-content">
+            <div class="typing-indicator">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+        </div>
+    `;
+
+      container.appendChild(typingDiv);
+      scrollToBottom();
+    }
+
+    function removeTypingIndicator() {
+      const indicator = document.getElementById('typing-indicator');
+      if (indicator) {
+        indicator.remove();
+      }
+    }
+
+    function scrollToBottom() {
+      const container = document.getElementById('chatbot-messages');
+      setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+      }, 100);
+    }
+
+    function getCurrentTime() {
+      const now = new Date();
+      return now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+  </script>
+</body>
 
 </html>
