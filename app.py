@@ -25,6 +25,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 import io
 import base64
+import re
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -64,6 +65,209 @@ def load_user(user_id):
         conn.close()
     return None
 
+# ---------------------- Helper Functions ----------------------
+def get_tomorrow_date():
+    tomorrow = datetime.now() + timedelta(days=1)
+    return tomorrow.strftime('%Y-%m-%d')
+
+def get_day_after_tomorrow():
+    day_after = datetime.now() + timedelta(days=2)
+    return day_after.strftime('%Y-%m-%d')
+
+def get_in_7_days():
+    """Return date string for 7 days from today (YYYY-MM-DD)"""
+    today = datetime.now()
+    future = today + timedelta(days=7)
+    return future.strftime('%Y-%m-%d')
+
+def get_default_service_time():
+    # Default time: 2 PM tomorrow
+    return "14:00"
+
+def get_default_pickup_time():
+    # Default pickup time: 10 AM tomorrow
+    tomorrow = datetime.now() + timedelta(days=1)
+    return tomorrow.replace(hour=10, minute=0, second=0, microsecond=0).strftime('%H:%M')
+
+def get_tomorrow_time(hours_from_now=2):
+    tomorrow = datetime.now() + timedelta(days=1)
+    tomorrow = tomorrow.replace(hour=hours_from_now, minute=0, second=0, microsecond=0)
+    return tomorrow.strftime('%H:%M')
+
+# ---------------------- Notification Functions ----------------------
+def delete_notification(notification_id, user_id):
+    """Delete a specific notification for a user"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM notifications WHERE id = %s AND user_id = %s", (notification_id, user_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to delete notification: {e}")
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+def save_notification(user_id, title, message, icon='notifications', type='info'):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO notifications (user_id, title, message, icon, type)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (user_id, title, message, icon, type))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to save notification: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def get_user_notifications(user_id, limit=50):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT id, title, message, icon, type, created_at, is_read
+            FROM notifications
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (user_id, limit))
+        rows = cur.fetchall()
+        return [
+            {
+                "id": r[0],
+                "title": r[1],
+                "message": r[2],
+                "icon": r[3],
+                "type": r[4],
+                "time": r[5].strftime("%I:%M %p") if r[5] else "Just now",
+                "time_ago": time_ago(r[5]) if r[5] else "Just now",
+                "is_read": r[6]
+            } for r in rows
+        ]
+    except Exception as e:
+        logger.error(f"Error fetching notifications: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def mark_notifications_read(user_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE notifications SET is_read = TRUE WHERE user_id = %s AND is_read = FALSE", (user_id,))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+    finally:
+        cur.close()
+        conn.close()
+
+def get_unread_count(user_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT COUNT(*) FROM notifications WHERE user_id = %s AND is_read = FALSE", (user_id,))
+        return cur.fetchone()[0]
+    except:
+        return 0
+    finally:
+        cur.close()
+        conn.close()
+
+def time_ago(dt):
+    if not dt:
+        return "Just now"
+    now = datetime.now()
+    diff = now - dt
+    if diff.total_seconds() < 60:
+        return "Just now"
+    elif diff.total_seconds() < 3600:
+        mins = int(diff.total_seconds() // 60)
+        return f"{mins} minute{'s' if mins != 1 else ''} ago"
+    elif diff.total_seconds() < 86400:
+        hours = int(diff.total_seconds() // 3600)
+        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+    else:
+        days = diff.days
+        return f"{days} day{'s' if days != 1 else ''} ago"
+    
+def _parse_details(val):
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except Exception:
+            return val
+    return val
+
+def _to_iso(dt):
+    if isinstance(dt, (datetime, date)):
+        return dt.isoformat()
+    return dt
+
+def _row_to_json_safe(row):
+    if not row:
+        return None
+    r = list(row)
+    if len(r) > 4:
+        r[4] = _parse_details(r[4])
+    if len(r) > 7:
+        r[7] = _to_iso(r[7])
+    return r
+
+def get_requests_json():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT id, user_id, booking_id, service_type, details, payment_status, admin_confirmation, created_at
+            FROM requests
+            ORDER BY created_at DESC
+        """)
+        rows = cur.fetchall()
+        return [_row_to_json_safe(r) for r in rows]
+    except Exception as e:
+        logger.error(f"get_requests_json error: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def get_last_request_json():
+    if not current_user.is_authenticated:
+        return None
+    user_id = current_user.get_id()
+    if not user_id:
+        return None
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT id, user_id, booking_id, service_type, details, payment_status, admin_confirmation, created_at
+            FROM requests
+            WHERE user_id = %s
+            ORDER BY id DESC
+            LIMIT 1
+        """, (user_id,))
+        row = cur.fetchone()
+        return _row_to_json_safe(row) if row else None
+    except Exception as e:
+        logger.error(f"get_last_request_json error: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+# ---------------------- Context Processor ----------------------
 @app.context_processor
 def inject_common_variables():
     """Inject common variables into all templates automatically"""
@@ -219,7 +423,6 @@ def save_lifestyle():
     return redirect(url_for('dashboard'))
 
 # ---------------------- Static dirs ----------------------
-
 def get_tickets_dir():
     static_folder = app.static_folder or os.path.join(app.root_path, 'static')
     tickets_dir = Path(static_folder) / "tickets"
@@ -229,58 +432,6 @@ def get_tickets_dir():
 TICKETS_DIR = get_tickets_dir()
 
 # ---------------------- PDF Ticket Generation ----------------------
-@app.route('/admin/generate-ticket', methods=['POST'])
-def admin_generate_ticket():
-    if not session.get('is_admin'):
-        return jsonify({"error": "Unauthorized"}), 403
-    
-    data = request.get_json()
-    request_id = data.get('request_id')
-    booking_id = data.get('booking_id')
-    service_type = data.get('service_type')
-    user_id = data.get('user_id')
-    
-    if not all([request_id, booking_id, service_type, user_id]):
-        return jsonify({"error": "Missing parameters"}), 400
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT details FROM requests WHERE id = %s", (request_id,))
-        request_data = cur.fetchone()
-        
-        if not request_data:
-            return jsonify({"error": "Request not found"}), 404
-        
-        details = request_data[0]
-        try:
-            details_obj = json.loads(details) if isinstance(details, str) else details
-        except:
-            details_obj = {"raw": str(details)}
-        
-        pdf_filename = create_pdf_ticket_for_booking(booking_id, service_type, details_obj, user_id)
-        
-        details_obj["ticket_pdf_url"] = f"/static/tickets/{pdf_filename}"
-        details_obj["ticket_generated_at"] = datetime.now().isoformat()
-        
-        cur.execute("UPDATE requests SET details = %s::jsonb WHERE id = %s",
-                   (json.dumps(details_obj), request_id))
-        conn.commit()
-        
-        return jsonify({
-            "success": True,
-            "message": "PDF ticket generated successfully",
-            "ticket_url": f"/static/tickets/{pdf_filename}",
-            "booking_id": booking_id
-        })
-        
-    except Exception as e:
-        conn.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cur.close()
-        conn.close()
-        
 def generate_pdf_ticket(booking_id, service_type, details, user_id):
     """Generate professional PDF ticket"""
     filename = f"ticket_{booking_id}.pdf"
@@ -533,6 +684,58 @@ def create_pdf_ticket_for_booking(booking_id, service_type, details, user_id):
     
     return filename
 
+@app.route('/admin/generate-ticket', methods=['POST'])
+def admin_generate_ticket():
+    if not session.get('is_admin'):
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    data = request.get_json()
+    request_id = data.get('request_id')
+    booking_id = data.get('booking_id')
+    service_type = data.get('service_type')
+    user_id = data.get('user_id')
+    
+    if not all([request_id, booking_id, service_type, user_id]):
+        return jsonify({"error": "Missing parameters"}), 400
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT details FROM requests WHERE id = %s", (request_id,))
+        request_data = cur.fetchone()
+        
+        if not request_data:
+            return jsonify({"error": "Request not found"}), 404
+        
+        details = request_data[0]
+        try:
+            details_obj = json.loads(details) if isinstance(details, str) else details
+        except:
+            details_obj = {"raw": str(details)}
+        
+        pdf_filename = create_pdf_ticket_for_booking(booking_id, service_type, details_obj, user_id)
+        
+        details_obj["ticket_pdf_url"] = f"/static/tickets/{pdf_filename}"
+        details_obj["ticket_generated_at"] = datetime.now().isoformat()
+        
+        cur.execute("UPDATE requests SET details = %s::jsonb WHERE id = %s",
+                   (json.dumps(details_obj), request_id))
+        conn.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "PDF ticket generated successfully",
+            "ticket_url": f"/static/tickets/{pdf_filename}",
+            "booking_id": booking_id
+        })
+        
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
 # ---------------------- Static Mock Data ----------------------
 hotels_data = {
     "Mumbai": [
@@ -563,179 +766,6 @@ technicians_data = [
     {"id": "T005", "name": "Deepak Yadav", "service_type": "ac_repair", "experience": 6, "rating": 4.7, "price": 850, "availability": "Available", "location": "Pune"},
     {"id": "T006", "name": "Ravi Gupta", "service_type": "plumbing", "experience": 8, "rating": 4.8, "price": 650, "availability": "Available", "location": "Pune"},
 ]
-
-# ---------------------- JSON helpers ----------------------
-def delete_notification(notification_id, user_id):
-    """Delete a specific notification for a user"""
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("DELETE FROM notifications WHERE id = %s AND user_id = %s", (notification_id, user_id))
-        conn.commit()
-        return True
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to delete notification: {e}")
-        return False
-    finally:
-        cur.close()
-        conn.close()
-
-def save_notification(user_id, title, message, icon='notifications', type='info'):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            INSERT INTO notifications (user_id, title, message, icon, type)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (user_id, title, message, icon, type))
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to save notification: {e}")
-    finally:
-        cur.close()
-        conn.close()
-
-def get_user_notifications(user_id, limit=50):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            SELECT id, title, message, icon, type, created_at, is_read
-            FROM notifications
-            WHERE user_id = %s
-            ORDER BY created_at DESC
-            LIMIT %s
-        """, (user_id, limit))
-        rows = cur.fetchall()
-        return [
-            {
-                "id": r[0],
-                "title": r[1],
-                "message": r[2],
-                "icon": r[3],
-                "type": r[4],
-                "time": r[5].strftime("%I:%M %p") if r[5] else "Just now",
-                "time_ago": time_ago(r[5]) if r[5] else "Just now",
-                "is_read": r[6]
-            } for r in rows
-        ]
-    except Exception as e:
-        logger.error(f"Error fetching notifications: {e}")
-        return []
-    finally:
-        cur.close()
-        conn.close()
-
-def mark_notifications_read(user_id):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("UPDATE notifications SET is_read = TRUE WHERE user_id = %s AND is_read = FALSE", (user_id,))
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-    finally:
-        cur.close()
-        conn.close()
-
-def get_unread_count(user_id):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT COUNT(*) FROM notifications WHERE user_id = %s AND is_read = FALSE", (user_id,))
-        return cur.fetchone()[0]
-    except:
-        return 0
-    finally:
-        cur.close()
-        conn.close()
-
-def time_ago(dt):
-    if not dt:
-        return "Just now"
-    now = datetime.now()
-    diff = now - dt
-    if diff.total_seconds() < 60:
-        return "Just now"
-    elif diff.total_seconds() < 3600:
-        mins = int(diff.total_seconds() // 60)
-        return f"{mins} minute{'s' if mins != 1 else ''} ago"
-    elif diff.total_seconds() < 86400:
-        hours = int(diff.total_seconds() // 3600)
-        return f"{hours} hour{'s' if hours != 1 else ''} ago"
-    else:
-        days = diff.days
-        return f"{days} day{'s' if days != 1 else ''} ago"
-    
-def _parse_details(val):
-    if isinstance(val, dict):
-        return val
-    if isinstance(val, str):
-        try:
-            return json.loads(val)
-        except Exception:
-            return val
-    return val
-
-def _to_iso(dt):
-    if isinstance(dt, (datetime, date)):
-        return dt.isoformat()
-    return dt
-
-def _row_to_json_safe(row):
-    if not row:
-        return None
-    r = list(row)
-    if len(r) > 4:
-        r[4] = _parse_details(r[4])
-    if len(r) > 7:
-        r[7] = _to_iso(r[7])
-    return r
-
-def get_requests_json():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            SELECT id, user_id, booking_id, service_type, details, payment_status, admin_confirmation, created_at
-            FROM requests
-            ORDER BY created_at DESC
-        """)
-        rows = cur.fetchall()
-        return [_row_to_json_safe(r) for r in rows]
-    except Exception as e:
-        logger.error(f"get_requests_json error: {e}")
-        return []
-    finally:
-        cur.close()
-        conn.close()
-
-def get_last_request_json():
-    if not current_user.is_authenticated:
-        return None
-    user_id = current_user.get_id()
-    if not user_id:
-        return None
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            SELECT id, user_id, booking_id, service_type, details, payment_status, admin_confirmation, created_at
-            FROM requests
-            WHERE user_id = %s
-            ORDER BY id DESC
-            LIMIT 1
-        """, (user_id,))
-        row = cur.fetchone()
-        return _row_to_json_safe(row) if row else None
-    except Exception as e:
-        logger.error(f"get_last_request_json error: {e}")
-        return None
-    finally:
-        cur.close()
-        conn.close()
 
 # ---------------------- Live Updates ----------------------
 def get_active_users():
@@ -1169,6 +1199,241 @@ def handle_delete_request(data):
         cur.close()
         conn.close()
 
+@socketio.on('get_live_data')
+def handle_get_live_data():
+    if not session.get('is_admin'):
+        return
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT DISTINCT user_id 
+            FROM requests 
+            WHERE created_at >= NOW() - INTERVAL '24 hours'
+        """)
+        active_users = [row[0] for row in cur.fetchall()]
+        
+        emit('live_data_update', {
+            'active_users': active_users,
+            'active_count': len(active_users),
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Error getting live data: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+@socketio.on('send_broadcast')
+def handle_send_broadcast(data):
+    """Handle broadcast notifications from admin"""
+    try:
+        target = data.get('target')
+        user_id = data.get('user_id')
+        title = data.get('title', 'Notification')
+        message = data.get('message', '')
+        icon = data.get('icon', 'notifications_active')
+        notification_type = data.get('type', 'info')
+        
+        if not title or not message:
+            emit('broadcast_error', {'message': 'Title and message are required'})
+            return
+            
+        if target == 'specific':
+            if not user_id:
+                emit('broadcast_error', {'message': 'User ID is required for specific user'})
+                return
+            
+            save_notification(user_id, title, message, icon, notification_type)
+            
+            emit('broadcast_notification', {
+                'title': title,
+                'message': message,
+                'icon': icon,
+                'type': notification_type,
+                'timestamp': datetime.now().isoformat()
+            }, room=f"user_{user_id}")
+            
+        else:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            try:
+                cur.execute("SELECT id FROM users")
+                all_users = cur.fetchall()
+                
+                for user in all_users:
+                    user_id = user[0]
+                    save_notification(user_id, title, message, icon, notification_type)
+                    
+                    emit('broadcast_notification', {
+                        'title': title,
+                        'message': message,
+                        'icon': icon,
+                        'type': notification_type,
+                        'timestamp': datetime.now().isoformat()
+                    }, room=f"user_{user_id}")
+                    
+            finally:
+                cur.close()
+                conn.close()
+        
+        emit('broadcast_success', {'message': 'Notification sent successfully'})
+        
+    except Exception as e:
+        logger.error(f"Error in broadcast: {e}")
+        emit('broadcast_error', {'message': str(e)})
+
+@socketio.on('delete_notification')
+def handle_delete_notification(data):
+    """Handle deletion of a specific notification"""
+    try:
+        notification_id = data.get('notification_id')
+        user_id = data.get('user_id')
+        
+        if not notification_id or not user_id:
+            emit('notification_error', {'message': 'Missing parameters'})
+            return
+        
+        if delete_notification(notification_id, user_id):
+            emit('notification_deleted', {
+                'notification_id': notification_id,
+                'message': 'Notification deleted successfully'
+            }, room=f"user_{user_id}")
+        else:
+            emit('notification_error', {'message': 'Failed to delete notification'})
+            
+    except Exception as e:
+        logger.error(f"Error deleting notification: {e}")
+        emit('notification_error', {'message': str(e)})
+
+@socketio.on('mark_all_read')
+def handle_mark_all_read(data):
+    """Mark all notifications as read for a user"""
+    try:
+        user_id = data.get('user_id')
+        if not user_id:
+            emit('notification_error', {'message': 'User ID is required'})
+            return
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                UPDATE notifications 
+                SET is_read = TRUE 
+                WHERE user_id = %s AND is_read = FALSE
+            """, (user_id,))
+            conn.commit()
+            
+            emit('all_notifications_read', {
+                'user_id': user_id,
+                'message': 'All notifications marked as read'
+            }, room=f"user_{user_id}")
+            
+        except Exception as e:
+            conn.rollback()
+            emit('notification_error', {'message': str(e)})
+        finally:
+            cur.close()
+            conn.close()
+            
+    except Exception as e:
+        logger.error(f"Error marking all as read: {e}")
+        emit('notification_error', {'message': str(e)})
+
+@socketio.on('send_ticket_to_user')
+def handle_send_ticket_to_user(data):
+    request_id = data.get('request_id')
+    user_id = data.get('user_id')
+    
+    if not request_id or not user_id:
+        emit('error', {'message': 'Missing parameters'})
+        return
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT booking_id, service_type, details FROM requests WHERE id = %s", (request_id,))
+        request_data = cur.fetchone()
+        
+        if not request_data:
+            emit('error', {'message': 'Request not found'})
+            return
+        
+        booking_id, service_type, details = request_data
+        
+        try:
+            details_obj = json.loads(details) if isinstance(details, str) else details
+        except:
+            details_obj = {"raw": str(details)}
+        
+        pdf_filename = create_pdf_ticket_for_booking(booking_id, service_type, details_obj, user_id)
+        
+        emit('ticket_sent_to_user', {
+            'user_id': user_id,
+            'booking_id': booking_id,
+            'ticket_pdf_url': f"/static/tickets/{pdf_filename}"
+        }, broadcast=True)
+        
+        emit('ticket_ready', {
+            'booking_id': booking_id,
+            'service_type': service_type,
+            'ticket_pdf_url': f"/static/tickets/{pdf_filename}",
+            'message': 'Your PDF ticket has been generated! Click to download.'
+        }, room=f"user_{user_id}")
+        
+    except Exception as e:
+        emit('error', {'message': str(e)})
+    finally:
+        cur.close()
+        conn.close()
+
+@socketio.on('send_report_to_user')
+def handle_send_report_to_user(data):
+    user_id = data.get('user_id')
+    
+    if not user_id:
+        emit('error', {'message': 'Missing user_id'})
+        return
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT full_name, email FROM users WHERE id = %s", (user_id,))
+        user_data = cur.fetchone()
+        
+        if not user_data:
+            emit('error', {'message': 'User not found'})
+            return
+        
+        full_name, email = user_data
+        
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_requests,
+                COUNT(CASE WHEN payment_status = 'Confirmed' THEN 1 END) as confirmed_requests,
+                COUNT(CASE WHEN payment_status = 'Pending' THEN 1 END) as pending_requests
+            FROM requests WHERE user_id = %s
+        """, (user_id,))
+        stats = cur.fetchone()
+        
+        emit('report_sent', {
+            'user_id': user_id,
+            'message': f'Your activity report has been generated and sent to {email}',
+            'stats': {
+                'total_requests': stats[0] if stats else 0,
+                'confirmed_requests': stats[1] if stats else 0,
+                'pending_requests': stats[2] if stats else 0
+            }
+        }, room=f"user_{user_id}")
+        
+    except Exception as e:
+        emit('error', {'message': str(e)})
+    finally:
+        cur.close()
+        conn.close()
+
 # ---------------------- Admin API Routes ----------------------
 @app.route('/admin/users')
 def admin_users():
@@ -1338,98 +1603,6 @@ def admin_send_ticket():
         return jsonify({"success": True, "message": "PDF ticket sent to user"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cur.close()
-        conn.close()
-
-@socketio.on('send_ticket_to_user')
-def handle_send_ticket_to_user(data):
-    request_id = data.get('request_id')
-    user_id = data.get('user_id')
-    
-    if not request_id or not user_id:
-        emit('error', {'message': 'Missing parameters'})
-        return
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT booking_id, service_type, details FROM requests WHERE id = %s", (request_id,))
-        request_data = cur.fetchone()
-        
-        if not request_data:
-            emit('error', {'message': 'Request not found'})
-            return
-        
-        booking_id, service_type, details = request_data
-        
-        try:
-            details_obj = json.loads(details) if isinstance(details, str) else details
-        except:
-            details_obj = {"raw": str(details)}
-        
-        pdf_filename = create_pdf_ticket_for_booking(booking_id, service_type, details_obj, user_id)
-        
-        emit('ticket_sent_to_user', {
-            'user_id': user_id,
-            'booking_id': booking_id,
-            'ticket_pdf_url': f"/static/tickets/{pdf_filename}"
-        }, broadcast=True)
-        
-        emit('ticket_ready', {
-            'booking_id': booking_id,
-            'service_type': service_type,
-            'ticket_pdf_url': f"/static/tickets/{pdf_filename}",
-            'message': 'Your PDF ticket has been generated! Click to download.'
-        }, room=f"user_{user_id}")
-        
-    except Exception as e:
-        emit('error', {'message': str(e)})
-    finally:
-        cur.close()
-        conn.close()
-
-@socketio.on('send_report_to_user')
-def handle_send_report_to_user(data):
-    user_id = data.get('user_id')
-    
-    if not user_id:
-        emit('error', {'message': 'Missing user_id'})
-        return
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT full_name, email FROM users WHERE id = %s", (user_id,))
-        user_data = cur.fetchone()
-        
-        if not user_data:
-            emit('error', {'message': 'User not found'})
-            return
-        
-        full_name, email = user_data
-        
-        cur.execute("""
-            SELECT 
-                COUNT(*) as total_requests,
-                COUNT(CASE WHEN payment_status = 'Confirmed' THEN 1 END) as confirmed_requests,
-                COUNT(CASE WHEN payment_status = 'Pending' THEN 1 END) as pending_requests
-            FROM requests WHERE user_id = %s
-        """, (user_id,))
-        stats = cur.fetchone()
-        
-        emit('report_sent', {
-            'user_id': user_id,
-            'message': f'Your activity report has been generated and sent to {email}',
-            'stats': {
-                'total_requests': stats[0] if stats else 0,
-                'confirmed_requests': stats[1] if stats else 0,
-                'pending_requests': stats[2] if stats else 0
-            }
-        }, room=f"user_{user_id}")
-        
-    except Exception as e:
-        emit('error', {'message': str(e)})
     finally:
         cur.close()
         conn.close()
@@ -1651,149 +1824,6 @@ def user_request_details(request_id):
         cur.close()
         conn.close()
 
-@socketio.on('get_live_data')
-def handle_get_live_data():
-    if not session.get('is_admin'):
-        return
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            SELECT DISTINCT user_id 
-            FROM requests 
-            WHERE created_at >= NOW() - INTERVAL '24 hours'
-        """)
-        active_users = [row[0] for row in cur.fetchall()]
-        
-        emit('live_data_update', {
-            'active_users': active_users,
-            'active_count': len(active_users),
-            'timestamp': datetime.now().isoformat()
-        })
-    except Exception as e:
-        logger.error(f"Error getting live data: {e}")
-    finally:
-        cur.close()
-        conn.close()
-    
-@socketio.on('send_broadcast')
-def handle_send_broadcast(data):
-    """Handle broadcast notifications from admin"""
-    try:
-        target = data.get('target')
-        user_id = data.get('user_id')
-        title = data.get('title', 'Notification')
-        message = data.get('message', '')
-        icon = data.get('icon', 'notifications_active')
-        notification_type = data.get('type', 'info')
-        
-        if not title or not message:
-            emit('broadcast_error', {'message': 'Title and message are required'})
-            return
-            
-        if target == 'specific':
-            if not user_id:
-                emit('broadcast_error', {'message': 'User ID is required for specific user'})
-                return
-            
-            save_notification(user_id, title, message, icon, notification_type)
-            
-            emit('broadcast_notification', {
-                'title': title,
-                'message': message,
-                'icon': icon,
-                'type': notification_type,
-                'timestamp': datetime.now().isoformat()
-            }, room=f"user_{user_id}")
-            
-        else:
-            conn = get_db_connection()
-            cur = conn.cursor()
-            try:
-                cur.execute("SELECT id FROM users")
-                all_users = cur.fetchall()
-                
-                for user in all_users:
-                    user_id = user[0]
-                    save_notification(user_id, title, message, icon, notification_type)
-                    
-                    emit('broadcast_notification', {
-                        'title': title,
-                        'message': message,
-                        'icon': icon,
-                        'type': notification_type,
-                        'timestamp': datetime.now().isoformat()
-                    }, room=f"user_{user_id}")
-                    
-            finally:
-                cur.close()
-                conn.close()
-        
-        emit('broadcast_success', {'message': 'Notification sent successfully'})
-        
-    except Exception as e:
-        logger.error(f"Error in broadcast: {e}")
-        emit('broadcast_error', {'message': str(e)})
-
-@socketio.on('delete_notification')
-def handle_delete_notification(data):
-    """Handle deletion of a specific notification"""
-    try:
-        notification_id = data.get('notification_id')
-        user_id = data.get('user_id')
-        
-        if not notification_id or not user_id:
-            emit('notification_error', {'message': 'Missing parameters'})
-            return
-        
-        if delete_notification(notification_id, user_id):
-            emit('notification_deleted', {
-                'notification_id': notification_id,
-                'message': 'Notification deleted successfully'
-            }, room=f"user_{user_id}")
-        else:
-            emit('notification_error', {'message': 'Failed to delete notification'})
-            
-    except Exception as e:
-        logger.error(f"Error deleting notification: {e}")
-        emit('notification_error', {'message': str(e)})
-
-@socketio.on('mark_all_read')
-def handle_mark_all_read(data):
-    """Mark all notifications as read for a user"""
-    try:
-        user_id = data.get('user_id')
-        if not user_id:
-            emit('notification_error', {'message': 'User ID is required'})
-            return
-        
-        conn = get_db_connection()
-        cur = conn.cursor()
-        try:
-            cur.execute("""
-                UPDATE notifications 
-                SET is_read = TRUE 
-                WHERE user_id = %s AND is_read = FALSE
-            """, (user_id,))
-            conn.commit()
-            
-            emit('all_notifications_read', {
-                'user_id': user_id,
-                'message': 'All notifications marked as read'
-            }, room=f"user_{user_id}")
-            
-        except Exception as e:
-            conn.rollback()
-            emit('notification_error', {'message': str(e)})
-        finally:
-            cur.close()
-            conn.close()
-            
-    except Exception as e:
-        logger.error(f"Error marking all as read: {e}")
-        emit('notification_error', {'message': str(e)})
-        
 # ---------------------- Simulated PAYMENT (HOTEL) ----------------------
 @app.route('/confirm-booking', methods=['POST'])
 @login_required
@@ -1920,31 +1950,68 @@ def confirm_car_booking():
         cur.close()
         conn.close()
 
-
 # --------------------------------------------------------------
 #  Car Booking Routes
 # --------------------------------------------------------------
-@app.route('/submit_car_booking', methods=['POST'])
+@app.route('/submit_car_booking', methods=['GET', 'POST'])
 @login_required
 def submit_car_booking():
     try:
-        pickup = request.form.get('pickup', '').strip().title()
-        dropoff = request.form.get('dropoff', '').strip().title()
-        pickup_date = request.form.get('pickup_date', '').strip()
-        pickup_time = request.form.get('pickup_time', '').strip()
-        passengers = request.form.get('passengers', '1').strip()
-        car_class = request.form.get('cab_class', 'standard').strip().lower()
-        special_requests = request.form.get('special_requests', '').strip()
-        is_initial = request.form.get('is_initial', 'false') == 'true'
+        # Default values (used when called via GET without parameters)
+        pickup = 'Mumbai'
+        dropoff = 'Mumbai Airport'
+        pickup_date = get_tomorrow_date()
+        pickup_time = get_tomorrow_time(10)  # 10:00
+        passengers = 2
+        car_class = 'standard'
+        special_requests = ''
 
+        # ── Determine source of input ───────────────────────────────
+        if request.method == 'GET':
+            # Pre-filled from AI recommendations (URL parameters)
+            location_text = session.get('user_location', {}).get('city', 'Mumbai')
+            pickup = request.args.get('pickup', location_text).strip().title()
+            dropoff = request.args.get('dropoff', f'{pickup} Airport').strip().title()
+            pickup_date = request.args.get('pickup_date', get_tomorrow_date()).strip()
+            pickup_time = request.args.get('pickup_time', get_tomorrow_time(10)).strip()
+            try:
+                passengers = max(1, min(9, int(request.args.get('passengers', 2))))
+            except (ValueError, TypeError):
+                passengers = 2
+            car_class = request.args.get('cab_class', 'standard').strip().lower()
+            special_requests = request.args.get('special_requests', '').strip()
+
+        else:  # POST from modal form
+            pickup = request.form.get('pickup', '').strip().title()
+            dropoff = request.form.get('dropoff', '').strip().title()
+            pickup_date = request.form.get('pickup_date', '').strip()
+            pickup_time = request.form.get('pickup_time', '').strip()
+            passengers_str = request.form.get('passengers', '1').strip()
+            car_class = request.form.get('cab_class', 'standard').strip().lower()
+            special_requests = request.form.get('special_requests', '').strip()
+
+            try:
+                passengers = int(passengers_str)
+                if not 1 <= passengers <= 9:
+                    raise ValueError
+            except (ValueError, TypeError):
+                flash("Passengers must be between 1 and 9.", "danger")
+                return redirect(url_for('dashboard'))
+
+        # ── Basic validation ────────────────────────────────────────
         if not all([pickup, dropoff, pickup_date, pickup_time]):
             flash("Please fill all required fields.", "danger")
             return redirect(url_for('dashboard'))
 
-        if len(pickup_time.split(':')) == 3:
-            time_format = '%H:%M:%S'
+        # Parse pickup date + time
+        if ':' in pickup_time:
+            if len(pickup_time.split(':')) == 3:
+                time_format = '%H:%M:%S'
+            else:
+                time_format = '%H:%M'
         else:
-            time_format = '%H:%M'
+            flash("Invalid time format.", "danger")
+            return redirect(url_for('dashboard'))
 
         try:
             pickup_dt = datetime.strptime(f"{pickup_date} {pickup_time}", f'%Y-%m-%d {time_format}')
@@ -1956,22 +2023,16 @@ def submit_car_booking():
             flash("Invalid date or time format.", "danger")
             return redirect(url_for('dashboard'))
 
-        try:
-            passengers = int(passengers)
-            if not 1 <= passengers <= 9:
-                raise ValueError
-        except:
-            flash("Passengers must be 1–9.", "danger")
-            return redirect(url_for('dashboard'))
-
+        # ── Map cab class ───────────────────────────────────────────
         class_map = {
             'economy': 'Standard',
-            'standard': 'Standard', 
+            'standard': 'Standard',
             'luxury': 'Luxury',
             'suv': 'SUV'
         }
         target_class = class_map.get(car_class, 'Standard')
 
+        # ── Filter cars ─────────────────────────────────────────────
         filtered_cars = []
         for car in cars_data:
             cab_class = car.get('cab_class', '').lower()
@@ -1983,47 +2044,51 @@ def submit_car_booking():
                     filtered_cars.append(car)
 
         if not filtered_cars:
-            filtered_cars = [car for car in cars_data 
-                           if car.get('cab_class', '').lower() == target_class.lower()]
-            
-            if not filtered_cars:
-                flash(f"No {target_class} cars available right now – showing popular options!", "info")
-                filtered_cars = [c for c in cars_data if c.get('cab_class') in ['Standard', 'SUV', 'Luxury']]
+            filtered_cars = [car for car in cars_data
+                             if car.get('cab_class', '').lower() == target_class.lower()]
 
+        if not filtered_cars:
+            flash(f"No {target_class} cars available right now – showing popular options!", "info")
+            filtered_cars = [c for c in cars_data if c.get('cab_class') in ['Standard', 'SUV', 'Luxury']]
+
+        # Limit selection
         selected = filtered_cars[:6]
         if len(filtered_cars) > 6:
             selected = random.sample(filtered_cars, 6)
 
+        # ── Enhance car data for template ───────────────────────────
         enhanced_cars = []
         for idx, car in enumerate(selected):
             enhanced_car = car.copy()
-            
+
+            # transmission logic
             if car.get('cab_class') == 'Luxury':
                 transmission = 'Automatic'
-            elif car.get('model', '').lower().__contains__('premium'):
+            elif 'premium' in car.get('model', '').lower():
                 transmission = 'Automatic'
             else:
                 transmission = 'Manual'
-            
+
             enhanced_car.update({
                 'id': idx + 1,
                 'transmission': transmission,
                 'pickup': pickup,
                 'dropoff': dropoff,
                 'pickup_date': pickup_date,
-                'pickup_time': pickup_time.split(':')[0] + ':' + pickup_time.split(':')[1],
+                'pickup_time': pickup_time.split(':')[0] + ':' + pickup_time.split(':')[1] if ':' in pickup_time else pickup_time,
                 'passengers': passengers,
                 'booking_for': pickup_dt.strftime('%b %d, %Y at %I:%M %p')
             })
             enhanced_cars.append(enhanced_car)
 
+        # ── Render results page ─────────────────────────────────────
         return render_template(
             'car_results.html',
             cars=enhanced_cars,
             pickup=pickup,
             dropoff=dropoff,
             pickup_date=pickup_date,
-            pickup_time=pickup_time.split(':')[0] + ':' + pickup_time.split(':')[1],
+            pickup_time=pickup_time.split(':')[0] + ':' + pickup_time.split(':')[1] if ':' in pickup_time else pickup_time,
             passengers=passengers,
             car_class=target_class
         )
@@ -2035,113 +2100,115 @@ def submit_car_booking():
         flash("Something went wrong. Please try again.", "danger")
         return redirect(url_for('dashboard'))
 
-# ---------------------- Technician / Courier / Travel ----------------------
-@app.route('/submit-technician-booking', methods=['POST'])
+# ---------------------- Technician Booking ----------------------
+@app.route('/submit-technician-booking', methods=['GET', 'POST'])
 @login_required
 def submit_technician_booking():
-    service_type = (request.form.get('service_type') or '').strip().lower()
-    location = (request.form.get('location') or '').strip()
-    service_date = request.form.get('service_date')
-    service_time = request.form.get('service_time')
-    urgency = request.form.get('urgency', 'normal')
-    description = request.form.get('description', '').strip()
-    is_initial = request.form.get('is_initial', 'false') == 'true'
-
-    if not all([service_type, location, service_date, service_time, description]):
-        flash("Please provide valid technician booking details.", "danger")
-        return redirect(url_for('dashboard'))
-
     try:
-        service_datetime = datetime.strptime(f"{service_date} {service_time}", '%Y-%m-%d %H:%M')
-        if service_datetime < datetime.now():
-            flash("Service time cannot be in the past.", "danger")
+        # Default values
+        service_type = 'ac_repair'  # Most common request
+        location = 'Mumbai'
+        service_date = get_tomorrow_date()
+        service_time = get_default_service_time()
+        urgency = 'normal'
+        description = ''
+
+        if request.method == 'GET':
+            # Pre-filled from AI Recommendations (URL params)
+            location_text = session.get('user_location', {}).get('city', 'Mumbai')
+            location = request.args.get('location', location_text).strip().title()
+            service_date = request.args.get('service_date', get_tomorrow_date()).strip()
+            service_time = request.args.get('service_time', get_default_service_time()).strip()
+            service_type = request.args.get('service_type', 'ac_repair').strip().lower()
+            urgency = request.args.get('urgency', 'normal').strip().lower()
+            description = request.args.get('description', '').strip()
+
+        else:  # POST from modal form
+            service_type = (request.form.get('service_type') or '').strip().lower()
+            location = (request.form.get('location') or '').strip()
+            service_date = request.form.get('service_date', '').strip()
+            service_time = request.form.get('service_time', '').strip()
+            urgency = request.form.get('urgency', 'normal').strip().lower()
+            description = request.form.get('description', '').strip()
+
+        # ── Validation ─────────────────────────────────────────────
+        if not all([service_type, location, service_date, service_time]):
+            flash("Please provide all required technician details.", "danger")
             return redirect(url_for('dashboard'))
-    except ValueError:
-        flash("Invalid date or time format. Use YYYY-MM-DD and HH:MM.", "danger")
-        return redirect(url_for('dashboard'))
 
-    normalized_location = location.strip()
-    if normalized_location:
-        normalized_location = normalized_location.title()
+        # Validate date/time
+        try:
+            service_datetime = datetime.strptime(f"{service_date} {service_time}", '%Y-%m-%d %H:%M')
+            if service_datetime < datetime.now():
+                flash("Service time cannot be in the past.", "danger")
+                return redirect(url_for('dashboard'))
+        except ValueError:
+            flash("Invalid date or time format. Use YYYY-MM-DD and HH:MM.", "danger")
+            return redirect(url_for('dashboard'))
 
-    filtered_technicians = [
-        tech for tech in technicians_data
-        if tech.get('service_type', '').lower() == service_type and tech.get('location', '').lower() == normalized_location.lower()
-    ]
+        normalized_location = location.strip().title()
 
-    fallback_reason = None
-    if not filtered_technicians:
-        fallback_reason = "no_exact_location"
+        # ── Filter technicians ─────────────────────────────────────
         filtered_technicians = [
             tech for tech in technicians_data
             if tech.get('service_type', '').lower() == service_type
+            and tech.get('location', '').lower() == normalized_location.lower()
         ]
 
-    if not filtered_technicians:
-        fallback_reason = "no_service_type"
-        sorted_by_rating = sorted(technicians_data, key=lambda t: t.get('rating', 0), reverse=True)
-        filtered_technicians = sorted_by_rating[:6]
+        fallback_reason = None
+        if not filtered_technicians:
+            fallback_reason = "no_exact_location"
+            filtered_technicians = [
+                tech for tech in technicians_data
+                if tech.get('service_type', '').lower() == service_type
+            ]
 
-    num_to_show = min(max(5, len(filtered_technicians)), len(filtered_technicians))
-    if len(filtered_technicians) > num_to_show:
-        selected_technicians = random.sample(filtered_technicians, num_to_show)
-    else:
-        selected_technicians = filtered_technicians
+        if not filtered_technicians:
+            fallback_reason = "no_service_type"
+            sorted_by_rating = sorted(technicians_data, key=lambda t: t.get('rating', 0), reverse=True)
+            filtered_technicians = sorted_by_rating[:6]
 
-    for tech in selected_technicians:
-        tech['service_time'] = service_time
-        tech['location'] = normalized_location
+        # Select 5–6 technicians
+        num_to_show = random.choice([5, 6])
+        selected_technicians = (
+            random.sample(filtered_technicians, min(num_to_show, len(filtered_technicians)))
+            if len(filtered_technicians) > num_to_show
+            else filtered_technicians
+        )
 
-    if is_initial:
-        booking_id = f"TECH-{random.randint(1000, 9999)}"
-        conn = get_db_connection()
-        cur = conn.cursor()
-        try:
-            payload = json.dumps({
-                'service_type': service_type,
-                'location': normalized_location,
-                'service_date': service_date,
-                'service_time': service_time,
-                'urgency': urgency,
-                'description': description
-            })
-            cur.execute("""
-                INSERT INTO requests (user_id, booking_id, service_type, details, payment_status, admin_confirmation, created_at)
-                VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s)
-            """, (
-                current_user.get_id(),
-                booking_id,
-                'Technician Booking',
-                payload,
-                'Pending',
-                'Pending',
-                datetime.now()
-            ))
-            conn.commit()
-            socketio.emit('new_request', {'request': get_last_request_json()})
-            flash("Technician booking request submitted successfully!", "success")
-        except psycopg2.Error as e:
-            conn.rollback()
-            flash(f"Database error: {str(e)}. Please ensure the requests table exists.", "danger")
-        finally:
-            cur.close()
-            conn.close()
-    else:
-        if fallback_reason == "no_exact_location":
-            flash("No technicians found in that exact location. Showing technicians for the selected service type.", "info")
-        elif fallback_reason == "no_service_type":
-            flash("No technicians found for that service type. Showing top available technicians.", "info")
+        # Add display fields
+        for tech in selected_technicians:
+            tech['service_time'] = service_time
+            tech['location'] = normalized_location
+            tech['service_date'] = service_date
+            tech['urgency'] = urgency.capitalize()
+
+        # ── Flash messages ─────────────────────────────────────────
+        if request.method == 'GET':
+            flash(f"Showing top technicians for {service_type.replace('_', ' ').title()} in {normalized_location}", "info")
         else:
-            flash("Search modified! Showing updated results.", "info")
+            if fallback_reason == "no_exact_location":
+                flash("No technicians in exact location — showing available ones for this service.", "info")
+            elif fallback_reason == "no_service_type":
+                flash("Showing top-rated technicians across all services.", "info")
+            else:
+                flash("Here are the best matching technicians!", "success")
 
-    return render_template('technician_results.html',
-                           technicians=selected_technicians,
-                           service_type=service_type,
-                           location=normalized_location,
-                           service_date=service_date,
-                           service_time=service_time,
-                           urgency=urgency,
-                           description=description)
+        return render_template('technician_results.html',
+                               technicians=selected_technicians,
+                               service_type=service_type,
+                               location=normalized_location,
+                               service_date=service_date,
+                               service_time=service_time,
+                               urgency=urgency,
+                               description=description)
+
+    except Exception as e:
+        import traceback
+        print("ERROR in submit_technician_booking:")
+        traceback.print_exc()
+        flash("Something went wrong. Please try again.", "danger")
+        return redirect(url_for('dashboard'))
 
 @app.route('/technician/confirm', methods=['POST'])
 @login_required
@@ -2202,118 +2269,132 @@ def confirm_technician():
         cur.close()
         conn.close()
 
-@app.route('/submit_courier_booking', methods=['POST'])
+# ---------------------- Courier Booking ----------------------
+@app.route('/submit_courier_booking', methods=['GET', 'POST'])
 @login_required
 def submit_courier_booking():
-    pickup          = request.form.get('pickup', '').strip().title()
-    dropoff         = request.form.get('dropoff', '').strip().title()
-    pickup_date     = request.form.get('pickup_date', '').strip()
-    pickup_time     = request.form.get('pickup_time', '').strip()
-    package_weight  = request.form.get('package_weight', '1.0').strip()
-    courier_type    = request.form.get('courier_type', 'standard').strip().lower()
-    special_requests = request.form.get('special_requests', '').strip()
-    is_initial      = request.form.get('is_initial', 'false') == 'true'
-
     try:
-        weight = float(package_weight)
-        if weight < 0.1:
-            raise ValueError()
-    except ValueError:
-        flash("Package weight must be at least 0.1 kg.", "danger")
-        return redirect(url_for('dashboard'))
+        # Default values
+        pickup = 'Mumbai'
+        dropoff = 'Mumbai Downtown'
+        pickup_date = get_tomorrow_date()
+        pickup_time = get_default_pickup_time()
+        package_weight = 2.0
+        courier_type = 'standard'
+        special_requests = ''
 
-    if not all([pickup, dropoff, pickup_date, pickup_time]):
-        flash("Please fill all required fields.", "danger")
-        return redirect(url_for('dashboard'))
+        if request.method == 'GET':
+            # Pre-filled from AI Recommendations (URL params)
+            location_text = session.get('user_location', {}).get('city', 'Mumbai')
+            pickup = request.args.get('pickup', location_text).strip().title()
+            dropoff = request.args.get('dropoff', f'{pickup} Downtown').strip().title()
+            pickup_date = request.args.get('pickup_date', get_tomorrow_date()).strip()
+            pickup_time = request.args.get('pickup_time', get_default_pickup_time()).strip()
+            try:
+                package_weight = float(request.args.get('package_weight', 2.0))
+                package_weight = max(0.1, package_weight)  # Minimum 0.1 kg
+            except (ValueError, TypeError):
+                package_weight = 2.0
+            courier_type = request.args.get('courier_type', 'standard').strip().lower()
+            special_requests = request.args.get('special_requests', '').strip()
 
-    try:
-        pickup_dt = datetime.strptime(f"{pickup_date} {pickup_time}", '%Y-%m-%d %H:%M')
-        if pickup_dt < datetime.now():
-            flash("Pickup time cannot be in the past.", "danger")
+        else:  # POST from modal form
+            pickup = request.form.get('pickup', '').strip().title()
+            dropoff = request.form.get('dropoff', '').strip().title()
+            pickup_date = request.form.get('pickup_date', '').strip()
+            pickup_time = request.form.get('pickup_time', '').strip()
+            try:
+                package_weight = float(request.form.get('package_weight', '2.0'))
+                if package_weight < 0.1:
+                    raise ValueError
+            except ValueError:
+                flash("Package weight must be at least 0.1 kg.", "danger")
+                return redirect(url_for('dashboard'))
+            courier_type = request.form.get('courier_type', 'standard').strip().lower()
+            special_requests = request.form.get('special_requests', '').strip()
+
+        # ── Basic validation ───────────────────────────────────────
+        if not all([pickup, dropoff, pickup_date, pickup_time]):
+            flash("Please fill all required fields.", "danger")
             return redirect(url_for('dashboard'))
-    except ValueError:
-        flash("Invalid date or time format.", "danger")
-        return redirect(url_for('dashboard'))
 
-    services = {
-        "standard":   {"price_per_kg": 50,  "delivery_time": "2–3 days"},
-        "express":    {"price_per_kg": 100, "delivery_time": "Same day"},
-        "overnight":  {"price_per_kg": 200, "delivery_time": "Next day"}
-    }
-    svc = services.get(courier_type, services["standard"])
-    price_per_kg = svc["price_per_kg"]
-    delivery_time = svc["delivery_time"]
-
-    if is_initial:
-        booking_id = f"COURIER-{random.randint(1000, 9999)}"
-        payload = json.dumps({
-            "pickup": pickup, "dropoff": dropoff, "pickup_date": pickup_date,
-            "pickup_time": pickup_time, "weight": weight, "courier_type": courier_type,
-            "special_requests": special_requests, "total_price": weight * price_per_kg
-        })
-        conn = get_db_connection()
-        cur = conn.cursor()
+        # Validate pickup date/time
         try:
-            cur.execute("""
-                INSERT INTO requests
-                (user_id, booking_id, service_type, details, payment_status, admin_confirmation, created_at)
-                VALUES (%s,%s,%s,%s::jsonb,%s,%s,%s)
-            """, (current_user.get_id(), booking_id, 'Courier Booking', payload, 'Pending', 'Pending', datetime.now()))
-            conn.commit()
-            socketio.emit('new_request', {'request': get_last_request_json()}, to=None)
-            flash("Initial request saved.", "success")
-        except Exception as e:
-            conn.rollback()
-            flash(f"DB error: {e}", "danger")
-        finally:
-            cur.close()
-            conn.close()
-    else:
-        flash("Search updated – showing 5–6 couriers.", "info")
+            pickup_dt = datetime.strptime(f"{pickup_date} {pickup_time}", '%Y-%m-%d %H:%M')
+            if pickup_dt < datetime.now():
+                flash("Pickup time cannot be in the past.", "danger")
+                return redirect(url_for('dashboard'))
+        except ValueError:
+            flash("Invalid date or time format.", "danger")
+            return redirect(url_for('dashboard'))
 
-    all_couriers = []
-    base_names = [
-        "SwiftFly", "NinjaPost", "TurboShip", "SpeedyWing", "FlashCargo",
-        "ZoomX", "RocketMail", "BlitzSend", "JetPack", "HyperCourier",
-        "LightningDrop", "VortexShip", "CometCarry", "MeteorMove", "AstroPost"
-    ]
+        # ── Pricing logic ──────────────────────────────────────────
+        services = {
+            "standard":   {"price_per_kg": 50,  "delivery_time": "2–3 days"},
+            "express":    {"price_per_kg": 100, "delivery_time": "Same day"},
+            "overnight":  {"price_per_kg": 200, "delivery_time": "Next day"}
+        }
+        svc = services.get(courier_type, services["standard"])
+        price_per_kg = svc["price_per_kg"]
+        delivery_time = svc["delivery_time"]
 
-    for _ in range(25):
-        name = random.choice(base_names)
-        hours_offset = random.randint(1, 6)
-        est_drop = (pickup_dt + timedelta(hours=hours_offset)).strftime("%H:%M")
-        is_express = random.random() < 0.4
+        # ── Generate mock couriers ─────────────────────────────────
+        all_couriers = []
+        base_names = [
+            "SwiftFly", "NinjaPost", "TurboShip", "SpeedyWing", "FlashCargo",
+            "ZoomX", "RocketMail", "BlitzSend", "JetPack", "HyperCourier",
+            "LightningDrop", "VortexShip", "CometCarry", "MeteorMove", "AstroPost"
+        ]
 
-        all_couriers.append({
-            "id": f"{'EXP' if is_express else 'COU'}-{random.randint(100, 9999)}",
-            "name": name,
-            "pickup": pickup,
-            "dropoff": dropoff,
-            "pickup_time": pickup_time,
-            "dropoff_time": est_drop,
-            "courier_type": "Express" if is_express else courier_type.capitalize(),
-            "max_weight": random.choice([20, 25, 30, 40, 50]),
-            "rating": round(random.uniform(4.0, 5.0), 1),
-            "availability": "Available",
-            "duration": "Same day" if is_express else delivery_time,
-            "price": 100 if is_express else price_per_kg
-        })
+        for _ in range(25):
+            name = random.choice(base_names)
+            hours_offset = random.randint(1, 6)
+            est_drop = (pickup_dt + timedelta(hours=hours_offset)).strftime("%H:%M")
+            is_express = random.random() < 0.4
 
-    display_count = random.choice([5, 6])
-    couriers = random.sample(all_couriers, display_count)
+            all_couriers.append({
+                "id": f"{'EXP' if is_express else 'COU'}-{random.randint(100, 9999)}",
+                "name": name,
+                "pickup": pickup,
+                "dropoff": dropoff,
+                "pickup_time": pickup_time,
+                "dropoff_time": est_drop,
+                "courier_type": "Express" if is_express else courier_type.capitalize(),
+                "max_weight": random.choice([20, 25, 30, 40, 50]),
+                "rating": round(random.uniform(4.0, 5.0), 1),
+                "availability": "Available",
+                "duration": "Same day" if is_express else delivery_time,
+                "price": 100 if is_express else price_per_kg  # Price per kg or flat for express
+            })
 
-    return render_template(
-        'courier_results.html',
-        pickup=pickup,
-        dropoff=dropoff,
-        pickup_date=pickup_date,
-        pickup_time=pickup_time,
-        package_weight=weight,
-        courier_type=courier_type.capitalize(),
-        special_requests=special_requests,
-        couriers=couriers,
-        current_user_id=current_user.get_id()
-    )
+        display_count = random.choice([5, 6])
+        couriers = random.sample(all_couriers, display_count)
+
+        # ── Flash message ──────────────────────────────────────────
+        if request.method == 'GET':
+            flash(f"Showing fast courier options from {pickup} → {dropoff}", "info")
+        else:
+            flash("Search updated – showing 5–6 couriers.", "info")
+
+        return render_template(
+            'courier_results.html',
+            pickup=pickup,
+            dropoff=dropoff,
+            pickup_date=pickup_date,
+            pickup_time=pickup_time,
+            package_weight=package_weight,
+            courier_type=courier_type.capitalize(),
+            special_requests=special_requests,
+            couriers=couriers,
+            current_user_id=current_user.get_id()
+        )
+
+    except Exception as e:
+        import traceback
+        print("ERROR in submit_courier_booking:")
+        traceback.print_exc()
+        flash("Something went wrong. Please try again.", "danger")
+        return redirect(url_for('dashboard'))
 
 @app.route('/courier/confirm', methods=['POST'])
 @login_required
@@ -2421,9 +2502,7 @@ def confirm_courier():
         cur.close()
         conn.close()
 
-# --------------------------------------------------------------
-# 3. USER DETAILS (prefill email/phone)
-# --------------------------------------------------------------
+# ---------------------- User Details ----------------------
 @app.route('/get_user_details', methods=['GET'])
 @login_required
 def get_user_details():
@@ -2615,171 +2694,184 @@ def save_contact():
 def hotel_booking():
     return render_template("hotel.html", user=session['username'])
 
-@app.route('/submit-hotel-booking', methods=['POST'])
+@app.route('/submit-hotel-booking', methods=['GET', 'POST'])
 @login_required
 def submit_hotel_booking():
-    destination = request.form['destination'].strip().capitalize()
-    check_in = request.form['checkin']
-    check_out = request.form['checkout']
-    rooms = int(request.form.get('rooms', 1))
-    guests = int(request.form.get('guests', 1))
+    # Default values
+    destination = 'Mumbai'
+    checkin = get_tomorrow_date()
+    checkout = get_day_after_tomorrow()
+    rooms = 1
+    guests = 2
 
-    if not all([destination, check_in, check_out]) or rooms < 1 or guests < 1:
-        flash("Please provide valid booking details.", "danger")
-        return redirect(url_for('hotel_booking'))
+    if request.method == 'GET':
+        # Pre-filled from AI Recommendations (via URL params)
+        destination = request.args.get('destination', 'Mumbai').strip().capitalize()
+        checkin = request.args.get('checkin', get_tomorrow_date())
+        checkout = request.args.get('checkout', get_day_after_tomorrow())
+        try:
+            rooms = max(1, int(request.args.get('rooms', 1)))
+            guests = max(1, int(request.args.get('guests', 2)))
+        except (ValueError, TypeError):
+            rooms = 1
+            guests = 2
+
+    else:  # POST from modal form
+        destination = request.form.get('destination', '').strip().capitalize()
+        checkin = request.form.get('checkin', '').strip()
+        checkout = request.form.get('checkout', '').strip()
+        try:
+            rooms = max(1, int(request.form.get('rooms', 1)))
+            guests = max(1, int(request.form.get('guests', 2)))
+        except (ValueError, TypeError):
+            rooms = 1
+            guests = 2
+
+    # Validation
+    if not destination:
+        flash("Please enter a destination city.", "danger")
+        return redirect(url_for('dashboard'))
+
+    if not checkin or not checkout:
+        flash("Please select check-in and check-out dates.", "danger")
+        return redirect(url_for('dashboard'))
 
     try:
-        check_in_date = datetime.strptime(check_in, '%Y-%m-%d')
-        check_out_date = datetime.strptime(check_out, '%Y-%m-%d')
+        check_in_date = datetime.strptime(checkin, '%Y-%m-%d')
+        check_out_date = datetime.strptime(checkout, '%Y-%m-%d')
         if check_out_date <= check_in_date:
             flash("Check-out date must be after check-in date.", "danger")
-            return redirect(url_for('hotel_booking'))
+            return redirect(url_for('dashboard'))
+        if check_in_date < datetime.now():
+            flash("Check-in date cannot be in the past.", "danger")
+            return redirect(url_for('dashboard'))
     except ValueError:
-        flash("Invalid date format. Use YYYY-MM-DD.", "danger")
-        return redirect(url_for('hotel_booking'))
+        flash("Invalid date format. Please use the date picker.", "danger")
+        return redirect(url_for('dashboard'))
 
+    # Check if city is supported
     allowed_cities = list(hotels_data.keys())
     if destination not in allowed_cities:
-        flash("Hotel bookings are not available for this city yet.", "warning")
-        return render_template('hotel_results.html', message=f"Coming soon in {destination}", destination=destination)
+        flash(f"Hotel bookings in {destination} coming soon!", "info")
+        return render_template('hotel_results.html',
+                               message=f"We're expanding! Hotels in {destination} coming soon.",
+                               destination=destination,
+                               checkin=checkin,
+                               checkout=checkout,
+                               rooms=rooms,
+                               guests=guests)
 
+    # Fetch and randomize hotels
     all_hotels = hotels_data[destination]
     random.shuffle(all_hotels)
-    selected_hotels = all_hotels[:min(len(all_hotels), 5)]
+    selected_hotels = all_hotels[:min(len(all_hotels), 6)]  # Show up to 6
 
+    # Render results page
     return render_template('hotel_results.html',
-                         hotels=selected_hotels,
-                         destination=destination,
-                         checkin=check_in,
-                         checkout=check_out,
-                         rooms=rooms,
-                         guests=guests)
+                           hotels=selected_hotels,
+                           destination=destination,
+                           checkin=checkin,
+                           checkout=checkout,
+                           rooms=rooms,
+                           guests=guests)
 
-@app.route('/submit-travel-booking', methods=['POST'])
+@app.route('/submit-travel-booking', methods=['GET', 'POST'])
 @login_required
 def submit_travel_booking():
     import logging
-    logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger(__name__)
 
-    origin = request.form.get('origin', '').strip().title()
-    destination = request.form.get('destination', '').strip().title()
-    departure_date = request.form.get('departure_date')
-    return_date = request.form.get('return_date')
-    adults = request.form.get('adults', 1)
-    children = request.form.get('children', 0)
-    infants = request.form.get('infants', 0)
-    travel_class = request.form.get('class', 'economy')
-    is_initial = request.form.get('is_initial', 'false') == 'true'
+    # Default values
+    origin = 'Mumbai'
+    destination = 'Delhi'  # Popular default
+    departure_date = get_in_7_days()
+    return_date = None
+    adults = 1
+    children = 0
+    infants = 0
+    travel_class = 'economy'
 
-    logger.debug(f"Received form data: origin={origin}, destination={destination}, departure_date={departure_date}, "
-                 f"return_date={return_date}, adults={adults}, children={children}, infants={infants}, travel_class={travel_class}, is_initial={is_initial}")
+    if request.method == 'GET':
+        # Pre-filled from AI Recommendations (via URL params)
+        location_text = session.get('user_location', {}).get('city', 'Mumbai')
+        origin = request.args.get('origin', location_text).strip().title()
+        destination = request.args.get('destination', 'Delhi').strip().title()
+        departure_date = request.args.get('departure_date', get_in_7_days())
+        return_date = request.args.get('return_date')  # Optional
+        try:
+            adults = max(1, int(request.args.get('adults', 1)))
+            children = max(0, int(request.args.get('children', 0)))
+            infants = max(0, int(request.args.get('infants', 0)))
+        except (ValueError, TypeError):
+            adults = 1
+            children = 0
+            infants = 0
+        travel_class = request.args.get('class', 'economy').lower()
 
-    if not all([origin, destination, departure_date]):
-        logger.warning("Validation failed: Missing required fields")
-        flash("Please provide valid travel details.", "danger")
+    else:  # POST from modal form
+        origin = request.form.get('origin', '').strip().title()
+        destination = request.form.get('destination', '').strip().title()
+        departure_date = request.form.get('departure_date', '').strip()
+        return_date = request.form.get('return_date', '').strip() or None
+        try:
+            adults = max(1, int(request.form.get('adults', 1)))
+            children = max(0, int(request.form.get('children', 0)))
+            infants = max(0, int(request.form.get('infants', 0)))
+        except (ValueError, TypeError):
+            adults = 1
+            children = 0
+            infants = 0
+        travel_class = request.form.get('class', 'economy').lower()
+
+    logger.debug(f"Travel search: origin={origin}, destination={destination}, departure={departure_date}, "
+                 f"return={return_date}, adults={adults}, children={children}, infants={infants}, class={travel_class}")
+
+    # Validation
+    if not origin or not destination or not departure_date:
+        flash("Please provide origin, destination, and departure date.", "danger")
         return redirect(url_for('dashboard'))
 
     if origin.lower() == destination.lower():
-        logger.warning("Validation failed: Origin and destination are the same")
         flash("Origin and destination cannot be the same.", "danger")
-        return redirect(url_for('dashboard'))
-
-    try:
-        adults = int(adults)
-        children = int(children)
-        infants = int(infants)
-        if adults < 1:
-            logger.warning("Validation failed: Adults less than 1")
-            flash("At least one adult is required.", "danger")
-            return redirect(url_for('dashboard'))
-    except ValueError:
-        logger.warning("Validation failed: Invalid number format for passengers")
-        flash("Invalid number of passengers.", "danger")
         return redirect(url_for('dashboard'))
 
     try:
         departure = datetime.strptime(departure_date, '%Y-%m-%d')
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         if departure < today:
-            logger.warning("Validation failed: Departure date in the past")
             flash("Departure date cannot be in the past.", "danger")
             return redirect(url_for('dashboard'))
         if return_date:
             return_date_obj = datetime.strptime(return_date, '%Y-%m-%d')
             if return_date_obj <= departure:
-                logger.warning("Validation failed: Return date not after departure date")
                 flash("Return date must be after departure date.", "danger")
                 return redirect(url_for('dashboard'))
-    except ValueError as e:
-        logger.error(f"Validation failed: Invalid date format - {str(e)}")
-        flash("Invalid date format. Use YYYY-MM-DD.", "danger")
+    except ValueError:
+        flash("Invalid date format. Please use the date picker.", "danger")
         return redirect(url_for('dashboard'))
 
+    # Generate flights
     flights = generate_flight_data(origin, destination, travel_class)
-    
+
     display_count = random.choice([5, 6])
-    if len(flights) > display_count:
-        displayed_flights = random.sample(flights, display_count)
-    else:
-        displayed_flights = flights
+    displayed_flights = random.sample(flights, min(display_count, len(flights))) if len(flights) > display_count else flights
 
-    arrival_date = departure_date
+    arrival_date = departure_date  # Or calculate if needed
 
-    if is_initial:
-        booking_id = f"FLIGHT-{random.randint(1000, 9999)}"
-        conn = get_db_connection()
-        cur = conn.cursor()
-        try:
-            payload = json.dumps({
-                'origin': origin,
-                'destination': destination,
-                'departure_date': departure_date,
-                'return_date': return_date,
-                'adults': adults,
-                'children': children,
-                'infants': infants,
-                'travel_class': travel_class
-            })
-            cur.execute("""
-                INSERT INTO requests (user_id, booking_id, service_type, details, payment_status, admin_confirmation, created_at)
-                VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s)
-            """, (
-                current_user.get_id(),
-                booking_id,
-                'Flight Booking',
-                payload,
-                'Pending',
-                'Pending',
-                datetime.now()
-            ))
-            conn.commit()
-            socketio.emit('new_request', {'request': get_last_request_json()}, to=None)
-            logger.debug(f"Flight booking saved: booking_id={booking_id}")
-            flash("Flight search submitted successfully!", "success")
-        except psycopg2.Error as e:
-            conn.rollback()
-            logger.error(f"Error saving flight booking: {str(e)}")
-            flash(f"Database error: {str(e)}. Please ensure the requests table exists.", "danger")
-        finally:
-            cur.close()
-            conn.close()
-    else:
-        flash("Search updated – showing available flights.", "info")
+    flash("Showing best flight options for your trip!", "info")
 
-    logger.debug("Rendering travel_results.html")
     return render_template('travel_results.html',
-                         origin=origin,
-                         destination=destination,
-                         departure_date=departure_date,
-                         return_date=return_date,
-                         arrival_date=arrival_date,
-                         adults=adults,
-                         children=children,
-                         infants=infants,
-                         travel_class=travel_class,
-                         flights=displayed_flights,
-                         current_user_id=current_user.get_id())
+                           origin=origin,
+                           destination=destination,
+                           departure_date=departure_date,
+                           return_date=return_date,
+                           arrival_date=arrival_date,
+                           adults=adults,
+                           children=children,
+                           infants=infants,
+                           travel_class=travel_class,
+                           flights=displayed_flights,
+                           current_user_id=current_user.get_id())
 
 def generate_flight_data(origin, destination, travel_class):
     """Generate realistic flight data"""
@@ -3142,7 +3234,6 @@ def fix_existing_flight_numbers():
         conn.close()
 
 # ---------------------- AI Recommendations API ----------------------
-
 @app.route('/api/save-location', methods=['POST'])
 @login_required
 def api_save_location():
@@ -3170,7 +3261,6 @@ def api_save_location():
     
     return jsonify({'success': True, 'message': 'Location saved successfully'})
 
-
 @app.route('/api/dismiss-recommendation', methods=['POST'])
 @login_required
 def api_dismiss_recommendation():
@@ -3185,127 +3275,136 @@ def api_dismiss_recommendation():
     
     return jsonify({'success': True, 'message': 'Recommendation dismissed'})
 
-# ---------------------- IMPROVED AI Recommendations API ----------------------
 @app.route('/api/lifestyle-recommendations')
 @login_required
 def api_lifestyle_recommendations():
-    """Get AI-powered recommendations for user - FIXED VERSION"""
+    """Get AI-powered recommendations - FIXED for list/string interests"""
     try:
         user_id = current_user.get_id()
-        
-        # Get user's lifestyle profile
         profile = get_user_profile(user_id)
         
-        if not profile or not profile.get('interests'):
+        if not profile:
             return jsonify({
                 'success': True,
+                'has_profile': False,
                 'recommendations': [],
-                'message': 'Please complete your lifestyle profile to get recommendations',
-                'has_profile': False
+                'message': 'No profile found'
             })
+
+        # Handle interests whether it's string or list
+        interests_raw = profile.get('interests')
         
-        # Generate recommendations based on profile
-        recommendations = []
-        interests = profile.get('interests', '').split(',') if profile.get('interests') else []
+        if isinstance(interests_raw, list):
+            interests = [str(i).strip() for i in interests_raw if str(i).strip()]
+        elif isinstance(interests_raw, str):
+            interests = [i.strip() for i in interests_raw.split(',') if i.strip()]
+        else:
+            interests = []
+
+        if not interests:
+            return jsonify({
+                'success': True,
+                'has_profile': False,
+                'recommendations': [],
+                'message': 'Please add at least one interest in your profile'
+            })
+
+        # Extract other fields safely
         travel_style = profile.get('travel_style', 'comfort')
-        group_size = profile.get('group_size', 1)
+        group_size = int(profile.get('group_size', 1))
         cab_type = profile.get('cab_type', 'economy')
-        home_owner = profile.get('home_owner', False)
-        
-        logger.info(f"Generating recommendations for user {user_id} with profile: {profile}")
-        
+        home_owner = bool(profile.get('home_owner', False))
+
+        recommendations = []
+
         # Hotel recommendations
-        if any(interest in ['travel', 'luxury', 'business'] for interest in interests):
+        if any(word in ' '.join(interests).lower() for word in ['travel', 'luxury', 'business', 'vacation', 'stay']):
             recommendations.append({
                 'id': 1,
                 'service_type': 'Hotel Booking',
-                'reason': f'Based on your {travel_style} travel style, we recommend luxury hotels with premium amenities',
+                'reason': f'Based on your {travel_style} travel style and interest in travel, we recommend premium hotels',
                 'match_score': 95,
                 'metadata': {
-                    'price': '₹5,000-15,000/night',
+                    'price': '₹5,000-20,000/night',
                     'location': 'Major Cities',
-                    'amenities': 'Pool, Spa, Restaurant'
+                    'amenities': 'Spa, Pool, Fine Dining'
                 }
             })
-        
+
         # Flight recommendations
-        if any(interest in ['travel', 'adventure', 'business'] for interest in interests):
+        if any(word in ' '.join(interests).lower() for word in ['travel', 'adventure', 'business', 'flight']):
             recommendations.append({
                 'id': 2,
                 'service_type': 'Flight Booking',
-                'reason': 'Frequent traveler? Get the best flight deals for your next adventure',
-                'match_score': 90,
+                'reason': 'Great flight deals for frequent travelers and explorers',
+                'match_score': 92,
                 'metadata': {
-                    'price': '₹3,000-20,000',
-                    'duration': 'Domestic & International',
+                    'price': '₹4,000-25,000',
+                    'routes': 'Domestic & International',
                     'class': travel_style.title()
                 }
             })
-        
+
         # Car recommendations
-        if cab_type in ['luxury', 'premium', 'suv'] or group_size > 4:
+        if cab_type in ['luxury', 'premium', 'suv'] or group_size > 3:
             recommendations.append({
                 'id': 3,
                 'service_type': 'Car Booking',
-                'reason': f'Perfect for groups of {group_size}. {cab_type.title()} cabs available',
-                'match_score': 88,
+                'reason': f'Ideal for groups of {group_size} with {cab_type.title()} preference',
+                'match_score': 90,
                 'metadata': {
-                    'price': '₹1,500-3,000/trip',
+                    'price': '₹1,800-4,000/trip',
                     'vehicle': cab_type.title(),
-                    'capacity': f'{group_size}+ passengers'
+                    'capacity': f'Up to {group_size + 2} passengers'
                 }
             })
-        
+
         # Technician recommendations
         if home_owner:
             recommendations.append({
                 'id': 4,
                 'service_type': 'Technician Booking',
-                'reason': 'As a homeowner, get verified technicians for AC, plumbing, electrical work',
-                'match_score': 85,
+                'reason': 'Verified technicians for maintenance and repairs at your home',
+                'match_score': 88,
                 'metadata': {
-                    'price': '₹500-1,500',
-                    'availability': 'Same Day Service',
-                    'verified': 'Yes'
+                    'price': '₹600-2,000',
+                    'availability': 'Same-day & Emergency',
+                    'services': 'AC, Plumbing, Electrical'
                 }
             })
-        
+
         # Courier recommendations
-        if any(interest in ['business', 'shopping'] for interest in interests):
+        if any(word in ' '.join(interests).lower() for word in ['business', 'shopping', 'ecommerce', 'send']):
             recommendations.append({
                 'id': 5,
                 'service_type': 'Courier Booking',
-                'reason': 'Fast and reliable courier services for your needs',
-                'match_score': 82,
+                'reason': 'Fast, reliable delivery for business or personal packages',
+                'match_score': 85,
                 'metadata': {
-                    'price': '₹50-200/kg',
-                    'delivery': 'Same Day Available',
-                    'tracking': 'Real-time'
+                    'price': '₹60-300/kg',
+                    'delivery': 'Same-day & Express',
+                    'tracking': 'Real-time GPS'
                 }
             })
-        
-        logger.info(f"Generated {len(recommendations)} recommendations for user {user_id}")
-        
+
         return jsonify({
             'success': True,
-            'recommendations': recommendations[:5],  # Limit to top 5
-            'new_recommendations': len(recommendations) > 0,
-            'has_profile': True
+            'has_profile': True,
+            'recommendations': recommendations[:5],
+            'new_recommendations': len(recommendations)
         })
-        
+
     except Exception as e:
         logger.error(f"Error generating recommendations: {str(e)}")
         import traceback
-        traceback.print_exc()  # Print full error for debugging
+        traceback.print_exc()
         return jsonify({
             'success': False,
-            'error': str(e),
+            'error': 'Internal server error',
             'recommendations': [],
-            'message': 'Error generating recommendations. Please try again.'
+            'has_profile': True
         }), 500
 
-
-# ---------------------- IMPROVED Nearby Services API ----------------------
 @app.route('/api/nearby-services', methods=['POST'])
 @login_required
 def api_nearby_services():
@@ -3482,8 +3581,6 @@ def api_nearby_services():
             'message': 'Error finding nearby services. Please try again.'
         }), 500
 
-
-# ---------------------- AI CHATBOT API ----------------------
 @app.route('/api/chatbot', methods=['POST'])
 @login_required
 def api_chatbot():
@@ -3626,8 +3723,6 @@ Just tell me what you need!"""
             'response': "Sorry, I'm having trouble right now. Please try again or go directly to the Services section to make a booking!"
         }), 500
 
-
-# ---------------------- Book Nearby Service ----------------------
 @app.route('/api/book-nearby-service', methods=['POST'])
 @login_required
 def api_book_nearby_service():
@@ -3671,7 +3766,6 @@ def api_book_nearby_service():
             'error': str(e),
             'message': 'Unable to open booking form. Please try again.'
         }), 500
-
 
 # ---------------------- Run ----------------------
 if __name__ == '__main__':

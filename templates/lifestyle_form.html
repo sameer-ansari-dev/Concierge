@@ -4,24 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lifestyle Profile - Concierge Lifestyle</title>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Cormorant+Garamond:wght@300;400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --color-primary: #d4af37;
-            --color-primary-dark: #b8941f;
-            --color-primary-light: rgba(212, 175, 55, 0.1);
-            --color-bg-main: #0a0a0a;
-            --color-bg-secondary: #111111;
-            --color-bg-card: #0f0f0f;
-            --color-border: #2a2a2a;
-            --color-text-primary: #e0e0e0;
-            --color-text-secondary: #b0b0b0;
-            --font-display: 'Playfair Display', serif;
-            --font-heading: 'Cormorant Garamond', serif;
-            --font-body: 'Montserrat', sans-serif;
-        }
-
         * {
             margin: 0;
             padding: 0;
@@ -29,29 +14,484 @@
         }
 
         body {
-            font-family: var(--font-body);
-            background: linear-gradient(135deg, var(--color-bg-main) 0%, #1a1a1a 100%);
-            color: var(--color-text-primary);
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
             min-height: 100vh;
+            color: #e0e0e0;
+        }
+
+        .lifestyle-page {
+            max-width: 900px;
+            margin: 0 auto;
             padding: 40px 20px;
+        }
+
+        /* Header Section */
+        .lifestyle-header {
+            text-align: center;
+            margin-bottom: 40px;
+            animation: fadeIn 0.8s ease;
+        }
+
+        .lifestyle-header h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 2.8rem;
+            background: linear-gradient(135deg, #d4af37 0%, #f4d03f 50%, #d4af37 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 15px;
+        }
+
+        .lifestyle-header .subtitle {
+            color: #b0b0b0;
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
             line-height: 1.6;
         }
 
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            background: var(--color-bg-card);
-            border-radius: 16px;
-            border: 1px solid var(--color-border);
-            padding: 50px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            animation: fadeIn 0.6s ease;
+        .progress-indicator {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 25px;
         }
 
+        .progress-step {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #2a2a2a;
+            transition: all 0.3s;
+        }
+
+        .progress-step.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transform: scale(1.2);
+        }
+
+        .progress-step.completed {
+            background: #d4af37;
+        }
+
+        /* Form Container */
+        .lifestyle-form-container {
+            background: rgba(15, 15, 15, 0.95);
+            border-radius: 20px;
+            padding: 40px;
+            border: 1px solid #2a2a2a;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: slideUp 0.6s ease;
+        }
+
+        /* Form Sections */
+        .form-section {
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 1px solid #2a2a2a;
+            display: none;
+        }
+
+        .form-section.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .form-section:last-of-type {
+            border-bottom: none;
+            margin-bottom: 20px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .section-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .section-header h2 {
+            color: #d4af37;
+            font-family: 'Playfair Display', serif;
+            font-size: 1.5rem;
+        }
+
+        .section-header p {
+            color: #888;
+            font-size: 0.9rem;
+            margin-top: 3px;
+        }
+
+        /* Form Fields */
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-bottom: 25px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #d4af37;
+            font-weight: 500;
+            margin-bottom: 10px;
+            font-size: 0.95rem;
+        }
+
+        .form-input, .form-select {
+            width: 100%;
+            padding: 14px 18px;
+            background: #0a0a0a;
+            border: 1px solid #2a2a2a;
+            border-radius: 10px;
+            color: #e0e0e0;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+
+        .form-input:focus, .form-select:focus {
+            outline: none;
+            border-color: #d4af37;
+            box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1);
+        }
+
+        .form-select option {
+            background: #0a0a0a;
+            color: #e0e0e0;
+        }
+
+        /* Checkbox Grid for Interests */
+        .checkbox-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 12px;
+        }
+
+        .checkbox-option {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px;
+            background: #0a0a0a;
+            border: 1px solid #2a2a2a;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .checkbox-option:hover {
+            border-color: #d4af37;
+            background: rgba(212, 175, 55, 0.05);
+        }
+
+        .checkbox-option input[type="checkbox"] {
+            display: none;
+        }
+
+        .checkbox-option input[type="checkbox"]:checked + .checkbox-custom {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-color: transparent;
+        }
+
+        .checkbox-option input[type="checkbox"]:checked + .checkbox-custom::after {
+            content: '✓';
+            color: white;
+            font-size: 12px;
+        }
+
+        .checkbox-option input[type="checkbox"]:checked ~ .checkbox-label {
+            color: #d4af37;
+        }
+
+        .checkbox-custom {
+            width: 22px;
+            height: 22px;
+            border: 2px solid #3a3a3a;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            flex-shrink: 0;
+        }
+
+        .checkbox-icon {
+            font-size: 1.2rem;
+        }
+
+        .checkbox-label {
+            color: #e0e0e0;
+            font-size: 0.9rem;
+            transition: color 0.3s;
+        }
+
+        /* Radio Button Cards */
+        .radio-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .radio-card {
+            position: relative;
+            padding: 20px;
+            background: #0a0a0a;
+            border: 2px solid #2a2a2a;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+
+        .radio-card:hover {
+            border-color: #4a4a4a;
+            transform: translateY(-2px);
+        }
+
+        .radio-card input[type="radio"] {
+            display: none;
+        }
+
+        .radio-card input[type="radio"]:checked ~ .radio-content {
+            color: #d4af37;
+        }
+
+        .radio-card input[type="radio"]:checked ~ .radio-check {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-color: transparent;
+        }
+
+        .radio-card input[type="radio"]:checked ~ .radio-check::after {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: white;
+            border-radius: 50%;
+        }
+
+        .radio-card.selected {
+            border-color: #d4af37;
+            background: rgba(212, 175, 55, 0.05);
+        }
+
+        .radio-check {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 22px;
+            height: 22px;
+            border: 2px solid #3a3a3a;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .radio-content .radio-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .radio-content .radio-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .radio-content .radio-desc {
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        /* Service Preference Multi-select */
+        .service-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 12px;
+        }
+
+        .service-option {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 18px 12px;
+            background: #0a0a0a;
+            border: 2px solid #2a2a2a;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .service-option:hover {
+            border-color: #4a4a4a;
+        }
+
+        .service-option input[type="checkbox"] {
+            display: none;
+        }
+
+        .service-option input[type="checkbox"]:checked ~ .service-icon {
+            transform: scale(1.1);
+        }
+
+        .service-option input[type="checkbox"]:checked ~ .service-name {
+            color: #d4af37;
+        }
+
+        .service-option.selected {
+            border-color: #d4af37;
+            background: rgba(212, 175, 55, 0.1);
+        }
+
+        .service-icon {
+            font-size: 2rem;
+            margin-bottom: 8px;
+            transition: transform 0.3s;
+        }
+
+        .service-name {
+            font-size: 0.85rem;
+            color: #e0e0e0;
+            text-align: center;
+            transition: color 0.3s;
+        }
+
+        /* Location Section */
+        .location-box {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            padding: 25px;
+            text-align: center;
+        }
+
+        .location-box .material-icons {
+            font-size: 3rem;
+            color: #d4af37;
+            margin-bottom: 15px;
+        }
+
+        .location-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+            margin-top: 15px;
+        }
+
+        .location-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .location-status {
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: #888;
+        }
+
+        .location-status.success {
+            color: #2ecc71;
+        }
+
+        /* Navigation Buttons */
+        .form-navigation {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 30px;
+            padding-top: 25px;
+            border-top: 1px solid #2a2a2a;
+        }
+
+        .btn-nav {
+            padding: 14px 30px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-back {
+            background: transparent;
+            border: 1px solid #2a2a2a;
+            color: #b0b0b0;
+        }
+
+        .btn-back:hover {
+            border-color: #d4af37;
+            color: #d4af37;
+        }
+
+        .btn-next {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+        }
+
+        .btn-next:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, #d4af37 0%, #f4d03f 100%);
+            border: none;
+            color: #0a0a0a;
+            font-weight: 700;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(212, 175, 55, 0.3);
+        }
+
+        /* Back to Dashboard Link */
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #888;
+            text-decoration: none;
+            margin-bottom: 30px;
+            transition: color 0.3s;
+        }
+
+        .back-link:hover {
+            color: #d4af37;
+        }
+
+        /* Animations */
         @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
             from {
                 opacity: 0;
-                transform: translateY(20px);
+                transform: translateY(30px);
             }
             to {
                 opacity: 1;
@@ -59,595 +499,546 @@
             }
         }
 
-        .header {
-            text-align: center;
-            margin-bottom: 50px;
-            padding-bottom: 30px;
-            border-bottom: 1px solid var(--color-border);
-        }
-
-        .header-icon {
-            font-size: 64px;
-            color: var(--color-primary);
-            margin-bottom: 20px;
-            display: inline-block;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-        }
-
-        h1 {
-            font-family: var(--font-display);
-            font-size: 42px;
-            color: var(--color-primary);
-            margin-bottom: 12px;
-            font-weight: 700;
-        }
-
-        .subtitle {
-            font-size: 18px;
-            color: var(--color-text-secondary);
-            font-family: var(--font-heading);
-        }
-
-        .form-section {
-            margin-bottom: 40px;
-            animation: slideIn 0.5s ease;
-            animation-fill-mode: both;
-        }
-
-        .form-section:nth-child(1) { animation-delay: 0.1s; }
-        .form-section:nth-child(2) { animation-delay: 0.2s; }
-        .form-section:nth-child(3) { animation-delay: 0.3s; }
-        .form-section:nth-child(4) { animation-delay: 0.4s; }
-        .form-section:nth-child(5) { animation-delay: 0.5s; }
-        .form-section:nth-child(6) { animation-delay: 0.6s; }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateX(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-
-        .section-title {
-            font-family: var(--font-heading);
-            font-size: 24px;
-            color: var(--color-primary);
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .section-title .material-icons {
-            font-size: 28px;
-        }
-
-        .form-group {
-            margin-bottom: 25px;
-        }
-
-        label {
-            display: block;
-            color: var(--color-primary);
-            font-weight: 500;
-            margin-bottom: 10px;
-            font-size: 15px;
-        }
-
-        .help-text {
-            font-size: 13px;
-            color: var(--color-text-secondary);
-            margin-top: 6px;
-            font-style: italic;
-        }
-
-        input[type="text"],
-        input[type="email"],
-        input[type="number"],
-        select,
-        textarea {
-            width: 100%;
-            padding: 14px 16px;
-            background: var(--color-bg-main);
-            border: 1px solid var(--color-border);
-            border-radius: 8px;
-            color: var(--color-text-primary);
-            font-size: 15px;
-            font-family: var(--font-body);
-            transition: all 0.3s ease;
-        }
-
-        input:focus,
-        select:focus,
-        textarea:focus {
-            outline: none;
-            border-color: var(--color-primary);
-            box-shadow: 0 0 0 3px var(--color-primary-light);
-        }
-
-        textarea {
-            resize: vertical;
-            min-height: 100px;
-        }
-
-        /* Checkbox Grid */
-        .checkbox-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
-        }
-
-        .checkbox-item {
-            position: relative;
-        }
-
-        .checkbox-item input[type="checkbox"] {
-            position: absolute;
-            opacity: 0;
-        }
-
-        .checkbox-item label {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 12px 16px;
-            background: var(--color-bg-main);
-            border: 1px solid var(--color-border);
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin: 0;
-        }
-
-        .checkbox-item label::before {
-            content: '';
-            width: 20px;
-            height: 20px;
-            border: 2px solid var(--color-border);
-            border-radius: 4px;
-            transition: all 0.3s ease;
-        }
-
-        .checkbox-item input[type="checkbox"]:checked + label {
-            background: var(--color-primary-light);
-            border-color: var(--color-primary);
-        }
-
-        .checkbox-item input[type="checkbox"]:checked + label::before {
-            background: var(--color-primary);
-            border-color: var(--color-primary);
-        }
-
-        .checkbox-item label:hover {
-            border-color: var(--color-primary);
-            transform: translateY(-2px);
-        }
-
-        /* Radio buttons */
-        .radio-group {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
-        }
-
-        .radio-item {
-            position: relative;
-        }
-
-        .radio-item input[type="radio"] {
-            position: absolute;
-            opacity: 0;
-        }
-
-        .radio-item label {
-            display: block;
-            padding: 14px 20px;
-            background: var(--color-bg-main);
-            border: 1px solid var(--color-border);
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-align: center;
-            margin: 0;
-        }
-
-        .radio-item input[type="radio"]:checked + label {
-            background: var(--color-primary);
-            border-color: var(--color-primary);
-            color: var(--color-bg-main);
-            font-weight: 600;
-        }
-
-        .radio-item label:hover {
-            border-color: var(--color-primary);
-            transform: translateY(-2px);
-        }
-
-        /* Number input with custom styling */
-        .number-input {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .number-input input {
-            width: 100px;
-            text-align: center;
-        }
-
-        .number-input button {
-            width: 40px;
-            height: 40px;
-            background: var(--color-bg-main);
-            border: 1px solid var(--color-border);
-            border-radius: 8px;
-            color: var(--color-primary);
-            font-size: 20px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .number-input button:hover {
-            background: var(--color-primary-light);
-            border-color: var(--color-primary);
-        }
-
-        /* Submit button */
-        .submit-section {
-            margin-top: 50px;
-            text-align: center;
-            padding-top: 30px;
-            border-top: 1px solid var(--color-border);
-        }
-
-        .btn-submit {
-            padding: 18px 60px;
-            background: var(--color-primary);
-            color: var(--color-bg-main);
-            border: none;
-            border-radius: 8px;
-            font-size: 18px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-family: var(--font-body);
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .btn-submit:hover {
-            background: var(--color-primary-dark);
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(212, 175, 55, 0.3);
-        }
-
-        .btn-submit .material-icons {
-            font-size: 24px;
-        }
-
-        .btn-back {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 20px;
-            color: var(--color-primary);
-            text-decoration: none;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-
-        .btn-back:hover {
-            transform: translateX(-5px);
-        }
-
-        /* Progress indicator */
-        .progress-dots {
-            display: flex;
-            justify-content: center;
-            gap: 12px;
-            margin-bottom: 30px;
-        }
-
-        .progress-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: var(--color-border);
-            transition: all 0.3s ease;
-        }
-
-        .progress-dot.active {
-            background: var(--color-primary);
-            transform: scale(1.3);
-        }
-
+        /* Mobile Responsive */
         @media (max-width: 768px) {
-            .container {
-                padding: 30px 20px;
+            .lifestyle-page {
+                padding: 20px 15px;
             }
 
-            h1 {
-                font-size: 32px;
+            .lifestyle-header h1 {
+                font-size: 2rem;
             }
 
-            .checkbox-grid,
-            .radio-group {
+            .lifestyle-form-container {
+                padding: 25px 20px;
+            }
+
+            .form-row {
                 grid-template-columns: 1fr;
             }
 
-            .btn-submit {
-                width: 100%;
-                justify-content: center;
+            .checkbox-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .radio-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .service-grid {
+                grid-template-columns: repeat(3, 1fr);
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <a href="/dashboard" class="btn-back">
+    <div class="lifestyle-page">
+        <!-- Back Link -->
+        <a href="/dashboard" class="back-link">
             <i class="material-icons">arrow_back</i>
             Back to Dashboard
         </a>
 
-        <div class="header">
-            <div class="header-icon">🌟</div>
-            <h1>Your Lifestyle Profile</h1>
-            <p class="subtitle">Help us personalize your experience with AI-powered recommendations</p>
+        <!-- Header -->
+        <div class="lifestyle-header">
+            <h1>Create Your Lifestyle Profile</h1>
+            <p class="subtitle">
+                Help us understand your preferences to deliver AI-powered personalized recommendations.
+                This takes about 2 minutes and unlocks smart suggestions tailored just for you!
+            </p>
+            <div class="progress-indicator">
+                <div class="progress-step active" data-step="1"></div>
+                <div class="progress-step" data-step="2"></div>
+                <div class="progress-step" data-step="3"></div>
+                <div class="progress-step" data-step="4"></div>
+            </div>
         </div>
 
-        <div class="progress-dots">
-            <div class="progress-dot active"></div>
-            <div class="progress-dot active"></div>
-            <div class="progress-dot active"></div>
-            <div class="progress-dot"></div>
-            <div class="progress-dot"></div>
-        </div>
+        <!-- Form -->
+        <div class="lifestyle-form-container">
+            <form method="POST" action="/save_lifestyle" id="lifestyle-form">
 
-        <form action="/save_lifestyle" method="POST" id="lifestyle-form">
-            <!-- Interests Section -->
-            <div class="form-section">
-                <h2 class="section-title">
-                    <i class="material-icons">favorite</i>
-                    Your Interests
-                </h2>
-                <p class="help-text">Select all that apply - this helps us suggest relevant services</p>
-                
-                <div class="checkbox-grid">
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="travel" name="interests" value="travel" 
-                               {% if profile and 'travel' in profile.interests %}checked{% endif %}>
-                        <label for="travel">✈️ Travel & Exploration</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="luxury" name="interests" value="luxury"
-                               {% if profile and 'luxury' in profile.interests %}checked{% endif %}>
-                        <label for="luxury">💎 Luxury Services</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="business" name="interests" value="business"
-                               {% if profile and 'business' in profile.interests %}checked{% endif %}>
-                        <label for="business">💼 Business Travel</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="family" name="interests" value="family"
-                               {% if profile and 'family' in profile.interests %}checked{% endif %}>
-                        <label for="family">👨‍👩‍👧‍👦 Family Activities</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="adventure" name="interests" value="adventure"
-                               {% if profile and 'adventure' in profile.interests %}checked{% endif %}>
-                        <label for="adventure">🏔️ Adventure Sports</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="wellness" name="interests" value="wellness"
-                               {% if profile and 'wellness' in profile.interests %}checked{% endif %}>
-                        <label for="wellness">🧘 Wellness & Spa</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="dining" name="interests" value="dining"
-                               {% if profile and 'dining' in profile.interests %}checked{% endif %}>
-                        <label for="dining">🍽️ Fine Dining</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="entertainment" name="interests" value="entertainment"
-                               {% if profile and 'entertainment' in profile.interests %}checked{% endif %}>
-                        <label for="entertainment">🎭 Entertainment</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="shopping" name="interests" value="shopping"
-                               {% if profile and 'shopping' in profile.interests %}checked{% endif %}>
-                        <label for="shopping">🛍️ Shopping</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="culture" name="interests" value="culture"
-                               {% if profile and 'culture' in profile.interests %}checked{% endif %}>
-                        <label for="culture">🎨 Art & Culture</label>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Travel Style Section -->
-            <div class="form-section">
-                <h2 class="section-title">
-                    <i class="material-icons">luggage</i>
-                    Travel Style
-                </h2>
-                <p class="help-text">How do you prefer to travel?</p>
-                
-                <div class="radio-group">
-                    <div class="radio-item">
-                        <input type="radio" id="budget" name="travel_style" value="budget"
-                               {% if profile and profile.travel_style == 'budget' %}checked{% endif %}>
-                        <label for="budget">💰 Budget-Friendly</label>
-                    </div>
-                    <div class="radio-item">
-                        <input type="radio" id="comfort" name="travel_style" value="comfort"
-                               {% if profile and profile.travel_style == 'comfort' %}checked{% endif %}>
-                        <label for="comfort">😌 Comfortable</label>
-                    </div>
-                    <div class="radio-item">
-                        <input type="radio" id="premium" name="travel_style" value="premium"
-                               {% if profile and profile.travel_style == 'premium' %}checked{% endif %}>
-                        <label for="premium">⭐ Premium</label>
-                    </div>
-                    <div class="radio-item">
-                        <input type="radio" id="luxury_travel" name="travel_style" value="luxury"
-                               {% if profile and profile.travel_style == 'luxury' %}checked{% endif %}>
-                        <label for="luxury_travel">👑 Luxury</label>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Dining Preferences Section -->
-            <div class="form-section">
-                <h2 class="section-title">
-                    <i class="material-icons">restaurant</i>
-                    Dining Preferences
-                </h2>
-                
-                <div class="form-group">
-                    <label for="dietary">Dietary Preferences</label>
-                    <select id="dietary" name="dietary">
-                        <option value="none" {% if not profile or profile.dietary == 'none' %}selected{% endif %}>No restrictions</option>
-                        <option value="vegetarian" {% if profile and profile.dietary == 'vegetarian' %}selected{% endif %}>Vegetarian</option>
-                        <option value="vegan" {% if profile and profile.dietary == 'vegan' %}selected{% endif %}>Vegan</option>
-                        <option value="halal" {% if profile and profile.dietary == 'halal' %}selected{% endif %}>Halal</option>
-                        <option value="kosher" {% if profile and profile.dietary == 'kosher' %}selected{% endif %}>Kosher</option>
-                        <option value="gluten_free" {% if profile and profile.dietary == 'gluten_free' %}selected{% endif %}>Gluten-Free</option>
-                    </select>
-                </div>
-            </div>
-
-            <!-- Group Size Section -->
-            <div class="form-section">
-                <h2 class="section-title">
-                    <i class="material-icons">groups</i>
-                    Typical Group Size
-                </h2>
-                <p class="help-text">How many people usually travel with you?</p>
-                
-                <div class="form-group">
-                    <div class="number-input">
-                        <button type="button" onclick="changeValue('group_size', -1)">−</button>
-                        <input type="number" id="group_size" name="group_size" value="{% if profile %}{{ profile.group_size }}{% else %}1{% endif %}" min="1" max="20" readonly>
-                        <button type="button" onclick="changeValue('group_size', 1)">+</button>
-                        <span style="color: var(--color-text-secondary); margin-left: 10px;">person(s)</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Transportation Preferences Section -->
-            <div class="form-section">
-                <h2 class="section-title">
-                    <i class="material-icons">directions_car</i>
-                    Transportation Preferences
-                </h2>
-                
-                <div class="form-group">
-                    <label for="cab_type">Preferred Cab Type</label>
-                    <select id="cab_type" name="cab_type">
-                        <option value="economy" {% if not profile or profile.cab_type == 'economy' %}selected{% endif %}>Economy</option>
-                        <option value="standard" {% if profile and profile.cab_type == 'standard' %}selected{% endif %}>Standard</option>
-                        <option value="premium" {% if profile and profile.cab_type == 'premium' %}selected{% endif %}>Premium</option>
-                        <option value="luxury" {% if profile and profile.cab_type == 'luxury' %}selected{% endif %}>Luxury</option>
-                        <option value="suv" {% if profile and profile.cab_type == 'suv' %}selected{% endif %}>SUV</option>
-                    </select>
-                </div>
-            </div>
-
-            <!-- Home Ownership Section -->
-            <div class="form-section">
-                <h2 class="section-title">
-                    <i class="material-icons">home</i>
-                    Home & Services
-                </h2>
-                
-                <div class="form-group">
-                    <label>Do you own a home?</label>
-                    <p class="help-text">This helps us recommend relevant home maintenance services</p>
-                    <div class="radio-group">
-                        <div class="radio-item">
-                            <input type="radio" id="home_yes" name="home_owner" value="yes"
-                                   {% if profile and profile.home_owner %}checked{% endif %}>
-                            <label for="home_yes">🏡 Yes</label>
+                <!-- Section 1: About You -->
+                <div class="form-section active" data-section="1">
+                    <div class="section-header">
+                        <div class="section-icon">👤</div>
+                        <div>
+                            <h2>About You</h2>
+                            <p>Basic information to personalize your experience</p>
                         </div>
-                        <div class="radio-item">
-                            <input type="radio" id="home_no" name="home_owner" value="no"
-                                   {% if not profile or not profile.home_owner %}checked{% endif %}>
-                            <label for="home_no">🏢 No / Renting</label>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Age Group</label>
+                            <select name="age_group" class="form-select" required>
+                                <option value="">Select your age group</option>
+                                <option value="teen" {% if profile and profile.age_group == 'teen' %}selected{% endif %}>18-24 (Young Adult)</option>
+                                <option value="young_adult" {% if profile and profile.age_group == 'young_adult' %}selected{% endif %}>25-34 (Adult)</option>
+                                <option value="adult" {% if profile and profile.age_group == 'adult' %}selected{% endif %}>35-44 (Established)</option>
+                                <option value="middle_age" {% if profile and profile.age_group == 'middle_age' %}selected{% endif %}>45-54 (Experienced)</option>
+                                <option value="senior" {% if profile and profile.age_group == 'senior' %}selected{% endif %}>55+ (Senior)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Profession</label>
+                            <select name="profession" class="form-select" required>
+                                <option value="">Select your profession</option>
+                                <option value="student" {% if profile and profile.profession == 'student' %}selected{% endif %}>Student</option>
+                                <option value="working" {% if profile and profile.profession == 'working' %}selected{% endif %}>Working Professional</option>
+                                <option value="business" {% if profile and profile.profession == 'business' %}selected{% endif %}>Business Owner</option>
+                                <option value="freelancer" {% if profile and profile.profession == 'freelancer' %}selected{% endif %}>Freelancer / Self-Employed</option>
+                                <option value="retired" {% if profile and profile.profession == 'retired' %}selected{% endif %}>Retired</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Monthly Budget Range</label>
+                            <select name="monthly_budget" class="form-select" required>
+                                <option value="">Select budget range</option>
+                                <option value="low" {% if profile and profile.monthly_budget == 'low' %}selected{% endif %}>Under Rs 25,000</option>
+                                <option value="medium" {% if profile and profile.monthly_budget == 'medium' %}selected{% endif %}>Rs 25,000 - 75,000</option>
+                                <option value="high" {% if profile and profile.monthly_budget == 'high' %}selected{% endif %}>Rs 75,000 - 1,50,000</option>
+                                <option value="premium" {% if profile and profile.monthly_budget == 'premium' %}selected{% endif %}>Above Rs 1,50,000</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Lifestyle Type</label>
+                            <select name="lifestyle_type" class="form-select" required>
+                                <option value="">Select lifestyle preference</option>
+                                <option value="budget" {% if profile and profile.lifestyle_type == 'budget' %}selected{% endif %}>Budget Conscious</option>
+                                <option value="comfort" {% if profile and profile.lifestyle_type == 'comfort' %}selected{% endif %}>Comfort Seeker</option>
+                                <option value="luxury" {% if profile and profile.lifestyle_type == 'luxury' %}selected{% endif %}>Luxury Lover</option>
+                            </select>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Submit Button -->
-            <div class="submit-section">
-                <button type="submit" class="btn-submit">
-                    <i class="material-icons">save</i>
-                    Save My Profile
-                </button>
-                <p class="help-text" style="margin-top: 20px;">
-                    Your information is secure and will only be used to personalize your experience
-                </p>
-            </div>
-        </form>
+                <!-- Section 2: Travel Preferences -->
+                <div class="form-section" data-section="2">
+                    <div class="section-header">
+                        <div class="section-icon">✈️</div>
+                        <div>
+                            <h2>Travel Preferences</h2>
+                            <p>How do you like to travel?</p>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Travel Frequency</label>
+                        <div class="radio-cards">
+                            <label class="radio-card {% if profile and profile.travel_frequency == 'rarely' %}selected{% endif %}">
+                                <input type="radio" name="travel_frequency" value="rarely" {% if profile and profile.travel_frequency == 'rarely' %}checked{% endif %}>
+                                <span class="radio-check"></span>
+                                <div class="radio-content">
+                                    <div class="radio-icon">🏠</div>
+                                    <div class="radio-title">Rarely</div>
+                                    <div class="radio-desc">Once or twice a year</div>
+                                </div>
+                            </label>
+                            <label class="radio-card {% if profile and profile.travel_frequency == 'monthly' %}selected{% endif %}">
+                                <input type="radio" name="travel_frequency" value="monthly" {% if profile and profile.travel_frequency == 'monthly' or not profile %}checked{% endif %}>
+                                <span class="radio-check"></span>
+                                <div class="radio-content">
+                                    <div class="radio-icon">📅</div>
+                                    <div class="radio-title">Monthly</div>
+                                    <div class="radio-desc">1-2 trips per month</div>
+                                </div>
+                            </label>
+                            <label class="radio-card {% if profile and profile.travel_frequency == 'weekly' %}selected{% endif %}">
+                                <input type="radio" name="travel_frequency" value="weekly" {% if profile and profile.travel_frequency == 'weekly' %}checked{% endif %}>
+                                <span class="radio-check"></span>
+                                <div class="radio-content">
+                                    <div class="radio-icon">🚀</div>
+                                    <div class="radio-title">Weekly</div>
+                                    <div class="radio-desc">Travel every week</div>
+                                </div>
+                            </label>
+                            <label class="radio-card {% if profile and profile.travel_frequency == 'frequent' %}selected{% endif %}">
+                                <input type="radio" name="travel_frequency" value="frequent" {% if profile and profile.travel_frequency == 'frequent' %}checked{% endif %}>
+                                <span class="radio-check"></span>
+                                <div class="radio-content">
+                                    <div class="radio-icon">🌍</div>
+                                    <div class="radio-title">Frequent Flyer</div>
+                                    <div class="radio-desc">Multiple trips weekly</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Travel Style</label>
+                            <select name="travel_style" class="form-select">
+                                <option value="budget" {% if profile and profile.travel_style == 'budget' %}selected{% endif %}>Budget - Value for Money</option>
+                                <option value="comfort" {% if profile and profile.travel_style == 'comfort' or not profile %}selected{% endif %}>Comfort - Balanced</option>
+                                <option value="business" {% if profile and profile.travel_style == 'business' %}selected{% endif %}>Business - Professional</option>
+                                <option value="luxury" {% if profile and profile.travel_style == 'luxury' %}selected{% endif %}>Luxury - Premium Only</option>
+                                <option value="adventure" {% if profile and profile.travel_style == 'adventure' %}selected{% endif %}>Adventure - Off-beat</option>
+                                <option value="family" {% if profile and profile.travel_style == 'family' %}selected{% endif %}>Family - Kid-friendly</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Typical Group Size</label>
+                            <input type="number" name="typical_group_size" class="form-input"
+                                   min="1" max="20" value="{{ profile.typical_group_size if profile else 1 }}"
+                                   placeholder="How many people usually travel with you?">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Preferred Cab Type</label>
+                            <select name="preferred_cab_type" class="form-select">
+                                <option value="economy" {% if profile and profile.preferred_cab_type == 'economy' or not profile %}selected{% endif %}>Economy - Affordable</option>
+                                <option value="sedan" {% if profile and profile.preferred_cab_type == 'sedan' %}selected{% endif %}>Sedan - Comfortable</option>
+                                <option value="suv" {% if profile and profile.preferred_cab_type == 'suv' %}selected{% endif %}>SUV - Spacious</option>
+                                <option value="luxury" {% if profile and profile.preferred_cab_type == 'luxury' %}selected{% endif %}>Luxury - Premium</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Dietary Preference</label>
+                            <select name="dietary_pref" class="form-select">
+                                <option value="none" {% if profile and profile.dietary_pref == 'none' or not profile %}selected{% endif %}>No Preference</option>
+                                <option value="vegetarian" {% if profile and profile.dietary_pref == 'vegetarian' %}selected{% endif %}>Vegetarian</option>
+                                <option value="vegan" {% if profile and profile.dietary_pref == 'vegan' %}selected{% endif %}>Vegan</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Interests & Services -->
+                <div class="form-section" data-section="3">
+                    <div class="section-header">
+                        <div class="section-icon">⭐</div>
+                        <div>
+                            <h2>Interests & Services</h2>
+                            <p>Select all that apply to you</p>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Your Interests (Select multiple)</label>
+                        <div class="checkbox-grid">
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="interests" value="hiking"
+                                       {% if profile and 'hiking' in profile.interests %}checked{% endif %}>
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-icon">🥾</span>
+                                <span class="checkbox-label">Hiking</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="interests" value="fine_dining"
+                                       {% if profile and 'fine_dining' in profile.interests %}checked{% endif %}>
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-icon">🍽️</span>
+                                <span class="checkbox-label">Fine Dining</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="interests" value="spa"
+                                       {% if profile and 'spa' in profile.interests %}checked{% endif %}>
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-icon">💆</span>
+                                <span class="checkbox-label">Spa & Wellness</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="interests" value="shopping"
+                                       {% if profile and 'shopping' in profile.interests %}checked{% endif %}>
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-icon">🛍️</span>
+                                <span class="checkbox-label">Shopping</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="interests" value="cinema"
+                                       {% if profile and 'cinema' in profile.interests %}checked{% endif %}>
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-icon">🎬</span>
+                                <span class="checkbox-label">Cinema</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="interests" value="sports"
+                                       {% if profile and 'sports' in profile.interests %}checked{% endif %}>
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-icon">⚽</span>
+                                <span class="checkbox-label">Sports</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="interests" value="tech"
+                                       {% if profile and 'tech' in profile.interests %}checked{% endif %}>
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-icon">💻</span>
+                                <span class="checkbox-label">Technology</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="interests" value="fitness"
+                                       {% if profile and 'fitness' in profile.interests %}checked{% endif %}>
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-icon">🏋️</span>
+                                <span class="checkbox-label">Fitness</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="interests" value="music"
+                                       {% if profile and 'music' in profile.interests %}checked{% endif %}>
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-icon">🎵</span>
+                                <span class="checkbox-label">Music</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="interests" value="art"
+                                       {% if profile and 'art' in profile.interests %}checked{% endif %}>
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-icon">🎨</span>
+                                <span class="checkbox-label">Art & Culture</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Preferred Services (Select your most used)</label>
+                        <div class="service-grid">
+                            <label class="service-option {% if profile and 'hotel' in profile.preferred_services %}selected{% endif %}">
+                                <input type="checkbox" name="preferred_services" value="hotel"
+                                       {% if profile and 'hotel' in profile.preferred_services %}checked{% endif %}>
+                                <span class="service-icon">🏨</span>
+                                <span class="service-name">Hotels</span>
+                            </label>
+                            <label class="service-option {% if profile and 'flight' in profile.preferred_services %}selected{% endif %}">
+                                <input type="checkbox" name="preferred_services" value="flight"
+                                       {% if profile and 'flight' in profile.preferred_services %}checked{% endif %}>
+                                <span class="service-icon">✈️</span>
+                                <span class="service-name">Flights</span>
+                            </label>
+                            <label class="service-option {% if profile and 'cab' in profile.preferred_services %}selected{% endif %}">
+                                <input type="checkbox" name="preferred_services" value="cab"
+                                       {% if profile and 'cab' in profile.preferred_services %}checked{% endif %}>
+                                <span class="service-icon">🚗</span>
+                                <span class="service-name">Cabs</span>
+                            </label>
+                            <label class="service-option {% if profile and 'technician' in profile.preferred_services %}selected{% endif %}">
+                                <input type="checkbox" name="preferred_services" value="technician"
+                                       {% if profile and 'technician' in profile.preferred_services %}checked{% endif %}>
+                                <span class="service-icon">🛠️</span>
+                                <span class="service-name">Technicians</span>
+                            </label>
+                            <label class="service-option {% if profile and 'courier' in profile.preferred_services %}selected{% endif %}">
+                                <input type="checkbox" name="preferred_services" value="courier"
+                                       {% if profile and 'courier' in profile.preferred_services %}checked{% endif %}>
+                                <span class="service-icon">📦</span>
+                                <span class="service-name">Courier</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Do you own a home?</label>
+                        <div class="radio-cards" style="grid-template-columns: 1fr 1fr;">
+                            <label class="radio-card {% if profile and profile.home_owner %}selected{% endif %}">
+                                <input type="radio" name="home_owner" value="yes" {% if profile and profile.home_owner %}checked{% endif %}>
+                                <span class="radio-check"></span>
+                                <div class="radio-content">
+                                    <div class="radio-icon">🏠</div>
+                                    <div class="radio-title">Yes</div>
+                                    <div class="radio-desc">I own a home</div>
+                                </div>
+                            </label>
+                            <label class="radio-card {% if not profile or not profile.home_owner %}selected{% endif %}">
+                                <input type="radio" name="home_owner" value="no" {% if not profile or not profile.home_owner %}checked{% endif %}>
+                                <span class="radio-check"></span>
+                                <div class="radio-content">
+                                    <div class="radio-icon">🏢</div>
+                                    <div class="radio-title">No</div>
+                                    <div class="radio-desc">Renting / Other</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 4: Location -->
+                <div class="form-section" data-section="4">
+                    <div class="section-header">
+                        <div class="section-icon">📍</div>
+                        <div>
+                            <h2>Your Location</h2>
+                            <p>Help us find services near you</p>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>City</label>
+                            <input type="text" name="city" class="form-input"
+                                   value="{{ profile.city if profile else '' }}"
+                                   placeholder="e.g., Mumbai, Delhi, Bangalore">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Area / Locality</label>
+                            <input type="text" name="area" class="form-input"
+                                   value="{{ profile.area if profile else '' }}"
+                                   placeholder="e.g., Andheri, Koramangala">
+                        </div>
+                    </div>
+
+                    <div class="location-box">
+                        <i class="material-icons">my_location</i>
+                        <h3 style="color: #d4af37; margin-bottom: 10px;">Enable Location Services</h3>
+                        <p style="color: #888; margin-bottom: 15px;">
+                            Allow us to detect your location for real-time nearby service suggestions
+                        </p>
+                        <button type="button" class="location-btn" onclick="getLocation()">
+                            <i class="material-icons" style="font-size: 18px; vertical-align: middle;">gps_fixed</i>
+                            Detect My Location
+                        </button>
+                        <div id="location-status" class="location-status"></div>
+                        <input type="hidden" name="latitude" id="latitude" value="{{ profile.latitude if profile else '' }}">
+                        <input type="hidden" name="longitude" id="longitude" value="{{ profile.longitude if profile else '' }}">
+                    </div>
+                </div>
+
+                <!-- Navigation Buttons -->
+                <div class="form-navigation">
+                    <button type="button" class="btn-nav btn-back" id="btn-back" onclick="prevSection()" style="display: none;">
+                        <i class="material-icons">arrow_back</i>
+                        Previous
+                    </button>
+                    <button type="button" class="btn-nav btn-next" id="btn-next" onclick="nextSection()">
+                        Next
+                        <i class="material-icons">arrow_forward</i>
+                    </button>
+                    <button type="submit" class="btn-nav btn-submit" id="btn-submit" style="display: none;">
+                        Save My Profile
+                        <i class="material-icons">check</i>
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <script>
-        // Number input controls
-        function changeValue(inputId, delta) {
-            const input = document.getElementById(inputId);
-            let value = parseInt(input.value) || 1;
-            const min = parseInt(input.min) || 1;
-            const max = parseInt(input.max) || 20;
-            
-            value = Math.max(min, Math.min(max, value + delta));
-            input.value = value;
+        let currentSection = 1;
+        const totalSections = 4;
+
+        function updateProgress() {
+            // Update progress indicators
+            document.querySelectorAll('.progress-step').forEach((step, index) => {
+                step.classList.remove('active', 'completed');
+                if (index + 1 < currentSection) {
+                    step.classList.add('completed');
+                } else if (index + 1 === currentSection) {
+                    step.classList.add('active');
+                }
+            });
+
+            // Show/hide sections
+            document.querySelectorAll('.form-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            document.querySelector(`.form-section[data-section="${currentSection}"]`).classList.add('active');
+
+            // Update buttons
+            document.getElementById('btn-back').style.display = currentSection > 1 ? 'flex' : 'none';
+            document.getElementById('btn-next').style.display = currentSection < totalSections ? 'flex' : 'none';
+            document.getElementById('btn-submit').style.display = currentSection === totalSections ? 'flex' : 'none';
         }
 
-        // Form validation
-        document.getElementById('lifestyle-form').addEventListener('submit', function(e) {
-            const checkedInterests = document.querySelectorAll('input[name="interests"]:checked');
-            const travelStyle = document.querySelector('input[name="travel_style"]:checked');
-            
-            if (checkedInterests.length === 0) {
-                e.preventDefault();
-                alert('Please select at least one interest to continue');
-                return;
+        function nextSection() {
+            if (currentSection < totalSections) {
+                currentSection++;
+                updateProgress();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
             }
-            
-            if (!travelStyle) {
-                e.preventDefault();
-                alert('Please select your travel style');
-                return;
+        }
+
+        function prevSection() {
+            if (currentSection > 1) {
+                currentSection--;
+                updateProgress();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
             }
-            
-            // Show loading state
-            const submitBtn = this.querySelector('.btn-submit');
-            submitBtn.innerHTML = '<i class="material-icons">hourglass_empty</i> Saving...';
-            submitBtn.disabled = true;
+        }
+
+        // Handle radio card selection visual
+        document.querySelectorAll('.radio-card input[type="radio"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                // Remove selected from all in same group
+                const name = this.name;
+                document.querySelectorAll(`.radio-card input[name="${name}"]`).forEach(r => {
+                    r.closest('.radio-card').classList.remove('selected');
+                });
+                // Add selected to current
+                this.closest('.radio-card').classList.add('selected');
+            });
         });
 
-        // Smooth scroll for form sections
-        document.querySelectorAll('.form-section').forEach((section, index) => {
-            section.style.opacity = '0';
-            setTimeout(() => {
-                section.style.transition = 'opacity 0.5s ease';
-                section.style.opacity = '1';
-            }, index * 100);
+        // Handle service option selection visual
+        document.querySelectorAll('.service-option input[type="checkbox"]').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                this.closest('.service-option').classList.toggle('selected', this.checked);
+            });
         });
+
+        // Handle checkbox option selection visual
+        document.querySelectorAll('.checkbox-option input[type="checkbox"]').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                this.closest('.checkbox-option').classList.toggle('selected', this.checked);
+            });
+        });
+
+        // Location detection
+        function getLocation() {
+            const statusEl = document.getElementById('location-status');
+            statusEl.textContent = 'Detecting location...';
+            statusEl.className = 'location-status';
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        document.getElementById('latitude').value = position.coords.latitude;
+                        document.getElementById('longitude').value = position.coords.longitude;
+
+                        statusEl.textContent = 'Location detected successfully!';
+                        statusEl.className = 'location-status success';
+
+                        // Try to get address from coordinates (reverse geocoding)
+                        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.address) {
+                                    const city = data.address.city || data.address.town || data.address.village || '';
+                                    const area = data.address.suburb || data.address.neighbourhood || '';
+
+                                    if (city && !document.querySelector('input[name="city"]').value) {
+                                        document.querySelector('input[name="city"]').value = city;
+                                    }
+                                    if (area && !document.querySelector('input[name="area"]').value) {
+                                        document.querySelector('input[name="area"]').value = area;
+                                    }
+
+                                    statusEl.textContent = `Location: ${area ? area + ', ' : ''}${city}`;
+                                }
+                            })
+                            .catch(() => {});
+                    },
+                    function(error) {
+                        statusEl.textContent = 'Could not detect location. Please enter manually.';
+                        statusEl.className = 'location-status';
+                    }
+                );
+            } else {
+                statusEl.textContent = 'Geolocation not supported by your browser.';
+                statusEl.className = 'location-status';
+            }
+        }
+
+        // Initialize
+        updateProgress();
     </script>
 </body>
 </html>

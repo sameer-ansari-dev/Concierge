@@ -1394,27 +1394,82 @@
     `;
     }
 
-    function bookRecommendedService(serviceType, recIndex) {
-      // Map service types to modal IDs
-      const serviceMap = {
-        'Hotel Booking': 'hotel',
-        'Flight Booking': 'travel',
-        'Car Booking': 'car',
-        'Luxury Cabs': 'car',
-        'Technician Booking': 'event',
-        'Handyman Services': 'event',
-        'Courier Booking': 'courier',
-        'Courier & Delivery': 'courier'
-      };
+    function bookRecommendedService(serviceType) {
+    // Get user's current location (from sidebar or stored)
+    const locationText = document.getElementById('location-text')?.textContent || 'Mumbai';
+    const city = locationText.split(',')[0].trim();
 
-      const modalId = serviceMap[serviceType];
-      if (modalId) {
-        openModal(modalId);
-        showToast(`Opening ${serviceType} booking form`, 'info');
-      } else {
-        showToast('Service not available', 'error');
-      }
+    let url = '';
+    let params = new URLSearchParams();
+
+    if (serviceType.includes('Hotel')) {
+        url = '/submit-hotel-booking';
+        params.set('destination', city);
+        params.set('checkin', getTomorrowDate());
+        params.set('checkout', getDayAfterTomorrowDate());
+        params.set('rooms', '1');
+        params.set('guests', '2');
+
+    } else if (serviceType.includes('Flight')) {
+        url = '/submit-travel-booking';
+        params.set('origin', city);
+        params.set('destination', 'Delhi'); // default popular
+        params.set('departure_date', getIn7Days());
+        params.set('adults', '1');
+
+    } else if (serviceType.includes('Car') || serviceType.includes('Cab')) {
+        url = '/submit_car_booking';
+        params.set('pickup', locationText);
+        params.set('dropoff', `${city} Airport`);
+        params.set('pickup_date', getTomorrowDate());
+        params.set('pickup_time', '10:00');
+        params.set('passengers', '2');
+        params.set('cab_class', 'luxury');
+
+    } else if (serviceType.includes('Technician') || serviceType.includes('Handyman')) {
+        url = '/submit-technician-booking';
+        params.set('location', locationText);
+        params.set('service_date', getTomorrowDate());
+        params.set('service_time', '14:00');
+        params.set('service_type', 'ac_repair');
+        params.set('urgency', 'normal');
+
+    } else if (serviceType.includes('Courier')) {
+        url = '/submit_courier_booking';
+        params.set('pickup', locationText);
+        params.set('dropoff', `${city} Downtown`);
+        params.set('pickup_date', getTomorrowDate());
+        params.set('pickup_time', '11:00');
+        params.set('package_weight', '2.0');
+        params.set('courier_type', 'express');
     }
+
+    if (url) {
+        window.location.href = `${url}?${params.toString()}`;
+        showToast(`Searching best ${serviceType} options for you in ${city}...`, 'info');
+    } else {
+        showToast('Service coming soon!', 'warning');
+    }
+}
+
+// Helper functions for dates
+function getTomorrowDate() {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+}
+
+function getDayAfterTomorrowDate() {
+    const d = new Date();
+    d.setDate(d.getDate() + 2);
+    return d.toISOString().split('T')[0];
+}
+
+function getIn7Days() {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().split('T')[0];
+}
 
     async function dismissRecommendation(recommendationId) {
       if (!confirm('Dismiss this recommendation?')) {
@@ -1958,56 +2013,82 @@ console.log('✅ Dashboard fixes loaded successfully!');
       showToast(`Showing ${serviceName} on map`, 'info');
     }
 
-    async function bookNearbyService(serviceType, serviceName, serviceId) {
-      try {
-        console.log('Booking nearby service:', serviceType, serviceName, serviceId);
+    function bookNearbyService(serviceType, serviceName, serviceId) {
+    // Get user's current location
+    const locationText = document.getElementById('location-text')?.textContent || 'Mumbai';
+    const city = locationText.split(',')[0].trim();
 
-        const response = await fetch('/api/book-nearby-service', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            service_type: serviceType,
-            service_name: serviceName,
-            service_id: serviceId
-          })
-        });
+    let url = '';
+    let params = new URLSearchParams();
 
-        const data = await response.json();
+    if (serviceType === 'Hotel Booking') {
+        url = '/submit-hotel-booking';
+        params.set('destination', city);
+        params.set('checkin', getTomorrowDate());
+        params.set('checkout', getDayAfterTomorrowDate());
+        params.set('rooms', '1');
+        params.set('guests', '2');
 
-        if (data.success) {
-          // Pre-fill the booking form based on service type
-          if (serviceType === 'Hotel Booking') {
-            prefillHotelForm(data);
-          } else if (serviceType === 'Technician Booking') {
-            prefillTechnicianForm(data);
-          } else if (serviceType === 'Car Booking') {
-            prefillCarForm(data);
-          } else if (serviceType === 'Courier Booking') {
-            prefillCourierForm(data);
-          }
+    } else if (serviceType === 'Flight Booking') {
+        url = '/submit-travel-booking';
+        params.set('origin', city);
+        params.set('destination', 'Delhi');
+        params.set('departure_date', getIn7Days());
+        params.set('adults', '1');
 
-          // Open the modal
-          openModal(data.modal_id);
-          showToast(`Booking form opened for ${serviceName}`, 'info');
-        } else {
-          showToast('Unable to open booking form', 'error');
-        }
-      } catch (error) {
-        console.error('Error booking service:', error);
+    } else if (serviceType === 'Car Booking') {
+        url = '/submit_car_booking';
+        params.set('pickup', locationText);
+        params.set('dropoff', `${city} Airport`);
+        params.set('pickup_date', getTomorrowDate());
+        params.set('pickup_time', '10:00');
+        params.set('passengers', '2');
+        params.set('cab_class', 'standard');
 
-        // Fallback: Open modal anyway
-        const serviceMap = {
-          'Hotel Booking': 'hotel',
-          'Car Booking': 'car',
-          'Technician Booking': 'event',
-          'Courier Booking': 'courier'
-        };
+    } else if (serviceType === 'Technician Booking') {
+        url = '/submit-technician-booking';
+        params.set('location', locationText);
+        params.set('service_date', getTomorrowDate());
+        params.set('service_time', '14:00');
+        params.set('service_type', 'ac_repair');  // common default
+        params.set('urgency', 'normal');
 
-        const modalId = serviceMap[serviceType] || 'hotel';
-        openModal(modalId);
-        showToast(`Opening ${serviceType} form...`, 'info');
-      }
+    } else if (serviceType === 'Courier Booking') {
+        url = '/submit_courier_booking';
+        params.set('pickup', locationText);
+        params.set('dropoff', `${city} Downtown`);
+        params.set('pickup_date', getTomorrowDate());
+        params.set('pickup_time', '11:00');
+        params.set('package_weight', '2.0');
+        params.set('courier_type', 'express');
     }
+
+    if (url) {
+        window.location.href = `${url}?${params.toString()}`;
+        showToast(`Finding best ${serviceType}: ${serviceName} in ${city}...`, 'info');
+    } else {
+        showToast('Service coming soon!', 'warning');
+    }
+}
+
+// Reuse the same helper date functions (already in your JS from AI rec fix)
+function getTomorrowDate() {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+}
+
+function getDayAfterTomorrowDate() {
+    const d = new Date();
+    d.setDate(d.getDate() + 2);
+    return d.toISOString().split('T')[0];
+}
+
+function getIn7Days() {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().split('T')[0];
+}
 
     // ============================================
 // PRE-FILL FUNCTIONS FOR EACH SERVICE
