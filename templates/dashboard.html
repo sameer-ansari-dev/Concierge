@@ -823,10 +823,11 @@
           <h4>Hello! I'm your AI assistant 👋</h4>
           <p>I can help you with hotels, flights, cabs, technicians, and more!</p>
           <div class="chat-quick-actions">
-            <button class="chat-quick-action" onclick="sendQuickMessage('Show me hotels')">🏨 Hotels</button>
-            <button class="chat-quick-action" onclick="sendQuickMessage('Find flights')">✈️ Flights</button>
-            <button class="chat-quick-action" onclick="sendQuickMessage('Book a cab')">🚗 Cabs</button>
-            <button class="chat-quick-action" onclick="sendQuickMessage('I need help')">❓ Help</button>
+            <button class="chat-quick-action" onclick="handleQuickReply('hotels')">🏨 Hotels</button>
+            <button class="chat-quick-action" onclick="handleQuickReply('flights')">✈️ Flights</button>
+            <button class="chat-quick-action" onclick="handleQuickReply('cabs')">🚗 Cabs</button>
+            <button class="chat-quick-action" onclick="handleQuickReply('technician')">🔧 Technician</button>
+            <button class="chat-quick-action" onclick="handleQuickReply('courier')">📦 Courier</button>
           </div>
         </div>
       </div>
@@ -1395,14 +1396,14 @@
     }
 
     function bookRecommendedService(serviceType) {
-    // Get user's current location (from sidebar or stored)
-    const locationText = document.getElementById('location-text')?.textContent || 'Mumbai';
-    const city = locationText.split(',')[0].trim();
+      // Get user's current location (from sidebar or stored)
+      const locationText = document.getElementById('location-text')?.textContent || 'Mumbai';
+      const city = locationText.split(',')[0].trim();
 
-    let url = '';
-    let params = new URLSearchParams();
+      let url = '';
+      let params = new URLSearchParams();
 
-    if (serviceType.includes('Hotel')) {
+      if (serviceType.includes('Hotel')) {
         url = '/submit-hotel-booking';
         params.set('destination', city);
         params.set('checkin', getTomorrowDate());
@@ -1410,14 +1411,14 @@
         params.set('rooms', '1');
         params.set('guests', '2');
 
-    } else if (serviceType.includes('Flight')) {
+      } else if (serviceType.includes('Flight')) {
         url = '/submit-travel-booking';
         params.set('origin', city);
         params.set('destination', 'Delhi'); // default popular
         params.set('departure_date', getIn7Days());
         params.set('adults', '1');
 
-    } else if (serviceType.includes('Car') || serviceType.includes('Cab')) {
+      } else if (serviceType.includes('Car') || serviceType.includes('Cab')) {
         url = '/submit_car_booking';
         params.set('pickup', locationText);
         params.set('dropoff', `${city} Airport`);
@@ -1426,7 +1427,7 @@
         params.set('passengers', '2');
         params.set('cab_class', 'luxury');
 
-    } else if (serviceType.includes('Technician') || serviceType.includes('Handyman')) {
+      } else if (serviceType.includes('Technician') || serviceType.includes('Handyman')) {
         url = '/submit-technician-booking';
         params.set('location', locationText);
         params.set('service_date', getTomorrowDate());
@@ -1434,7 +1435,7 @@
         params.set('service_type', 'ac_repair');
         params.set('urgency', 'normal');
 
-    } else if (serviceType.includes('Courier')) {
+      } else if (serviceType.includes('Courier')) {
         url = '/submit_courier_booking';
         params.set('pickup', locationText);
         params.set('dropoff', `${city} Downtown`);
@@ -1442,34 +1443,34 @@
         params.set('pickup_time', '11:00');
         params.set('package_weight', '2.0');
         params.set('courier_type', 'express');
-    }
+      }
 
-    if (url) {
+      if (url) {
         window.location.href = `${url}?${params.toString()}`;
         showToast(`Searching best ${serviceType} options for you in ${city}...`, 'info');
-    } else {
+      } else {
         showToast('Service coming soon!', 'warning');
+      }
     }
-}
 
-// Helper functions for dates
-function getTomorrowDate() {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split('T')[0];
-}
+    // Helper functions for dates
+    function getTomorrowDate() {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().split('T')[0];
+    }
 
-function getDayAfterTomorrowDate() {
-    const d = new Date();
-    d.setDate(d.getDate() + 2);
-    return d.toISOString().split('T')[0];
-}
+    function getDayAfterTomorrowDate() {
+      const d = new Date();
+      d.setDate(d.getDate() + 2);
+      return d.toISOString().split('T')[0];
+    }
 
-function getIn7Days() {
-    const d = new Date();
-    d.setDate(d.getDate() + 7);
-    return d.toISOString().split('T')[0];
-}
+    function getIn7Days() {
+      const d = new Date();
+      d.setDate(d.getDate() + 7);
+      return d.toISOString().split('T')[0];
+    }
 
     async function dismissRecommendation(recommendationId) {
       if (!confirm('Dismiss this recommendation?')) {
@@ -1648,9 +1649,18 @@ function getIn7Days() {
             initMap();
           }, 100);
         }
+
         if (sectionId === 'recommendations-section') {
           setTimeout(() => {
             fetchLifestyleRecommendations();
+          }, 100);
+        }
+
+        // If showing services section, ensure it's fully loaded
+        if (sectionId === 'services-section') {
+          setTimeout(() => {
+            // Re-initialize any date pickers in service modals
+            initDatePickers();
           }, 100);
         }
       }
@@ -1689,6 +1699,28 @@ function getIn7Days() {
       if (modal) {
         modal.style.display = 'block';
         document.body.style.overflow = 'hidden';
+
+        // Ensure the modal is visible and on top
+        modal.style.opacity = '1';
+        modal.style.zIndex = '9999';
+
+        // Initialize date pickers if they exist in this modal
+        setTimeout(() => {
+          const dateInputs = modal.querySelectorAll('.date-input');
+          if (dateInputs.length > 0 && typeof flatpickr !== 'undefined') {
+            dateInputs.forEach(input => {
+              // Re-initialize date picker if needed
+              if (!input._flatpickr) {
+                flatpickr(input, {
+                  altInput: true,
+                  altFormat: "F j, Y",
+                  dateFormat: "Y-m-d",
+                  minDate: "today"
+                });
+              }
+            });
+          }
+        }, 100);
       }
     }
 
@@ -1813,14 +1845,14 @@ function getIn7Days() {
     // ============================================
 
     async function fetchNearbyServices() {
-    const listElement = document.getElementById('nearby-services-list');
+      const listElement = document.getElementById('nearby-services-list');
 
-    if (!userLocation) {
+      if (!userLocation) {
         displayErrorNearbyServices('Location not detected. Please enable location services.');
         return;
-    }
+      }
 
-    try {
+      try {
         // Show loading
         listElement.innerHTML = `
             <div class="loading-state" style="grid-column: 1 / -1;">
@@ -1830,54 +1862,54 @@ function getIn7Days() {
         `;
 
         const response = await fetch('/api/nearby-services', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(userLocation)
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(userLocation)
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const data = await response.json();
-        
+
         console.log('Nearby services response:', data);
 
         if (!data.success) {
-            throw new Error(data.message || 'Failed to load services');
+          throw new Error(data.message || 'Failed to load services');
         }
 
         if (data.services && data.services.length > 0) {
-            displayNearbyServices(data.services);
-            
-            // Update count
-            const countElement = document.getElementById('nearby-count');
-            if (countElement) {
-                countElement.textContent = data.services.length;
-            }
-            
-            // Add markers to map
-            addServiceMarkersToMap(data.services);
-            
-            showToast(`Found ${data.services.length} services nearby`, 'success');
+          displayNearbyServices(data.services);
+
+          // Update count
+          const countElement = document.getElementById('nearby-count');
+          if (countElement) {
+            countElement.textContent = data.services.length;
+          }
+
+          // Add markers to map
+          addServiceMarkersToMap(data.services);
+
+          showToast(`Found ${data.services.length} services nearby`, 'success');
         } else {
-            displayEmptyNearbyServices();
+          displayEmptyNearbyServices();
         }
-    } catch (error) {
+      } catch (error) {
         console.error('Error fetching nearby services:', error);
         displayErrorNearbyServices(error.message);
+      }
     }
-}
 
     function displayNearbyServices(services) {
-    const listElement = document.getElementById('nearby-services-list');
-    const countElement = document.getElementById('nearby-count');
+      const listElement = document.getElementById('nearby-services-list');
+      const countElement = document.getElementById('nearby-count');
 
-    if (countElement) {
+      if (countElement) {
         countElement.textContent = services.length;
-    }
+      }
 
-    listElement.innerHTML = services.map((service, index) => `
+      listElement.innerHTML = services.map((service, index) => `
         <div class="nearby-service-card" style="animation: fadeInUp 0.5s ease ${index * 0.1}s forwards; opacity: 0;">
             <div class="service-distance">
                 <i class="material-icons">near_me</i>
@@ -1905,9 +1937,9 @@ function getIn7Days() {
             </div>
         </div>
     `).join('');
-}
+    }
 
-console.log('✅ Dashboard fixes loaded successfully!');
+    console.log('✅ Dashboard fixes loaded successfully!');
 
     function displayEmptyNearbyServices() {
       const listElement = document.getElementById('nearby-services-list');
@@ -2014,14 +2046,14 @@ console.log('✅ Dashboard fixes loaded successfully!');
     }
 
     function bookNearbyService(serviceType, serviceName, serviceId) {
-    // Get user's current location
-    const locationText = document.getElementById('location-text')?.textContent || 'Mumbai';
-    const city = locationText.split(',')[0].trim();
+      // Get user's current location
+      const locationText = document.getElementById('location-text')?.textContent || 'Mumbai';
+      const city = locationText.split(',')[0].trim();
 
-    let url = '';
-    let params = new URLSearchParams();
+      let url = '';
+      let params = new URLSearchParams();
 
-    if (serviceType === 'Hotel Booking') {
+      if (serviceType === 'Hotel Booking') {
         url = '/submit-hotel-booking';
         params.set('destination', city);
         params.set('checkin', getTomorrowDate());
@@ -2029,14 +2061,14 @@ console.log('✅ Dashboard fixes loaded successfully!');
         params.set('rooms', '1');
         params.set('guests', '2');
 
-    } else if (serviceType === 'Flight Booking') {
+      } else if (serviceType === 'Flight Booking') {
         url = '/submit-travel-booking';
         params.set('origin', city);
         params.set('destination', 'Delhi');
         params.set('departure_date', getIn7Days());
         params.set('adults', '1');
 
-    } else if (serviceType === 'Car Booking') {
+      } else if (serviceType === 'Car Booking') {
         url = '/submit_car_booking';
         params.set('pickup', locationText);
         params.set('dropoff', `${city} Airport`);
@@ -2045,7 +2077,7 @@ console.log('✅ Dashboard fixes loaded successfully!');
         params.set('passengers', '2');
         params.set('cab_class', 'standard');
 
-    } else if (serviceType === 'Technician Booking') {
+      } else if (serviceType === 'Technician Booking') {
         url = '/submit-technician-booking';
         params.set('location', locationText);
         params.set('service_date', getTomorrowDate());
@@ -2053,7 +2085,7 @@ console.log('✅ Dashboard fixes loaded successfully!');
         params.set('service_type', 'ac_repair');  // common default
         params.set('urgency', 'normal');
 
-    } else if (serviceType === 'Courier Booking') {
+      } else if (serviceType === 'Courier Booking') {
         url = '/submit_courier_booking';
         params.set('pickup', locationText);
         params.set('dropoff', `${city} Downtown`);
@@ -2061,183 +2093,183 @@ console.log('✅ Dashboard fixes loaded successfully!');
         params.set('pickup_time', '11:00');
         params.set('package_weight', '2.0');
         params.set('courier_type', 'express');
-    }
+      }
 
-    if (url) {
+      if (url) {
         window.location.href = `${url}?${params.toString()}`;
         showToast(`Finding best ${serviceType}: ${serviceName} in ${city}...`, 'info');
-    } else {
+      } else {
         showToast('Service coming soon!', 'warning');
+      }
     }
-}
 
-// Reuse the same helper date functions (already in your JS from AI rec fix)
-function getTomorrowDate() {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split('T')[0];
-}
+    // Reuse the same helper date functions (already in your JS from AI rec fix)
+    function getTomorrowDate() {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().split('T')[0];
+    }
 
-function getDayAfterTomorrowDate() {
-    const d = new Date();
-    d.setDate(d.getDate() + 2);
-    return d.toISOString().split('T')[0];
-}
+    function getDayAfterTomorrowDate() {
+      const d = new Date();
+      d.setDate(d.getDate() + 2);
+      return d.toISOString().split('T')[0];
+    }
 
-function getIn7Days() {
-    const d = new Date();
-    d.setDate(d.getDate() + 7);
-    return d.toISOString().split('T')[0];
-}
+    function getIn7Days() {
+      const d = new Date();
+      d.setDate(d.getDate() + 7);
+      return d.toISOString().split('T')[0];
+    }
 
     // ============================================
-// PRE-FILL FUNCTIONS FOR EACH SERVICE
-// ============================================
+    // PRE-FILL FUNCTIONS FOR EACH SERVICE
+    // ============================================
 
-function prefillHotelForm(data) {
-    // Get current date for check-in (today)
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    const checkin = today.toISOString().split('T')[0];
-    const checkout = tomorrow.toISOString().split('T')[0];
-    
-    // Pre-fill hotel booking form
-    const destinationInput = document.querySelector('#hotel-modal input[name="destination"]');
-    const checkinInput = document.querySelector('#hotel-modal input[name="checkin"]');
-    const checkoutInput = document.querySelector('#hotel-modal input[name="checkout"]');
-    
-    if (destinationInput) {
+    function prefillHotelForm(data) {
+      // Get current date for check-in (today)
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const checkin = today.toISOString().split('T')[0];
+      const checkout = tomorrow.toISOString().split('T')[0];
+
+      // Pre-fill hotel booking form
+      const destinationInput = document.querySelector('#hotel-modal input[name="destination"]');
+      const checkinInput = document.querySelector('#hotel-modal input[name="checkin"]');
+      const checkoutInput = document.querySelector('#hotel-modal input[name="checkout"]');
+
+      if (destinationInput) {
         // Extract city from service name or use user location
         const userLocation = document.getElementById('location-text')?.textContent || 'Mumbai';
         destinationInput.value = userLocation.split(',')[0];
-    }
-    
-    if (checkinInput) checkinInput.value = checkin;
-    if (checkoutInput) checkout.value = checkout;
-    
-    // Re-initialize date pickers
-    if (typeof flatpickr !== 'undefined') {
-        flatpickr(checkinInput, {
-            dateFormat: "Y-m-d",
-            minDate: "today",
-            defaultDate: checkin
-        });
-        
-        flatpickr(checkoutInput, {
-            dateFormat: "Y-m-d",
-            minDate: tomorrow,
-            defaultDate: checkout
-        });
-    }
-    
-    showToast('Hotel form pre-filled with location', 'success');
-}
+      }
 
-function prefillTechnicianForm(data) {
-    // Pre-fill technician booking form
-    const locationInput = document.querySelector('#event-modal input[name="location"]');
-    const serviceDateInput = document.querySelector('#event-modal input[name="service_date"]');
-    const serviceTimeInput = document.querySelector('#event-modal input[name="service_time"]');
-    
-    if (locationInput) {
+      if (checkinInput) checkinInput.value = checkin;
+      if (checkoutInput) checkout.value = checkout;
+
+      // Re-initialize date pickers
+      if (typeof flatpickr !== 'undefined') {
+        flatpickr(checkinInput, {
+          dateFormat: "Y-m-d",
+          minDate: "today",
+          defaultDate: checkin
+        });
+
+        flatpickr(checkoutInput, {
+          dateFormat: "Y-m-d",
+          minDate: tomorrow,
+          defaultDate: checkout
+        });
+      }
+
+      showToast('Hotel form pre-filled with location', 'success');
+    }
+
+    function prefillTechnicianForm(data) {
+      // Pre-fill technician booking form
+      const locationInput = document.querySelector('#event-modal input[name="location"]');
+      const serviceDateInput = document.querySelector('#event-modal input[name="service_date"]');
+      const serviceTimeInput = document.querySelector('#event-modal input[name="service_time"]');
+
+      if (locationInput) {
         const userLocation = document.getElementById('location-text')?.textContent || '';
         locationInput.value = userLocation;
-    }
-    
-    if (serviceDateInput) {
+      }
+
+      if (serviceDateInput) {
         const today = new Date().toISOString().split('T')[0];
         serviceDateInput.value = today;
-    }
-    
-    if (serviceTimeInput) {
+      }
+
+      if (serviceTimeInput) {
         // Set time to 2 hours from now
         const now = new Date();
         now.setHours(now.getHours() + 2);
         const timeString = now.toTimeString().slice(0, 5);
         serviceTimeInput.value = timeString;
-    }
-    
-    // Re-initialize date picker
-    if (typeof flatpickr !== 'undefined' && serviceDateInput) {
-        flatpickr(serviceDateInput, {
-            dateFormat: "Y-m-d",
-            minDate: "today"
-        });
-    }
-    
-    showToast('Technician form pre-filled', 'success');
-}
+      }
 
-function prefillCarForm(data) {
-    // Pre-fill car booking form
-    const pickupInput = document.querySelector('#car-modal input[name="pickup"]');
-    const dropoffInput = document.querySelector('#car-modal input[name="dropoff"]');
-    const pickupDateInput = document.querySelector('#car-modal input[name="pickup_date"]');
-    const pickupTimeInput = document.querySelector('#car-modal input[name="pickup_time"]');
-    
-    if (pickupInput) {
+      // Re-initialize date picker
+      if (typeof flatpickr !== 'undefined' && serviceDateInput) {
+        flatpickr(serviceDateInput, {
+          dateFormat: "Y-m-d",
+          minDate: "today"
+        });
+      }
+
+      showToast('Technician form pre-filled', 'success');
+    }
+
+    function prefillCarForm(data) {
+      // Pre-fill car booking form
+      const pickupInput = document.querySelector('#car-modal input[name="pickup"]');
+      const dropoffInput = document.querySelector('#car-modal input[name="dropoff"]');
+      const pickupDateInput = document.querySelector('#car-modal input[name="pickup_date"]');
+      const pickupTimeInput = document.querySelector('#car-modal input[name="pickup_time"]');
+
+      if (pickupInput) {
         const userLocation = document.getElementById('location-text')?.textContent || '';
         pickupInput.value = userLocation;
-    }
-    
-    if (pickupDateInput) {
+      }
+
+      if (pickupDateInput) {
         const today = new Date().toISOString().split('T')[0];
         pickupDateInput.value = today;
-    }
-    
-    if (pickupTimeInput) {
+      }
+
+      if (pickupTimeInput) {
         const now = new Date();
         now.setHours(now.getHours() + 1);
         const timeString = now.toTimeString().slice(0, 5);
         pickupTimeInput.value = timeString;
-    }
-    
-    // Re-initialize date picker
-    if (typeof flatpickr !== 'undefined' && pickupDateInput) {
-        flatpickr(pickupDateInput, {
-            dateFormat: "Y-m-d",
-            minDate: "today"
-        });
-    }
-    
-    showToast('Car booking form pre-filled', 'success');
-}
+      }
 
-function prefillCourierForm(data) {
-    // Pre-fill courier booking form
-    const pickupInput = document.querySelector('#courier-modal input[name="pickup"]');
-    const pickupDateInput = document.querySelector('#courier-modal input[name="pickup_date"]');
-    const pickupTimeInput = document.querySelector('#courier-modal input[name="pickup_time"]');
-    
-    if (pickupInput) {
+      // Re-initialize date picker
+      if (typeof flatpickr !== 'undefined' && pickupDateInput) {
+        flatpickr(pickupDateInput, {
+          dateFormat: "Y-m-d",
+          minDate: "today"
+        });
+      }
+
+      showToast('Car booking form pre-filled', 'success');
+    }
+
+    function prefillCourierForm(data) {
+      // Pre-fill courier booking form
+      const pickupInput = document.querySelector('#courier-modal input[name="pickup"]');
+      const pickupDateInput = document.querySelector('#courier-modal input[name="pickup_date"]');
+      const pickupTimeInput = document.querySelector('#courier-modal input[name="pickup_time"]');
+
+      if (pickupInput) {
         const userLocation = document.getElementById('location-text')?.textContent || '';
         pickupInput.value = userLocation;
-    }
-    
-    if (pickupDateInput) {
+      }
+
+      if (pickupDateInput) {
         const today = new Date().toISOString().split('T')[0];
         pickupDateInput.value = today;
-    }
-    
-    if (pickupTimeInput) {
+      }
+
+      if (pickupTimeInput) {
         const now = new Date();
         now.setHours(now.getHours() + 2);
         const timeString = now.toTimeString().slice(0, 5);
         pickupTimeInput.value = timeString;
-    }
-    
-    // Re-initialize date picker
-    if (typeof flatpickr !== 'undefined' && pickupDateInput) {
+      }
+
+      // Re-initialize date picker
+      if (typeof flatpickr !== 'undefined' && pickupDateInput) {
         flatpickr(pickupDateInput, {
-            dateFormat: "Y-m-d",
-            minDate: "today"
+          dateFormat: "Y-m-d",
+          minDate: "today"
         });
+      }
+
+      showToast('Courier form pre-filled', 'success');
     }
-    
-    showToast('Courier form pre-filled', 'success');
-}
 
     // ============================================
     // AI CHATBOT FUNCTIONS
@@ -2287,9 +2319,8 @@ function prefillCourierForm(data) {
         .then(response => response.json())
         .then(data => {
           removeTypingIndicator();
-
           if (data.success) {
-            addBotMessage(data.response);
+            addBotMessage(data.response, data.quick_replies || null);  // Pass quick_replies here!
           } else {
             addBotMessage("Sorry, I'm having trouble right now. Please try again!");
           }
@@ -2333,25 +2364,35 @@ function prefillCourierForm(data) {
       chatMessages.push({ type: 'user', text: text, time: new Date() });
     }
 
-    function addBotMessage(text) {
+    function addBotMessage(text, quickReplies = null) {
       const container = document.getElementById('chatbot-messages');
-
       const messageDiv = document.createElement('div');
       messageDiv.className = 'chat-message bot';
-      messageDiv.innerHTML = `
-        <div class="chat-message-avatar">
-            <i class="material-icons">smart_toy</i>
-        </div>
-        <div class="chat-message-content">
-            <div class="chat-message-bubble">${escapeHtml(text)}</div>
-            <div class="chat-message-time">${getCurrentTime()}</div>
-        </div>
-    `;
+      let html = `
+    <div class="chat-message-avatar">
+        <i class="material-icons">smart_toy</i>
+    </div>
+    <div class="chat-message-content">
+        <div class="chat-message-bubble">${escapeHtml(text)}</div>
+        <div class="chat-message-time">${getCurrentTime()}</div>
+  `;
 
+      // ADD QUICK REPLY BUTTONS IF PRESENT
+      if (quickReplies && quickReplies.length > 0) {
+        html += `<div class="chat-quick-actions">`;
+        quickReplies.forEach(btn => {
+          html += `<button class="chat-quick-action" onclick="handleQuickReply('${btn.payload}')">${btn.title}</button>`;
+        });
+        html += `</div>`;
+      }
+
+      html += `
+    </div>
+  `;
+      messageDiv.innerHTML = html;
       container.appendChild(messageDiv);
       scrollToBottom();
-
-      chatMessages.push({ type: 'bot', text: text, time: new Date() });
+      chatMessages.push({ type: 'bot', text: text, quickReplies: quickReplies, time: new Date() });
     }
 
     function showTypingIndicator() {
@@ -2400,6 +2441,171 @@ function prefillCourierForm(data) {
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+    if (data.quick_replies) {
+      const buttonsDiv = document.createElement('div');
+      buttonsDiv.className = 'chat-quick-actions';
+      data.quick_replies.forEach(btn => {
+        const button = document.createElement('button');
+        button.className = 'chat-quick-action';
+        button.textContent = btn.title;
+        button.onclick = () => sendQuickMessage(btn.payload);  // or handle specially
+        buttonsDiv.appendChild(button);
+      });
+      messageContent.appendChild(buttonsDiv);
+    }
+
+    function handleQuickReply(payload) {
+      console.log('Quick reply clicked:', payload);
+
+      let message = '';
+      let city = '';
+      let modalId = '';
+
+      switch (payload) {
+        case 'hotel_mumbai':
+          message = 'Mumbai';
+          city = 'Mumbai';
+          modalId = 'hotel';
+          break;
+        case 'hotel_pune':
+          message = 'Pune';
+          city = 'Pune';
+          modalId = 'hotel';
+          break;
+        case 'hotel_nashik':
+          message = 'Nashik';
+          city = 'Nashik';
+          modalId = 'hotel';
+          break;
+        case 'search_flights':
+          message = 'Search Flights';
+          modalId = 'travel';
+          break;
+        case 'ac_repair':
+          message = 'AC Repair';
+          modalId = 'event';
+          break;
+        case 'plumbing':
+          message = 'Plumbing';
+          modalId = 'event';
+          break;
+        case 'electrical':
+          message = 'Electrical';
+          modalId = 'event';
+          break;
+        case 'airport_cab':
+          message = 'Airport Cab';
+          modalId = 'car';
+          break;
+        case 'same_day_courier':
+          message = 'Same Day Courier';
+          modalId = 'courier';
+          break;
+        case 'hotels':
+          message = 'Hotels';
+          modalId = 'hotel';
+          break;
+        case 'flights':
+          message = 'Flights';
+          modalId = 'travel';
+          break;
+        case 'cabs':
+          message = 'Cabs';
+          modalId = 'car';
+          break;
+        case 'technician':
+          message = 'Technician';
+          modalId = 'event';
+          break;
+        case 'courier':
+          message = 'Courier';
+          modalId = 'courier';
+          break;
+        default:
+          message = payload.replace(/_/g, ' ');
+      }
+
+      // Show as user message
+      addUserMessage(message);
+
+      // Open the appropriate modal
+      if (modalId) {
+        // First, make sure the Services section is visible
+        showSection('services-section');
+
+        // Then open the modal after a short delay
+        setTimeout(() => {
+          console.log('Opening modal:', modalId);
+          openModal(modalId);
+
+          // Pre-fill data based on service type
+          const userLocation = document.getElementById('location-text')?.textContent || '';
+          const userCity = userLocation.split(',')[0].trim() || 'Mumbai';
+
+          switch (modalId) {
+            case 'hotel':
+              if (city) {
+                const destinationInput = document.querySelector('#hotel-modal input[name="destination"]');
+                if (destinationInput) {
+                  destinationInput.value = city;
+                  destinationInput.focus();
+                }
+                addBotMessage(`Perfect! I've opened the hotel booking form with ${city} as your destination. 🏨`);
+              } else {
+                addBotMessage(`I've opened the hotel booking form for you! 🏨`);
+              }
+              break;
+            case 'event':
+              addBotMessage(`Got it! Let me help you with technician services. Opening the booking form... 🔧`);
+              // Pre-fill location for technician
+              const locationInput = document.querySelector('#event-modal input[name="location"]');
+              if (locationInput && userCity) {
+                locationInput.value = userCity;
+              }
+              break;
+            case 'car':
+              addBotMessage(`Excellent choice! I've opened the luxury cab booking form for you. 🚗`);
+              // Pre-fill pickup location
+              const pickupInput = document.querySelector('#car-modal input[name="pickup"]');
+              if (pickupInput && userLocation) {
+                pickupInput.value = userLocation;
+              }
+              break;
+            case 'courier':
+              addBotMessage(`Great! I've opened the courier booking form for you. 📦`);
+              // Pre-fill pickup location
+              const courierPickupInput = document.querySelector('#courier-modal input[name="pickup"]');
+              if (courierPickupInput && userLocation) {
+                courierPickupInput.value = userLocation;
+              }
+              break;
+            case 'travel':
+              addBotMessage(`✈️ Perfect! I've opened the flight booking form. Where would you like to fly?`);
+              break;
+            default:
+              addBotMessage(`Got it! Let me help you with ${message}. Opening the booking form...`);
+          }
+        }, 300); // Small delay to ensure modal is ready
+      } else {
+        // Generic response for other services
+        addBotMessage(`Got it! Let me help you with ${message}. You can book this service from the Services section.`);
+      }
+    }
+    function openServiceAndModal(modalId) {
+      // First show the Services section
+      showSection('services-section');
+
+      // Set the sidebar menu to active
+      const servicesLink = document.querySelector('[onclick*="services-section"]');
+      if (servicesLink) {
+        setActive(servicesLink);
+      }
+
+      // Then open the modal
+      setTimeout(() => {
+        openModal(modalId);
+      }, 100);
     }
 
   </script>

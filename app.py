@@ -4,7 +4,7 @@ from flask import (
 )
 from flask_socketio import SocketIO, emit, join_room
 import random
-from db import save_user_profile, get_user_profile
+from db import save_user_profile_comprehensive, get_user_profile
 from datetime import datetime, date, timedelta
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from db import get_db_connection
@@ -381,40 +381,127 @@ def inject_common_variables():
 @app.route('/lifestyle_form')
 @login_required
 def lifestyle_form():
-    """Display the lifestyle form"""
-    profile = get_user_profile(current_user.get_id())
+    """Display the lifestyle form with existing profile data"""
+    user_id = current_user.get_id()
+    
+    # Get comprehensive profile
+    profile = get_user_profile(user_id)
+    
+    # If profile exists, parse interests and preferred_services
+    if profile:
+        # Parse interests
+        interests_raw = profile.get('interests', '')
+        if interests_raw:
+            profile['interests_list'] = interests_raw.split(',') if isinstance(interests_raw, str) else interests_raw
+        
+        # Parse preferred_services
+        services_raw = profile.get('preferred_services', '')
+        if services_raw:
+            profile['preferred_services_list'] = services_raw.split(',') if isinstance(services_raw, str) else services_raw
+    
     return render_template('lifestyle_form.html', profile=profile)
 
 @app.route('/save_lifestyle', methods=['POST'])
 @login_required
 def save_lifestyle():
-    """Save lifestyle data to database"""
+    """Save lifestyle data to database with all new fields"""
     try:
         user_id = current_user.get_id()
         
+        # Collect all form data
         interests = request.form.getlist('interests')
-        travel_style = request.form.get('travel_style', '')
-        dietary = request.form.get('dietary', 'none')
-        group_size = request.form.get('group_size', 1, type=int)
-        cab_type = request.form.get('cab_type', 'economy')
-        home_owner = request.form.get('home_owner') == 'yes'
+        preferred_services = request.form.getlist('preferred_services')
         
+        # Basic info
+        age_group = request.form.get('age_group', '')
+        profession = request.form.get('profession', '')
+        monthly_budget = request.form.get('monthly_budget', 'medium')
+        lifestyle_type = request.form.get('lifestyle_type', 'comfort')
+        
+        # Travel preferences
+        travel_frequency = request.form.get('travel_frequency', 'monthly')
+        travel_style = request.form.get('travel_style', 'comfort')
+        typical_group_size = request.form.get('typical_group_size', 1, type=int)
+        preferred_cab_type = request.form.get('preferred_cab_type', 'sedan')
+        dietary_pref = request.form.get('dietary_pref', 'none')
+        
+        # Location
+        city = request.form.get('city', '')
+        area = request.form.get('area', '')
+        latitude = request.form.get('latitude', '')
+        longitude = request.form.get('longitude', '')
+        
+        # Home owner (convert string to boolean)
+        home_owner_str = request.form.get('home_owner', 'no')
+        home_owner = home_owner_str == 'yes'
+        
+        # Convert lists to strings
         interests_str = ','.join(interests) if interests else ''
+        preferred_services_str = ','.join(preferred_services) if preferred_services else ''
         
-        success = save_user_profile(
-            user_id=user_id,
-            interests=interests_str,
-            travel_style=travel_style,
-            dietary=dietary,
-            group_size=group_size,
-            cab_type=cab_type,
-            home_owner=home_owner
-        )
+        # Save to database using your existing function (update it to handle new fields)
+        conn = get_db_connection()
+        cur = conn.cursor()
         
-        if success:
-            flash('✅ Your lifestyle profile has been saved! You will now get personalized suggestions.', 'success')
-        else:
+        try:
+            # First check if profile exists
+            cur.execute("SELECT id FROM lifestyle_profiles WHERE user_id = %s", (user_id,))
+            existing = cur.fetchone()
+            
+            if existing:
+                # Update existing profile
+                cur.execute("""
+                    UPDATE lifestyle_profiles SET
+                        age_group = %s,
+                        profession = %s,
+                        monthly_budget = %s,
+                        lifestyle_type = %s,
+                        travel_frequency = %s,
+                        travel_style = %s,
+                        typical_group_size = %s,
+                        preferred_cab_type = %s,
+                        dietary_pref = %s,
+                        city = %s,
+                        area = %s,
+                        latitude = %s,
+                        longitude = %s,
+                        home_owner = %s,
+                        interests = %s,
+                        preferred_services = %s,
+                        updated_at = NOW()
+                    WHERE user_id = %s
+                """, (
+                    age_group, profession, monthly_budget, lifestyle_type,
+                    travel_frequency, travel_style, typical_group_size, preferred_cab_type,
+                    dietary_pref, city, area, latitude, longitude, home_owner,
+                    interests_str, preferred_services_str, user_id
+                ))
+            else:
+                # Insert new profile
+                cur.execute("""
+                    INSERT INTO lifestyle_profiles (
+                        user_id, age_group, profession, monthly_budget, lifestyle_type,
+                        travel_frequency, travel_style, typical_group_size, preferred_cab_type,
+                        dietary_pref, city, area, latitude, longitude, home_owner,
+                        interests, preferred_services, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                """, (
+                    user_id, age_group, profession, monthly_budget, lifestyle_type,
+                    travel_frequency, travel_style, typical_group_size, preferred_cab_type,
+                    dietary_pref, city, area, latitude, longitude, home_owner,
+                    interests_str, preferred_services_str
+                ))
+            
+            conn.commit()
+            flash('✅ Your lifestyle profile has been saved! You will now get personalized AI suggestions.', 'success')
+            
+        except Exception as e:
+            conn.rollback()
+            print(f"Database error: {e}")
             flash('❌ Error saving profile. Please try again.', 'error')
+        finally:
+            cur.close()
+            conn.close()
             
     except Exception as e:
         print(f"Error in save_lifestyle: {e}")
@@ -3278,7 +3365,7 @@ def api_dismiss_recommendation():
 @app.route('/api/lifestyle-recommendations')
 @login_required
 def api_lifestyle_recommendations():
-    """Get AI-powered recommendations - FIXED for list/string interests"""
+    """Get AI-powered recommendations based on comprehensive lifestyle profile"""
     try:
         user_id = current_user.get_id()
         profile = get_user_profile(user_id)
@@ -3288,110 +3375,263 @@ def api_lifestyle_recommendations():
                 'success': True,
                 'has_profile': False,
                 'recommendations': [],
-                'message': 'No profile found'
+                'message': 'Complete your lifestyle profile to get personalized recommendations'
             })
 
         # Handle interests whether it's string or list
-        interests_raw = profile.get('interests')
-        
+        interests_raw = profile.get('interests', '')
         if isinstance(interests_raw, list):
-            interests = [str(i).strip() for i in interests_raw if str(i).strip()]
+            interests = [str(i).strip().lower() for i in interests_raw if str(i).strip()]
         elif isinstance(interests_raw, str):
-            interests = [i.strip() for i in interests_raw.split(',') if i.strip()]
+            interests = [i.strip().lower() for i in interests_raw.split(',') if i.strip()]
         else:
             interests = []
 
-        if not interests:
-            return jsonify({
-                'success': True,
-                'has_profile': False,
-                'recommendations': [],
-                'message': 'Please add at least one interest in your profile'
-            })
+        # Handle preferred services
+        preferred_services_raw = profile.get('preferred_services', '')
+        if isinstance(preferred_services_raw, list):
+            preferred_services = [str(s).strip().lower() for s in preferred_services_raw if str(s).strip()]
+        elif isinstance(preferred_services_raw, str):
+            preferred_services = [s.strip().lower() for s in preferred_services_raw.split(',') if s.strip()]
+        else:
+            preferred_services = []
 
-        # Extract other fields safely
+        # Get other profile data
+        travel_frequency = profile.get('travel_frequency', 'monthly')
         travel_style = profile.get('travel_style', 'comfort')
-        group_size = int(profile.get('group_size', 1))
-        cab_type = profile.get('cab_type', 'economy')
+        lifestyle_type = profile.get('lifestyle_type', 'comfort')
+        monthly_budget = profile.get('monthly_budget', 'medium')
+        typical_group_size = int(profile.get('typical_group_size', 1))
+        preferred_cab_type = profile.get('preferred_cab_type', 'sedan')
         home_owner = bool(profile.get('home_owner', False))
+        city = profile.get('city', '')
+        profession = profile.get('profession', '')
 
         recommendations = []
 
-        # Hotel recommendations
-        if any(word in ' '.join(interests).lower() for word in ['travel', 'luxury', 'business', 'vacation', 'stay']):
+        # SCORING LOGIC
+        # Base score depends on how well the recommendation matches user's profile
+        
+        # 1. HOTEL RECOMMENDATIONS
+        hotel_score = 0
+        hotel_reasons = []
+        
+        # Check if user travels frequently
+        if travel_frequency in ['monthly', 'weekly', 'frequent']:
+            hotel_score += 25
+            hotel_reasons.append("frequent traveler")
+        
+        # Check if luxury lifestyle
+        if lifestyle_type == 'luxury':
+            hotel_score += 30
+            hotel_reasons.append("luxury lifestyle")
+        elif lifestyle_type == 'comfort':
+            hotel_score += 20
+        
+        # Check interests related to hotels
+        hotel_interests = ['fine_dining', 'spa', 'shopping', 'fitness']
+        matched_interests = [i for i in hotel_interests if i in interests]
+        if matched_interests:
+            hotel_score += len(matched_interests) * 10
+            hotel_reasons.append(f"interests: {', '.join(matched_interests)}")
+        
+        # Check if hotels are a preferred service
+        if 'hotel' in preferred_services:
+            hotel_score += 25
+            hotel_reasons.append("preferred service")
+        
+        # Check budget
+        if monthly_budget in ['high', 'premium'] and hotel_score > 0:
+            hotel_score += 15
+            hotel_reasons.append("premium budget")
+        
+        if hotel_score >= 50:
+            hotel_type = "Luxury Hotels" if lifestyle_type == 'luxury' else "Comfort Hotels"
+            price_range = "₹8,000-25,000/night" if monthly_budget in ['high', 'premium'] else "₹3,000-8,000/night"
+            
             recommendations.append({
                 'id': 1,
                 'service_type': 'Hotel Booking',
-                'reason': f'Based on your {travel_style} travel style and interest in travel, we recommend premium hotels',
-                'match_score': 95,
+                'reason': f'Perfect for {", ".join(hotel_reasons[:2])}.',
+                'match_score': min(95, hotel_score),
                 'metadata': {
-                    'price': '₹5,000-20,000/night',
-                    'location': 'Major Cities',
-                    'amenities': 'Spa, Pool, Fine Dining'
+                    'price': price_range,
+                    'location': city or 'Major Cities',
+                    'amenities': 'Premium services based on your interests'
                 }
             })
 
-        # Flight recommendations
-        if any(word in ' '.join(interests).lower() for word in ['travel', 'adventure', 'business', 'flight']):
+        # 2. FLIGHT RECOMMENDATIONS
+        flight_score = 0
+        flight_reasons = []
+        
+        if travel_frequency in ['weekly', 'frequent']:
+            flight_score += 40
+            flight_reasons.append("frequent flyer")
+        elif travel_frequency == 'monthly':
+            flight_score += 25
+            flight_reasons.append("monthly traveler")
+        
+        if 'flight' in preferred_services:
+            flight_score += 30
+            flight_reasons.append("preferred service")
+        
+        # Business travel style
+        if travel_style == 'business':
+            flight_score += 20
+            flight_reasons.append("business travel")
+        
+        if flight_score >= 40:
+            travel_class = "Business Class" if travel_style == 'business' or lifestyle_type == 'luxury' else "Premium Economy"
+            
             recommendations.append({
                 'id': 2,
                 'service_type': 'Flight Booking',
-                'reason': 'Great flight deals for frequent travelers and explorers',
-                'match_score': 92,
+                'reason': f'Ideal for {", ".join(flight_reasons)}.',
+                'match_score': min(90, flight_score),
                 'metadata': {
-                    'price': '₹4,000-25,000',
-                    'routes': 'Domestic & International',
-                    'class': travel_style.title()
+                    'price': '₹5,000-50,000',
+                    'class': travel_class,
+                    'routes': 'Domestic & International'
                 }
             })
 
-        # Car recommendations
-        if cab_type in ['luxury', 'premium', 'suv'] or group_size > 3:
+        # 3. CAR RECOMMENDATIONS
+        car_score = 0
+        car_reasons = []
+        
+        if typical_group_size > 3:
+            car_score += 25
+            car_reasons.append(f"group of {typical_group_size}")
+        
+        if preferred_cab_type == 'luxury' or lifestyle_type == 'luxury':
+            car_score += 30
+            car_reasons.append("luxury preference")
+        elif preferred_cab_type in ['suv', 'sedan']:
+            car_score += 20
+            car_reasons.append(f"{preferred_cab_type} preference")
+        
+        if 'cab' in preferred_services:
+            car_score += 25
+            car_reasons.append("preferred service")
+        
+        if car_score >= 40:
+            cab_type = "Luxury Cabs" if preferred_cab_type == 'luxury' else f"{preferred_cab_type.title()} Cabs"
+            
             recommendations.append({
                 'id': 3,
                 'service_type': 'Car Booking',
-                'reason': f'Ideal for groups of {group_size} with {cab_type.title()} preference',
-                'match_score': 90,
+                'reason': f'Best for {", ".join(car_reasons)}.',
+                'match_score': min(85, car_score),
                 'metadata': {
-                    'price': '₹1,800-4,000/trip',
-                    'vehicle': cab_type.title(),
-                    'capacity': f'Up to {group_size + 2} passengers'
+                    'price': '₹1,500-5,000/trip',
+                    'vehicle': cab_type,
+                    'capacity': f'Up to {max(4, typical_group_size)} passengers'
                 }
             })
 
-        # Technician recommendations
+        # 4. TECHNICIAN RECOMMENDATIONS
         if home_owner:
+            tech_score = 60
+            tech_reasons = ["home owner"]
+            
+            # Add bonus for interests
+            home_interests = ['tech', 'fitness', 'music', 'art']
+            if any(i in interests for i in home_interests):
+                tech_score += 15
+                tech_reasons.append("home maintenance needs")
+            
+            if 'technician' in preferred_services:
+                tech_score += 20
+                tech_reasons.append("preferred service")
+            
             recommendations.append({
                 'id': 4,
                 'service_type': 'Technician Booking',
-                'reason': 'Verified technicians for maintenance and repairs at your home',
-                'match_score': 88,
+                'reason': f'Essential for {", ".join(tech_reasons)}.',
+                'match_score': min(90, tech_score),
                 'metadata': {
-                    'price': '₹600-2,000',
+                    'price': '₹500-2,000',
                     'availability': 'Same-day & Emergency',
-                    'services': 'AC, Plumbing, Electrical'
+                    'services': 'AC, Plumbing, Electrical, Carpentry'
                 }
             })
 
-        # Courier recommendations
-        if any(word in ' '.join(interests).lower() for word in ['business', 'shopping', 'ecommerce', 'send']):
+        # 5. COURIER RECOMMENDATIONS
+        courier_score = 0
+        courier_reasons = []
+        
+        if 'courier' in preferred_services:
+            courier_score += 40
+            courier_reasons.append("preferred service")
+        
+        if travel_style == 'business' or profile.get('profession', '') in ['business', 'working', 'freelancer']:
+            courier_score += 25
+            courier_reasons.append(f"{profession} needs")
+        
+        if monthly_budget in ['medium', 'high', 'premium']:
+            courier_score += 15
+            courier_reasons.append("express delivery budget")
+        
+        if courier_score >= 40:
+            delivery_type = "Express Delivery" if monthly_budget in ['high', 'premium'] else "Standard Delivery"
+            
             recommendations.append({
                 'id': 5,
                 'service_type': 'Courier Booking',
-                'reason': 'Fast, reliable delivery for business or personal packages',
-                'match_score': 85,
+                'reason': f'Useful for {", ".join(courier_reasons)}.',
+                'match_score': min(80, courier_score),
                 'metadata': {
-                    'price': '₹60-300/kg',
-                    'delivery': 'Same-day & Express',
-                    'tracking': 'Real-time GPS'
+                    'price': '₹100-500',
+                    'delivery': delivery_type,
+                    'tracking': 'Real-time GPS Tracking'
                 }
             })
+
+        # If no specific recommendations, show generic ones
+        if not recommendations:
+            # Generic recommendations based on common needs
+            generic_recs = [
+                {
+                    'id': 6,
+                    'service_type': 'Hotel Booking',
+                    'reason': 'Great for weekend getaways and business trips',
+                    'match_score': 75,
+                    'metadata': {
+                        'price': '₹3,000-15,000/night',
+                        'location': 'Popular Destinations',
+                        'amenities': 'Basic to Premium'
+                    }
+                },
+                {
+                    'id': 7,
+                    'service_type': 'Car Booking',
+                    'reason': 'Convenient for local travel and airport transfers',
+                    'match_score': 70,
+                    'metadata': {
+                        'price': '₹1,000-3,000/trip',
+                        'vehicle': 'Standard to Luxury',
+                        'capacity': 'Up to 4 passengers'
+                    }
+                }
+            ]
+            recommendations = generic_recs
+
+        # Sort by match score (highest first) and limit to 5
+        recommendations.sort(key=lambda x: x['match_score'], reverse=True)
+        recommendations = recommendations[:5]
 
         return jsonify({
             'success': True,
             'has_profile': True,
-            'recommendations': recommendations[:5],
-            'new_recommendations': len(recommendations)
+            'recommendations': recommendations,
+            'new_recommendations': len(recommendations),
+            'profile_summary': {
+                'travel_style': travel_style,
+                'lifestyle_type': lifestyle_type,
+                'interests_count': len(interests),
+                'preferred_services': preferred_services
+            }
         })
 
     except Exception as e:
@@ -3584,143 +3824,126 @@ def api_nearby_services():
 @app.route('/api/chatbot', methods=['POST'])
 @login_required
 def api_chatbot():
-    """Handle chatbot conversations - IMPROVED VERSION"""
+    """Interactive Concierge Chatbot with City Options & Quick Buttons"""
     try:
         data = request.json
-        user_message = data.get('message', '').strip()
-        user_id = current_user.get_id()
-        
-        if not user_message:
-            return jsonify({
-                'success': False,
-                'error': 'Message is required'
-            }), 400
-        
-        logger.info(f"Chatbot message from user {user_id}: {user_message}")
-        
-        # Get user profile for context
-        profile = get_user_profile(user_id)
-        
-        # Improved response system
-        message_lower = user_message.lower()
-        
-        # Greeting responses
-        if any(word in message_lower for word in ['hi', 'hello', 'hey', 'greetings', 'good morning', 'good afternoon', 'good evening']):
-            responses = [
-                "Hello! 👋 I'm your Concierge Lifestyle assistant. How can I help you today?",
-                "Hi there! 🌟 Ready to book something amazing? Ask me anything!",
-                "Hey! 😊 I'm here to help with hotels, flights, cabs, and more. What do you need?",
-                "Good day! 🎯 What can I assist you with today?"
-            ]
-            bot_response = random.choice(responses)
-            
-        # Hotel queries
-        elif any(word in message_lower for word in ['hotel', 'accommodation', 'stay', 'room', 'lodge']):
-            bot_response = "🏨 Looking for a hotel? I can help! Which city are you planning to visit? We have luxury and budget options in Mumbai, Pune, and many more cities. Just let me know your destination!"
-            
-        # Flight queries
-        elif any(word in message_lower for word in ['flight', 'fly', 'airplane', 'plane', 'travel', 'trip', 'ticket']):
-            bot_response = "✈️ Planning a trip? Let me help you find the perfect flight! Where would you like to go? I can search domestic and international flights with great deals."
-            
-        # Car/Cab queries
-        elif any(word in message_lower for word in ['cab', 'car', 'taxi', 'ride', 'driver', 'transport']):
-            bot_response = "🚗 Need a ride? We have economy, luxury, and SUV options available. Where would you like to go? I can arrange pickup and drop-off anywhere!"
-            
-        # Technician queries
-        elif any(word in message_lower for word in ['technician', 'repair', 'fix', 'plumb', 'electric', 'ac', 'broken', 'maintenance']):
-            bot_response = "🔧 Having technical issues at home? Our verified technicians can help with AC repair, plumbing, electrical work, carpentry, and more. What needs fixing?"
-            
-        # Courier queries
-        elif any(word in message_lower for word in ['courier', 'delivery', 'send', 'package', 'parcel', 'ship']):
-            bot_response = "📦 Need to send something? Our courier services offer same-day delivery! Where do you want to send your package?"
-            
-        # Price queries
-        elif any(word in message_lower for word in ['price', 'cost', 'expensive', 'cheap', 'rate', 'charge', 'fee']):
-            bot_response = "💰 Prices vary by service:\n• Hotels: ₹2,000-15,000/night\n• Flights: ₹3,000-50,000\n• Cabs: ₹1,000-3,000/trip\n• Technicians: ₹500-2,000\n• Courier: ₹50-500\n\nWhich service interests you?"
-            
-        # Recommendation queries
-        elif any(word in message_lower for word in ['recommend', 'suggest', 'what should', 'advice', 'best']):
-            if profile and profile.get('interests'):
-                bot_response = "💡 Based on your lifestyle profile, I have personalized recommendations for you! Check out the 'AI Suggestions' section for tailored services just for you."
-            else:
-                bot_response = "💡 I'd love to give you personalized recommendations! Please complete your lifestyle profile first in the 'AI Suggestions' section, then I can suggest the best services based on your preferences."
-        
-        # Profile queries
-        elif any(word in message_lower for word in ['profile', 'lifestyle', 'preferences', 'setting', 'account']):
-            if profile and profile.get('interests'):
-                interests = profile.get('interests', '').split(',')
-                bot_response = f"📋 Your profile shows you're interested in: {', '.join(interests)}. You can update it anytime from the 'AI Suggestions' section!"
-            else:
-                bot_response = "📋 You haven't completed your lifestyle profile yet. Click on 'AI Suggestions' and then 'Complete Profile' to get personalized recommendations tailored to your interests!"
-                
-        # Booking status queries
-        elif any(word in message_lower for word in ['booking', 'reservation', 'status', 'order', 'request']):
-            bot_response = "📅 To check your bookings, go to 'My Requests' section. You can see all your active bookings, payment status, and download tickets there!"
-            
-        # Location/Nearby queries
-        elif any(word in message_lower for word in ['near', 'nearby', 'close', 'around', 'location']):
-            bot_response = "📍 Check the 'Nearby' section to find services close to your current location! We'll show you hotels, technicians, and more based on your GPS location."
-            
-        # Payment queries
-        elif any(word in message_lower for word in ['payment', 'pay', 'cash', 'card', 'online']):
-            bot_response = "💳 We accept multiple payment methods! After booking, you'll see payment options. For now, it's a simulated system to demonstrate the booking process."
-            
-        # Cancel queries
-        elif any(word in message_lower for word in ['cancel', 'refund', 'return']):
-            bot_response = "🔄 To cancel a booking, go to 'My Requests' and select your booking. Free cancellation is available up to 48 hours before check-in/service time!"
-            
-        # Help queries
-        elif any(word in message_lower for word in ['help', 'how', 'what can you', 'feature', 'service']):
-            bot_response = """🎯 I can help you with:
-• Hotel bookings in major cities
-• Flight bookings (domestic & international)
-• Luxury cab services
-• Home repair technicians
-• Courier & delivery services
-• Personalized AI recommendations
-• Track your bookings
+        if not data or 'message' not in data:
+            return jsonify({'success': False, 'error': 'Message required'}), 400
 
-Just tell me what you need!"""
-            
-        # Thank you / Goodbye
-        elif any(word in message_lower for word in ['thank', 'thanks', 'appreciate', 'bye', 'goodbye']):
-            responses = [
-                "You're welcome! 😊 Anything else I can help with?",
-                "Happy to help! 🌟 Let me know if you need anything else.",
-                "My pleasure! 👍 Feel free to ask if you have more questions.",
-                "Glad I could help! 🎉 Have a great day!"
+        user_message = data.get('message', '').strip()
+        if not user_message:
+            return jsonify({'success': False, 'error': 'Empty message'}), 400
+
+        user_id = current_user.get_id()
+        logger.info(f"Chatbot message from user {user_id}: {user_message}")
+
+        # Safe profile loading (handles string/list interests)
+        profile = None
+        first_name = "there"
+        interests = []
+
+        try:
+            profile = get_user_profile(user_id)
+            if profile:
+                raw_name = profile.get('first_name')
+                if raw_name and str(raw_name).strip() not in ['None', 'null', '']:
+                    first_name = str(raw_name).strip().capitalize()
+
+                raw_interests = profile.get('interests')
+                if raw_interests:
+                    if isinstance(raw_interests, str):
+                        interests = [i.strip().capitalize() for i in raw_interests.split(',') if i.strip()]
+                    elif isinstance(raw_interests, (list, tuple)):
+                        interests = [str(i).strip().capitalize() for i in raw_interests if str(i).strip()]
+        except Exception as e:
+            logger.warning(f"Profile error for {user_id}: {e}")
+
+        message_lower = user_message.lower()
+        words = set(message_lower.split())
+
+        # === INTERACTIVE RESPONSES WITH OPTIONS ===
+        if any(k in message_lower for k in ['hotel', 'stay', 'accommodation', 'room', 'resort']):
+            bot_response = (
+                f"🏨 Wonderful choice, {first_name}! We specialize in luxury stays in three exclusive destinations:\n\n"
+                "Which city would you like to explore?"
+            )
+            quick_replies = [
+                {"title": "🌆 Mumbai", "payload": "hotel_mumbai"},
+                {"title": "🏙️ Pune", "payload": "hotel_pune"},
+                {"title": "🍷 Nashik", "payload": "hotel_nashik"}
             ]
-            bot_response = random.choice(responses)
-            
-        # Yes/No responses
-        elif message_lower in ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay']:
-            bot_response = "Great! 😊 What would you like to do? I can help you book hotels, flights, cabs, technicians, or couriers. Just let me know!"
-            
-        elif message_lower in ['no', 'nope', 'not now']:
-            bot_response = "No problem! 👍 I'm here whenever you need help. Just ask!"
-            
-        # Default - More flexible response
+
+        elif any(k in message_lower for k in ['flight', 'fly', 'plane', 'ticket']):
+            bot_response = (
+                "✈️ Ready for takeoff in style?\n\n"
+                "We handle domestic & international flights with premium seating.\n"
+                "Where would you like to fly from and to?"
+            )
+            quick_replies = [
+                {"title": "Search Flights", "payload": "search_flights"},
+                {"title": "Business Class Deals", "payload": "business_class"}
+            ]
+
+        elif any(k in message_lower for k in ['cab', 'taxi', 'car', 'ride', 'chauffeur']):
+            bot_response = (
+                "🚗 Your luxury ride awaits!\n\n"
+                "Choose from Mercedes, BMW, Audi, or Limousine with professional chauffeurs."
+            )
+            quick_replies = [
+                {"title": "Airport Transfer", "payload": "airport_cab"},
+                {"title": "City Tour", "payload": "city_cab"},
+                {"title": "Outstation Trip", "payload": "outstation_cab"}
+            ]
+
+        elif any(k in message_lower for k in ['technician', 'repair', 'fix', 'ac', 'plumber', 'electrician']):
+            bot_response = (
+                "🔧 Expert home care incoming!\n\n"
+                "Our verified technicians are available for same-day service."
+            )
+            quick_replies = [
+                {"title": "AC Repair", "payload": "ac_repair"},
+                {"title": "Plumbing", "payload": "plumbing"},
+                {"title": "Electrical", "payload": "electrical"},
+                {"title": "Other Issue", "payload": "other_repair"}
+            ]
+
+        elif any(k in message_lower for k in ['courier', 'delivery', 'send', 'package']):
+            bot_response = (
+                "📦 Lightning-fast delivery!\n\n"
+                "Same-day & express options available across cities."
+            )
+            quick_replies = [
+                {"title": "Same-Day Delivery", "payload": "same_day_courier"},
+                {"title": "Document Courier", "payload": "document_courier"},
+                {"title": "Fragile/Heavy Parcel", "payload": "heavy_courier"}
+            ]
+
         else:
-            # Try to extract keywords
-            if len(user_message.split()) <= 3:
-                # Short message - give general help
-                bot_response = f"I see you mentioned '{user_message}'. 🤔 I can help you with:\n• Hotels & Accommodations\n• Flight Bookings\n• Cab Services\n• Technicians & Repairs\n• Courier Services\n\nWhich one interests you?"
-            else:
-                # Longer message - more conversational
-                bot_response = "I understand you're asking about something, but I'm not quite sure what you need. 🤔 Could you rephrase that? I'm here to help with:\n\n✈️ Flights\n🏨 Hotels\n🚗 Cabs\n🔧 Technicians\n📦 Couriers\n\nWhat are you looking for?"
-        
+            # General greeting or fallback with main options
+            bot_response = (
+                f"Hello {first_name}! 👋\n\n"
+                "How may I assist you today?"
+            )
+            quick_replies = [
+                {"title": "🏨 Hotels", "payload": "hotels"},
+                {"title": "✈️ Flights", "payload": "flights"},
+                {"title": "🚗 Luxury Cabs", "payload": "cabs"},
+                {"title": "🔧 Home Repairs", "payload": "technician"},
+                {"title": "📦 Courier", "payload": "courier"}
+            ]
+
         return jsonify({
             'success': True,
             'response': bot_response,
+            'quick_replies': quick_replies,  # Your frontend can render these as buttons!
             'timestamp': datetime.now().isoformat()
         })
-        
+
     except Exception as e:
-        logger.error(f"Chatbot error: {str(e)}")
+        logger.error(f"Chatbot critical error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
-            'error': str(e),
-            'response': "Sorry, I'm having trouble right now. Please try again or go directly to the Services section to make a booking!"
+            'response': "I'm having a brief technical moment. Please try again or visit Services directly."
         }), 500
 
 @app.route('/api/book-nearby-service', methods=['POST'])
