@@ -1039,6 +1039,15 @@
 
         // Initialize
         updateProgress();
+
+        // Handle form submission with loading state
+        document.getElementById('lifestyle-form').addEventListener('submit', function(e) {
+            const btn = document.getElementById('btn-submit');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="material-icons" style="animation: spin 1s linear infinite;">sync</i> Saving Profile...';
+            
+            // Allow the form to submit naturally to /save_lifestyle
+        });
     </script>
 </body>
 </html>

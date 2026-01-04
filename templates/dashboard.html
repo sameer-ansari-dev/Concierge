@@ -25,6 +25,172 @@
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+  <style>
+    /* Professional Profile Header Styles */
+    .profile-header-card {
+      position: relative;
+      background: #ffffff;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      margin-bottom: 30px;
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    .profile-cover {
+      height: 120px;
+      background: linear-gradient(135deg, #2c3e50, #3498db);
+      position: relative;
+    }
+
+    .profile-content-wrapper {
+      padding: 0 30px 30px;
+      display: flex;
+      align-items: flex-end;
+      margin-top: -50px;
+      gap: 25px;
+    }
+
+    .profile-avatar-section {
+      position: relative;
+    }
+
+    .avatar-container {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      border: 4px solid #ffffff;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      position: relative;
+      background: #f8f9fa;
+      overflow: hidden;
+    }
+
+    .profile-avatar {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .profile-avatar-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #ecf0f1;
+      color: #95a5a6;
+    }
+
+    .avatar-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.6);
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      cursor: pointer;
+    }
+
+    .avatar-container:hover .avatar-overlay {
+      opacity: 1;
+    }
+
+    .avatar-upload-label {
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+
+    .profile-info-section {
+      flex: 1;
+      padding-bottom: 5px;
+    }
+
+    .profile-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 2rem;
+      font-weight: 700;
+      color: #2c3e50;
+      margin: 0 0 5px 0;
+    }
+
+    .profile-email {
+      color: #7f8c8d;
+      font-size: 0.95rem;
+      margin: 0 0 10px 0;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .profile-badges {
+      display: flex;
+      gap: 10px;
+    }
+
+    .badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .badge-verified {
+      background: #e8f5e9;
+      color: #27ae60;
+    }
+
+    .badge-member {
+      background: #e3f2fd;
+      color: #2980b9;
+    }
+
+    .price-reason-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.8rem;
+      padding: 2px 8px;
+      background: #fff3e0;
+      color: #e67e22;
+      border-radius: 12px;
+      font-weight: 600;
+      border: 1px solid #ffe0b2;
+    }
+
+    @media (max-width: 600px) {
+      .profile-content-wrapper {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        margin-top: -60px;
+      }
+
+      .profile-info-section {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .profile-email {
+        justify-content: center;
+      }
+    }
+  </style>
 </head>
 
 <body>
@@ -80,30 +246,32 @@
 
   <div class="dashboard-container">
     <!-- Sidebar -->
+
     <div class="sidebar" id="sidebar">
       <h2 class="logo">Concierge</h2>
       <ul class="sidebar-menu">
-        <li><a href="javascript:void(0)" onclick="showSection('welcome-section'); setActive(this)" class="active">
+        <li><a href="javascript:void(0)" onclick="showSection('welcome-section'); setActiveMenuItem(this);"
+            class="active">
             <i class="material-icons">home</i>
             <span>Home</span>
           </a></li>
-        <li><a href="javascript:void(0)" onclick="showSection('recommendations-section'); setActive(this)">
+        <li><a href="javascript:void(0)" onclick="showSection('recommendations-section'); setActiveMenuItem(this);">
             <i class="material-icons">star</i>
             <span>AI Suggestions</span>
           </a></li>
-        <li><a href="javascript:void(0)" onclick="showSection('requests-section'); setActive(this)">
+        <li><a href="javascript:void(0)" onclick="showSection('requests-section'); setActiveMenuItem(this);">
             <i class="material-icons">calendar_today</i>
             <span>My Requests</span>
           </a></li>
-        <li><a href="javascript:void(0)" onclick="showSection('services-section'); setActive(this)">
+        <li><a href="javascript:void(0)" onclick="showSection('services-section'); setActiveMenuItem(this);">
             <i class="material-icons">business_center</i>
             <span>Services</span>
           </a></li>
-        <li><a href="javascript:void(0)" onclick="showSection('nearby-section'); setActive(this)">
+        <li><a href="javascript:void(0)" onclick="showSection('nearby-section'); setActiveMenuItem(this);">
             <i class="material-icons">near_me</i>
             <span>Nearby</span>
           </a></li>
-        <li><a href="javascript:void(0)" onclick="showSection('contact-section'); setActive(this)">
+        <li><a href="javascript:void(0)" onclick="showSection('contact-section'); setActiveMenuItem(this);">
             <i class="material-icons">person</i>
             <span>My Profile</span>
           </a></li>
@@ -228,9 +396,18 @@
               <h2>Services Near You</h2>
               <p class="section-subtitle">Discover local options based on your location</p>
             </div>
-            <button class="btn refresh-btn" onclick="findNearbyServices()">
-              <i class="material-icons">my_location</i> Update Location
-            </button>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <div class="radius-control"
+                style="display: flex; align-items: center; gap: 10px; background: white; padding: 5px 15px; border-radius: 20px; border: 1px solid #ddd;">
+                <span style="font-size: 0.9rem; color: #666;">Radius:</span>
+                <input type="range" id="radiusSlider" min="1" max="50" value="10" onchange="updateRadius(this.value)"
+                  style="width: 100px;">
+                <span id="radiusValue" style="font-size: 0.9rem; font-weight: bold; width: 40px;">10km</span>
+              </div>
+              <button class="btn refresh-btn" onclick="findNearbyServices()">
+                <i class="material-icons">my_location</i> Update Location
+              </button>
+            </div>
           </div>
 
           <!-- Location Status -->
@@ -273,6 +450,32 @@
             <button class="btn refresh-btn" onclick="refreshRequests()">
               <i class="material-icons">refresh</i> Refresh
             </button>
+          </div>
+
+          <!-- Filters -->
+          <div class="requests-filters"
+            style="display: flex; gap: 15px; margin-bottom: 20px; align-items: center; flex-wrap: wrap;">
+            <div class="search-box" style="position: relative; flex: 1; min-width: 200px;">
+              <i class="material-icons"
+                style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #666;">search</i>
+              <input type="text" id="requestSearch" placeholder="Search bookings..." onkeyup="filterRequests()"
+                style="width: 100%; padding: 10px 10px 10px 35px; border: 1px solid #ddd; border-radius: 8px; font-family: inherit;">
+            </div>
+            <select id="serviceFilter" onchange="filterRequests()"
+              style="padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-family: inherit; background: white;">
+              <option value="all">All Services</option>
+              <option value="Hotel Booking">Hotel</option>
+              <option value="Flight Booking">Flight</option>
+              <option value="Car Booking">Car</option>
+              <option value="Technician Booking">Technician</option>
+              <option value="Courier Booking">Courier</option>
+            </select>
+            <select id="statusFilter" onchange="filterRequests()"
+              style="padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-family: inherit; background: white;">
+              <option value="all">All Status</option>
+              <option value="Confirmed">Confirmed</option>
+              <option value="Pending">Pending</option>
+            </select>
           </div>
 
           <div id="requests-table-container">
@@ -446,7 +649,8 @@
               <i class="material-icons">hotel</i>
               <h2>Book Your Stay</h2>
             </div>
-            <form action="{{ url_for('submit_hotel_booking') }}" method="POST" class="booking-form">
+            <form action="{{ url_for('submit_hotel_booking') }}" method="POST" class="booking-form"
+              onsubmit="return validateHotelForm(this)">
               <div class="field">
                 <label><i class="material-icons">location_city</i> Destination</label>
                 <input type="text" name="destination" placeholder="Enter City" required>
@@ -721,7 +925,6 @@
           </div>
         </div>
       </div>
-
       <!-- Contact Section -->
       <div id="contact-section" class="main-content-section">
         <div class="contact-container">
@@ -729,6 +932,52 @@
             <div>
               <h2>My Profile</h2>
               <p class="section-subtitle">Manage your contact information</p>
+            </div>
+          </div>
+
+          <div class="profile-header-card">
+            <div class="profile-cover"></div>
+            <div class="profile-content-wrapper">
+              <div class="profile-avatar-section">
+                <div class="avatar-container">
+                  {% if contact.profile_picture %}
+                  <img src="{{ url_for('static', filename='uploads/profile_pictures/' + contact.profile_picture) }}"
+                    alt="Profile" class="profile-avatar"
+                    onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name={{ contact.name or user }}&background=random&size=200';">
+                  {% else %}
+                  <div class="profile-avatar-placeholder">
+                    <i class="material-icons" style="font-size: 48px;">person</i>
+                  </div>
+                  {% endif %}
+
+                  <div class="avatar-overlay">
+                    <form action="{{ url_for('upload_profile_picture') }}" method="POST" enctype="multipart/form-data"
+                      id="avatarForm">
+                      <label for="profile_picture_input" class="avatar-upload-label" title="Change Profile Picture">
+                        <i class="material-icons">camera_alt</i>
+                      </label>
+                      <input type="file" id="profile_picture_input" name="profile_picture" accept="image/*"
+                        onchange="document.getElementById('avatarForm').submit()" style="display: none;">
+                    </form>
+                  </div>
+                </div>
+              </div>
+
+              <div class="profile-info-section">
+                <h1 class="profile-name">{{ contact.name or user }}</h1>
+                <p class="profile-email">
+                  <i class="material-icons" style="font-size: 16px;">email</i>
+                  {{ contact.email }}
+                </p>
+                <div class="profile-badges">
+                  <span class="badge badge-verified">
+                    <i class="material-icons" style="font-size: 14px;">verified</i> Verified User
+                  </span>
+                  <span class="badge badge-member">
+                    <i class="material-icons" style="font-size: 14px;">star</i> Premium Member
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -849,576 +1098,772 @@
 
   <!-- Inline critical JavaScript -->
   <script>
-    // ============================================
-    // CONCIERGE LIFESTYLE - DASHBOARD JAVASCRIPT
-    // Complete functionality for AI-powered dashboard
-    // ============================================
+  // ============================================
+  // CONCIERGE LIFESTYLE - DASHBOARD JAVASCRIPT
+  // COMPLETELY FIXED VERSION - December 2024
+  // ============================================
 
-    // Global variables
-    let socket;
-    const currentUserId = document.body.dataset.userId || "{{ current_user_id }}";
-    let unreadNotifications = 0;
-    let userLocation = null;
-    let map = null;
-    let userMarker = null;
+  // Global variables
+  let socket;
+  const currentUserId = "{{ current_user_id }}" || null;
+  let unreadNotifications = 0;
+  let userLocation = null;
+  let map = null;
+  let userMarker = null;
+  let chatbotOpen = false;
+  let currentActiveSection = 'welcome-section';
 
-    // ============================================
-    // INITIALIZATION
-    // ============================================
+  // ============================================
+  // INITIALIZATION
+  // ============================================
 
-    document.addEventListener('DOMContentLoaded', function () {
-      console.log('Dashboard initializing...');
+  document.addEventListener('DOMContentLoaded', function () {
+    console.log('🚀 Dashboard initializing...');
 
-      // Initialize all components
-      initDatePickers();
-      initSidebar();
-      initSocket();
-      getUserLocation();
+    // Initialize all core components
+    initDatePickers();
+    initSidebar();
+    initSocket();
+    initNavigation();
+    
+    // Start background services
+    getUserLocation();
+    
+    // Load initial data
+    fetchLifestyleRecommendations();
+    fetchNearbyServices();
+    
+    // Set default active section
+    setTimeout(() => {
+      showSection('welcome-section');
+    }, 100);
 
-      // Auto-hide flash messages
-      setTimeout(() => {
-        document.querySelectorAll('.flash-messages .toast').forEach(toast => {
-          toast.style.animation = 'slideOut 0.3s ease forwards';
-          setTimeout(() => toast.remove(), 300);
-        });
-      }, 5000);
-    });
+    // Auto-hide flash messages
+    setTimeout(() => {
+      document.querySelectorAll('.flash-messages .toast').forEach(toast => {
+        toast.style.animation = 'slideOut 0.3s ease forwards';
+        setTimeout(() => toast.remove(), 300);
+      });
+    }, 5000);
+  });
 
-    // ============================================
-    // WEBSOCKET CONNECTION
-    // ============================================
+  // ============================================
+  // FIXED NAVIGATION SYSTEM
+  // ============================================
 
-    function initSocket() {
-      try {
-        socket = io();
-
-        socket.on('connect', function () {
-          console.log('Connected to server');
-          socket.emit('user_connect', { user_id: currentUserId });
-        });
-
-        socket.on('booking_confirmed', function (data) {
-          showToast(data.message || 'Booking confirmed!', 'success');
-          addNotification(
-            'Booking Confirmed',
-            data.message || 'Your booking has been confirmed',
-            'check_circle',
-            'success'
-          );
-        });
-
-        socket.on('ticket_ready', function (data) {
-          showToast('Your PDF ticket is ready for download!', 'success');
-          addNotification(
-            'PDF Ticket Ready',
-            'Your ticket is now available. Click to download.',
-            'picture_as_pdf',
-            'info'
-          );
-        });
-
-        socket.on('payment_confirmed', function (data) {
-          showToast('Payment confirmed successfully!', 'success');
-          addNotification(
-            'Payment Confirmed',
-            data.message || 'Your payment has been processed',
-            'payment',
-            'success'
-          );
-        });
-
-        socket.on('recommendation_ready', function (data) {
-          showToast('New AI recommendation available!', 'info');
-          addNotification(
-            'AI Recommendation',
-            data.message || 'We have a new suggestion for you',
-            'lightbulb',
-            'recommendation'
-          );
-        });
-
-      } catch (error) {
-        console.error('Socket initialization error:', error);
-      }
-    }
-
-    // ============================================
-    // NOTIFICATION MANAGEMENT
-    // ============================================
-
-    function addNotification(title, message, icon = 'notifications', type = 'info') {
-      const notificationList = document.getElementById('notification-list');
-
-      // Remove empty state if exists
-      const emptyState = notificationList.querySelector('.notification-item.empty');
-      if (emptyState) {
-        emptyState.remove();
-      }
-
-      const notificationId = Date.now();
-      const div = document.createElement('div');
-      div.className = `notification-item unread ${type}`;
-      div.setAttribute('data-id', notificationId);
-
-      div.innerHTML = `
-        <i class="material-icons">${icon}</i>
-        <div class="notification-content">
-            <p><strong>${title}</strong></p>
-            <p>${message}</p>
-            <span class="notification-time">Just now</span>
-        </div>
-        <button class="delete-notification-btn" onclick="deleteNotification(${notificationId})" title="Delete">
-            <i class="material-icons">close</i>
-        </button>
-    `;
-
-      notificationList.insertBefore(div, notificationList.firstChild);
-      unreadNotifications++;
-      updateNotificationCount();
-
-      // Auto-scroll to top
-      notificationList.scrollTop = 0;
-    }
-
-    function deleteNotification(notificationId) {
-      if (confirm('Delete this notification?')) {
-        const notification = document.querySelector(`.notification-item[data-id="${notificationId}"]`);
-        if (notification) {
-          // Animate out
-          notification.style.animation = 'slideOut 0.3s ease forwards';
-          setTimeout(() => {
-            notification.remove();
-
-            // Update count if was unread
-            if (notification.classList.contains('unread')) {
-              unreadNotifications = Math.max(0, unreadNotifications - 1);
-              updateNotificationCount();
+  function initNavigation() {
+    console.log('🔄 Initializing navigation...');
+    
+    // Set up event listeners for all navigation links
+    document.querySelectorAll('.sidebar-menu a, .quick-action-btn').forEach(element => {
+      if (element.classList.contains('quick-action-btn')) {
+        // Quick action buttons
+        element.addEventListener('click', function(e) {
+          e.preventDefault();
+          const onclick = this.getAttribute('onclick');
+          if (onclick) {
+            const sectionMatch = onclick.match(/showSection\('([^']+)'\)/);
+            if (sectionMatch && sectionMatch[1]) {
+              const sectionId = sectionMatch[1];
+              navigateToSection(sectionId);
             }
-
-            // Check if list is empty
-            const notificationList = document.getElementById('notification-list');
-            if (notificationList.children.length === 0) {
-              notificationList.innerHTML = `
-                        <div class="notification-item empty">
-                            <div class="notification-content">
-                                <p>No notifications yet.</p>
-                            </div>
-                        </div>
-                    `;
-            }
-          }, 300);
-        }
-      }
-    }
-
-    function markAllAsRead() {
-      fetch('/mark-notifications-read', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            document.querySelectorAll('.notification-item.unread').forEach(item => {
-              item.classList.remove('unread');
-            });
-            unreadNotifications = 0;
-            updateNotificationCount();
-            showToast('All notifications marked as read', 'success');
           }
-        })
-        .catch(error => {
-          console.error('Error marking all as read:', error);
         });
-    }
-
-    function clearAllNotifications() {
-      if (!confirm('Clear all notifications? This cannot be undone.')) {
-        return;
-      }
-
-      const notificationItems = document.querySelectorAll('.notification-item:not(.empty)');
-      const notificationIds = Array.from(notificationItems).map(item => item.getAttribute('data-id'));
-
-      // Clear UI
-      const notificationList = document.getElementById('notification-list');
-      notificationList.innerHTML = `
-        <div class="notification-item empty">
-            <div class="notification-content">
-                <p>No notifications yet.</p>
-            </div>
-        </div>
-    `;
-
-      unreadNotifications = 0;
-      updateNotificationCount();
-      showToast('All notifications cleared', 'success');
-    }
-
-    function toggleNotifications() {
-      const dropdown = document.getElementById('notification-dropdown');
-      dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
-
-      if (dropdown.style.display === 'block') {
-        refreshNotifications();
-      }
-    }
-
-    function refreshNotifications() {
-      fetch('/get-unread-count')
-        .then(response => response.json())
-        .then(data => {
-          unreadNotifications = data.unread_count || 0;
-          updateNotificationCount();
-        })
-        .catch(error => {
-          console.error('Error fetching notifications:', error);
-        });
-    }
-
-    function updateNotificationCount() {
-      const countElement = document.getElementById('notification-count');
-      if (unreadNotifications > 0) {
-        countElement.style.display = 'block';
-        countElement.textContent = unreadNotifications > 99 ? '99+' : unreadNotifications;
       } else {
-        countElement.style.display = 'none';
-      }
-    }
-
-    // Close notification dropdown when clicking outside
-    document.addEventListener('click', function (event) {
-      const bell = document.querySelector('.notification-bell');
-      const dropdown = document.getElementById('notification-dropdown');
-
-      if (bell && dropdown && !bell.contains(event.target) && !dropdown.contains(event.target)) {
-        dropdown.style.display = 'none';
+        // Sidebar menu links
+        element.addEventListener('click', function(e) {
+          e.preventDefault();
+          const onclick = this.getAttribute('onclick');
+          if (onclick) {
+            const sectionMatch = onclick.match(/showSection\('([^']+)'\)/);
+            if (sectionMatch && sectionMatch[1]) {
+              const sectionId = sectionMatch[1];
+              navigateToSection(sectionId);
+            }
+          }
+        });
       }
     });
+    
+    console.log('✅ Navigation initialized');
+  }
 
-    // ============================================
-    // GEOLOCATION & MAP
-    // ============================================
+  function navigateToSection(sectionId) {
+    console.log(`📍 Navigating to: ${sectionId}`);
+    
+    // Update current active section
+    currentActiveSection = sectionId;
+    
+    // Update active menu item
+    updateActiveMenuItem(sectionId);
+    
+    // Show the section
+    showSection(sectionId);
+  }
 
-    function getUserLocation() {
-      if (!navigator.geolocation) {
-        console.warn('Geolocation not supported');
-        updateLocationDisplay('Geolocation not supported');
-        return;
-      }
+  function updateActiveMenuItem(sectionId) {
+    // Remove active class from all sidebar items
+    document.querySelectorAll('.sidebar-menu a').forEach(item => {
+      item.classList.remove('active');
+    });
+    
+    // Add active class to the clicked item
+    const targetItem = document.querySelector(`.sidebar-menu a[onclick*="${sectionId}"]`);
+    if (targetItem) {
+      targetItem.classList.add('active');
+    }
+  }
 
-      updateLocationDisplay('Detecting location...');
+  function showSection(sectionId) {
+    console.log(`🎯 Showing section: ${sectionId}`);
+    
+    // Hide all sections with smooth transition
+    document.querySelectorAll('.main-content-section').forEach(section => {
+      section.classList.remove('active');
+      section.style.opacity = '0';
+      section.style.pointerEvents = 'none';
+    });
+    
+    // Show target section
+    const targetSection = document.getElementById(sectionId);
+    if (targetSection) {
+      targetSection.classList.add('active');
+      setTimeout(() => {
+        targetSection.style.opacity = '1';
+        targetSection.style.pointerEvents = 'all';
+      }, 10);
+      
+      // Load section-specific content
+      loadSectionContent(sectionId);
+      
+      // Scroll to top
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      console.error(`❌ Section not found: ${sectionId}`);
+      showToast('Section not available', 'error');
+    }
+  }
 
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          userLocation = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          };
-
-          console.log('Location detected:', userLocation);
-          reverseGeocode(userLocation.lat, userLocation.lng);
-        },
-        (error) => {
-          console.error('Geolocation error:', error);
-          let message = 'Unable to detect location';
-
-          switch (error.code) {
-            case error.PERMISSION_DENIED:
-              message = 'Location access denied';
-              break;
-            case error.POSITION_UNAVAILABLE:
-              message = 'Location unavailable';
-              break;
-            case error.TIMEOUT:
-              message = 'Location request timeout';
-              break;
+  function loadSectionContent(sectionId) {
+    console.log(`📦 Loading content for: ${sectionId}`);
+    
+    switch(sectionId) {
+      case 'nearby-section':
+        setTimeout(() => {
+          if (!map && typeof initMap === 'function') {
+            initMap();
           }
-
-          updateLocationDisplay(message);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
+          if (typeof fetchNearbyServices === 'function') {
+            fetchNearbyServices();
+          }
+        }, 100);
+        break;
+        
+      case 'recommendations-section':
+        if (typeof fetchLifestyleRecommendations === 'function') {
+          setTimeout(fetchLifestyleRecommendations, 100);
         }
-      );
-    }
-
-    async function reverseGeocode(lat, lng) {
-      try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`
-        );
-
-        if (!response.ok) {
-          throw new Error('Geocoding failed');
+        break;
+        
+      case 'requests-section':
+        if (typeof filterRequests === 'function') {
+          setTimeout(filterRequests, 100);
         }
+        break;
+        
+      case 'services-section':
+        setTimeout(() => {
+          if (typeof initDatePickers === 'function') {
+            initDatePickers();
+          }
+        }, 200);
+        break;
+    }
+  }
 
-        const data = await response.json();
-        const city = data.address.city || data.address.town || data.address.village || 'Unknown';
-        const state = data.address.state || '';
-        const country = data.address.country || '';
+  // ============================================
+  // SIDEBAR FUNCTIONS
+  // ============================================
 
-        const locationString = `${city}${state ? ', ' + state : ''}`;
-        updateLocationDisplay(locationString);
-
-        // Save to backend
-        saveUserLocation(city, state, country, lat, lng);
-
-      } catch (error) {
-        console.error('Reverse geocoding error:', error);
-        updateLocationDisplay(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+  function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const hamburger = document.querySelector('.hamburger');
+    
+    if (sidebar) {
+      sidebar.classList.toggle('active');
+      if (hamburger) {
+        hamburger.classList.toggle('active');
       }
     }
+  }
 
-    function updateLocationDisplay(text) {
-      // Update sidebar location
-      const sidebarLocation = document.getElementById('location-text');
-      if (sidebarLocation) {
-        sidebarLocation.textContent = text;
-      }
+  function initSidebar() {
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', function (event) {
+      const sidebar = document.getElementById('sidebar');
+      const hamburger = document.querySelector('.hamburger');
 
-      // Update nearby section location
-      const currentLocationName = document.getElementById('current-location-name');
-      if (currentLocationName) {
-        currentLocationName.textContent = text;
-      }
-
-      const currentLocationCoords = document.getElementById('current-location-coords');
-      if (currentLocationCoords && userLocation) {
-        currentLocationCoords.textContent = `${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}`;
-      }
-    }
-
-    async function saveUserLocation(city, state, country, lat, lng) {
-      try {
-        const response = await fetch('/api/save-location', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            city: city,
-            state: state,
-            country: country,
-            latitude: lat,
-            longitude: lng
-          })
-        });
-
-        if (response.ok) {
-          console.log('Location saved successfully');
+      if (window.innerWidth <= 768 && sidebar && hamburger) {
+        if (!sidebar.contains(event.target) && 
+            !hamburger.contains(event.target) &&
+            sidebar.classList.contains('active')) {
+          sidebar.classList.remove('active');
+          hamburger.classList.remove('active');
         }
-      } catch (error) {
-        console.error('Error saving location:', error);
       }
-    }
+    });
+  }
 
-    function initMap() {
-      if (!userLocation) {
-        getUserLocation();
-        return;
-      }
+  // ============================================
+  // WEBSOCKET CONNECTION
+  // ============================================
 
-      const mapElement = document.getElementById('map');
-      if (!mapElement) {
-        console.error('Map element not found');
-        return;
-      }
+  function initSocket() {
+    try {
+      socket = io();
 
-      // Initialize Leaflet map
-      if (map) {
-        map.remove(); // Remove existing map
-      }
-
-      map = L.map('map').setView([userLocation.lat, userLocation.lng], 13);
-
-      // Add tile layer (OpenStreetMap)
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 19
-      }).addTo(map);
-
-      // Add user marker
-      const customIcon = L.divIcon({
-        className: 'custom-marker',
-        html: '<div style="background: #d4af37; width: 30px; height: 30px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"></div>',
-        iconSize: [30, 30],
-        iconAnchor: [15, 15]
+      socket.on('connect', () => {
+        console.log('🔌 Connected to server');
+        if (currentUserId) {
+          socket.emit('user_connect', { user_id: currentUserId });
+        }
       });
 
-      userMarker = L.marker([userLocation.lat, userLocation.lng], { icon: customIcon })
-        .addTo(map)
-        .bindPopup('<b>You are here</b>')
-        .openPopup();
+      socket.on('booking_confirmed', data => {
+        showToast(data.message || 'Booking confirmed!', 'success');
+        addNotification(
+          'Booking Confirmed',
+          data.message || 'Your booking has been confirmed',
+          'check_circle',
+          'success'
+        );
+      });
 
-      // Fetch and display nearby services
-      fetchNearbyServices();
+      socket.on('ticket_ready', data => {
+        showToast('Your PDF ticket is ready for download!', 'success');
+        addNotification(
+          'PDF Ticket Ready',
+          'Your ticket is now available. Click to download.',
+          'picture_as_pdf',
+          'info'
+        );
+      });
+
+      socket.on('payment_confirmed', data => {
+        showToast('Payment confirmed successfully!', 'success');
+        addNotification(
+          'Payment Confirmed',
+          data.message || 'Your payment has been processed',
+          'payment',
+          'success'
+        );
+      });
+
+      socket.on('recommendation_ready', data => {
+        showToast('New AI recommendation available!', 'info');
+        addNotification(
+          'AI Recommendation',
+          data.message || 'We have a new suggestion for you',
+          'lightbulb',
+          'recommendation'
+        );
+      });
+
+      // Incoming chat messages
+      socket.on('new_chat_message', data => {
+        if (data.sender_id !== currentUserId) {
+          if (!chatbotOpen) {
+            const badge = document.getElementById('chatbot-notification');
+            if (badge) {
+              badge.style.display = 'flex';
+              badge.textContent = (parseInt(badge.textContent || '0') + 1).toString();
+            }
+          }
+          addBotMessage(data.message, true);
+        }
+      });
+
+      socket.on('disconnect', () => {
+        console.log('⚠️ Disconnected from server');
+      });
+
+    } catch (error) {
+      console.error('Socket error:', error);
+    }
+  }
+
+  // ============================================
+  // NOTIFICATION MANAGEMENT
+  // ============================================
+
+  function addNotification(title, message, icon = 'notifications', type = 'info') {
+    const list = document.getElementById('notification-list');
+    const empty = list.querySelector('.notification-item.empty');
+    
+    if (empty) {
+      empty.remove();
     }
 
-    function findNearbyServices() {
-      if (!userLocation) {
-        showToast('Detecting location...', 'info');
-        getUserLocation();
-        setTimeout(() => {
-          if (userLocation) {
-            findNearbyServices();
-          }
-        }, 2000);
-        return;
+    const id = Date.now();
+    const item = document.createElement('div');
+    item.className = `notification-item unread ${type}`;
+    item.dataset.id = id;
+    item.innerHTML = `
+      <i class="material-icons">${icon}</i>
+      <div class="notification-content">
+        <p><strong>${title}</strong></p>
+        <p>${message}</p>
+        <span class="notification-time">Just now</span>
+      </div>
+      <button class="delete-notification-btn" onclick="deleteNotification(${id})" title="Delete">
+        <i class="material-icons">close</i>
+      </button>
+    `;
+    
+    list.insertBefore(item, list.firstChild);
+    unreadNotifications++;
+    updateNotificationCount();
+  }
+
+  function deleteNotification(id) {
+    if (!confirm('Delete this notification?')) return;
+    
+    const item = document.querySelector(`.notification-item[data-id="${id}"]`);
+    if (item) {
+      item.style.animation = 'slideOut 0.3s ease forwards';
+      setTimeout(() => {
+        item.remove();
+        if (item.classList.contains('unread')) {
+          unreadNotifications = Math.max(0, unreadNotifications - 1);
+          updateNotificationCount();
+        }
+        checkEmptyNotifications();
+      }, 300);
+    }
+  }
+
+  function checkEmptyNotifications() {
+    const list = document.getElementById('notification-list');
+    if (!list.children.length) {
+      list.innerHTML = `
+        <div class="notification-item empty">
+          <div class="notification-content">
+            <p>No notifications yet.</p>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  function markAllAsRead() {
+    fetch('/mark-notifications-read', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          document.querySelectorAll('.notification-item.unread').forEach(item => {
+            item.classList.remove('unread');
+          });
+          unreadNotifications = 0;
+          updateNotificationCount();
+          showToast('All marked as read', 'success');
+        }
+      })
+      .catch(error => {
+        console.error('Error marking as read:', error);
+        showToast('Failed to mark as read', 'error');
+      });
+  }
+
+  function clearAllNotifications() {
+    if (!confirm('Clear all notifications? This cannot be undone.')) return;
+    
+    fetch('/clear-all-notifications', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          const list = document.getElementById('notification-list');
+          list.innerHTML = `
+            <div class="notification-item empty">
+              <div class="notification-content">
+                <p>No notifications yet.</p>
+              </div>
+            </div>
+          `;
+          unreadNotifications = 0;
+          updateNotificationCount();
+          showToast('All notifications cleared', 'success');
+        }
+      })
+      .catch(error => {
+        console.error('Error clearing notifications:', error);
+        showToast('Failed to clear notifications', 'error');
+      });
+  }
+
+  function toggleNotifications() {
+    const dropdown = document.getElementById('notification-dropdown');
+    const currentDisplay = dropdown.style.display || 'none';
+    dropdown.style.display = currentDisplay === 'none' ? 'block' : 'none';
+    
+    if (dropdown.style.display === 'block') {
+      refreshNotifications();
+    }
+  }
+
+  function refreshNotifications() {
+    fetch('/get-unread-count')
+      .then(response => response.json())
+      .then(data => {
+        unreadNotifications = data.unread_count || 0;
+        updateNotificationCount();
+      })
+      .catch(error => {
+        console.error('Error fetching notifications:', error);
+      });
+  }
+
+  function updateNotificationCount() {
+    const countElement = document.getElementById('notification-count');
+    if (unreadNotifications > 0) {
+      countElement.style.display = 'block';
+      countElement.textContent = unreadNotifications > 99 ? '99+' : unreadNotifications.toString();
+    } else {
+      countElement.style.display = 'none';
+    }
+  }
+
+  // Close notification dropdown when clicking outside
+  document.addEventListener('click', function (event) {
+    const bell = document.querySelector('.notification-bell');
+    const dropdown = document.getElementById('notification-dropdown');
+
+    if (bell && dropdown && !bell.contains(event.target) && !dropdown.contains(event.target)) {
+      dropdown.style.display = 'none';
+    }
+  });
+
+  // ============================================
+  // GEOLOCATION & MAP
+  // ============================================
+
+  function getUserLocation() {
+    if (!navigator.geolocation) {
+      updateLocationDisplay('Geolocation not supported');
+      showToast('Geolocation not supported by your browser', 'warning');
+      return;
+    }
+
+    updateLocationDisplay('Detecting location...');
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        userLocation = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+        console.log('📍 Location detected:', userLocation);
+        reverseGeocode(userLocation.lat, userLocation.lng);
+        
+        // Update nearby services count
+        fetchNearbyServices();
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        let message = 'Location access denied';
+        
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            message = 'Location access denied. Using default location.';
+            userLocation = { lat: 19.0760, lng: 72.8777 }; // Mumbai
+            break;
+          case error.POSITION_UNAVAILABLE:
+            message = 'Location information unavailable';
+            break;
+          case error.TIMEOUT:
+            message = 'Location request timeout';
+            break;
+        }
+        
+        updateLocationDisplay(message);
+        showToast(message, 'warning');
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
+  }
+
+  async function reverseGeocode(lat, lng) {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`
+      );
+      
+      if (!response.ok) throw new Error('Geocoding failed');
+      
+      const data = await response.json();
+      const city = data.address.city || data.address.town || data.address.village || 'Unknown';
+      const state = data.address.state || '';
+      const country = data.address.country || '';
+      
+      const locationString = `${city}${state ? ', ' + state : ''}`;
+      updateLocationDisplay(locationString);
+      
+      // Save to backend
+      saveUserLocation(city, state, country, lat, lng);
+      
+    } catch (error) {
+      console.error('Reverse geocoding error:', error);
+      updateLocationDisplay(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+    }
+  }
+
+  function updateLocationDisplay(text) {
+    // Update all location elements
+    ['location-text', 'current-location-name'].forEach(id => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = text;
+    });
+    
+    // Update coordinates if available
+    const coordsElement = document.getElementById('current-location-coords');
+    if (coordsElement && userLocation) {
+      coordsElement.textContent = `${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}`;
+    }
+  }
+
+  async function saveUserLocation(city, state, country, lat, lng) {
+    try {
+      await fetch('/api/save-location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          city, state, country,
+          latitude: lat,
+          longitude: lng
+        })
+      });
+      console.log('📍 Location saved');
+    } catch (error) {
+      console.error('Error saving location:', error);
+    }
+  }
+
+  function initMap() {
+    if (!userLocation) {
+      getUserLocation();
+      return;
+    }
+
+    const mapElement = document.getElementById('map');
+    if (!mapElement) {
+      console.error('Map element not found');
+      return;
+    }
+
+    // Remove existing map if present
+    if (map) {
+      map.remove();
+    }
+
+    // Initialize new map
+    map = L.map('map').setView([userLocation.lat, userLocation.lng], 13);
+    
+    // Add tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19
+    }).addTo(map);
+
+    // Add user marker
+    const customIcon = L.divIcon({
+      className: 'custom-marker',
+      html: '<div style="background: #d4af37; width: 30px; height: 30px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"></div>',
+      iconSize: [30, 30],
+      iconAnchor: [15, 15]
+    });
+
+    userMarker = L.marker([userLocation.lat, userLocation.lng], { icon: customIcon })
+      .addTo(map)
+      .bindPopup('<b>You are here</b>')
+      .openPopup();
+
+    // Add nearby services to map
+    addServiceMarkersToMap([]); // Will be populated by fetchNearbyServices
+  }
+
+  function findNearbyServices() {
+    if (!userLocation) {
+      showToast('Detecting location...', 'info');
+      getUserLocation();
+      setTimeout(() => {
+        if (userLocation) findNearbyServices();
+      }, 2000);
+      return;
+    }
+
+    // Show nearby section
+    navigateToSection('nearby-section');
+    
+    // Initialize map if not already
+    if (!map) {
+      initMap();
+    }
+    
+    showToast('Searching for nearby services...', 'info');
+  }
+
+  // ============================================
+  // AI RECOMMENDATIONS
+  // ============================================
+
+  async function fetchLifestyleRecommendations() {
+    const grid = document.getElementById('recommendations-grid');
+    if (!grid) return;
+
+    try {
+      const response = await fetch('/api/lifestyle-recommendations');
+      
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
       }
 
-      // Show nearby section
-      showSection('nearby-section');
-      const link = document.querySelector('[onclick*="nearby-section"]');
-      if (link) setActive(link);
-
-      // Initialize map
-      initMap();
-
-      showToast('Searching for nearby services...', 'info');
-    }
-
-    // ============================================
-    // AI RECOMMENDATIONS
-    // ============================================
-
-    async function fetchLifestyleRecommendations() {
-      const grid = document.getElementById('recommendations-grid');
-
-      try {
-        // Show loading state
-        grid.innerHTML = `
-            <div class="loading-state" style="grid-column: 1 / -1;">
-                <div class="spinner-large"></div>
-                <p>Generating personalized recommendations...</p>
-            </div>
-        `;
-
-        const response = await fetch('/api/lifestyle-recommendations');
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        if (!data.success) {
-          throw new Error(data.message || 'Failed to load recommendations');
-        }
-
-        if (!data.has_profile) {
-          displayEmptyRecommendations();
-          return;
+      const data = await response.json();
+      
+      if (data.success) {
+        // Update recommendation count
+        const countElement = document.getElementById('recommendation-count');
+        if (countElement) {
+          countElement.textContent = data.recommendations?.length || 0;
         }
 
         if (data.recommendations && data.recommendations.length > 0) {
           displayRecommendations(data.recommendations);
-
-          // Update count
-          const countElement = document.getElementById('recommendation-count');
-          if (countElement) {
-            countElement.textContent = data.recommendations.length;
-          }
-        } else {
+        } else if (data.has_profile === false) {
           displayEmptyRecommendations();
+        } else {
+          displayEmptyRecommendations('No recommendations available yet.');
         }
-      } catch (error) {
-        console.error('Error fetching recommendations:', error);
-        displayErrorRecommendations(error.message);
+      } else {
+        displayErrorRecommendations(data.message || 'Unable to generate recommendations.');
       }
+    } catch (error) {
+      console.error('Error fetching recommendations:', error);
+      displayErrorRecommendations('Failed to load recommendations. Please try again.');
     }
+  }
 
-    function displayRecommendations(recommendations) {
-      const grid = document.getElementById('recommendations-grid');
+  function displayRecommendations(recommendations) {
+    const grid = document.getElementById('recommendations-grid');
+    if (!grid) return;
 
-      if (!recommendations || recommendations.length === 0) {
-        displayEmptyRecommendations();
-        return;
-      }
-
-      grid.innerHTML = recommendations.map((rec, index) => `
-        <div class="recommendation-card" style="animation: fadeInUp 0.5s ease ${index * 0.1}s forwards; opacity: 0;">
-            <div class="recommendation-header">
-                <i class="material-icons">${getServiceIcon(rec.service_type)}</i>
-                <h3>${rec.service_type}</h3>
-            </div>
-            <div class="recommendation-score">
-                ${rec.match_score || '95'}% Match
-            </div>
-            <p>${rec.reason || rec.description}</p>
-            ${rec.metadata ? `
-                <div class="recommendation-meta">
-                    ${rec.metadata.price ? `<span><i class="material-icons">payments</i>${rec.metadata.price}</span>` : ''}
-                    ${rec.metadata.duration ? `<span><i class="material-icons">schedule</i>${rec.metadata.duration}</span>` : ''}
-                    ${rec.metadata.location ? `<span><i class="material-icons">location_on</i>${rec.metadata.location}</span>` : ''}
-                </div>
-            ` : ''}
-            <div class="recommendation-actions">
-                <button class="btn-primary" onclick="bookRecommendedService('${rec.service_type}', ${index})">
-                    <i class="material-icons">check</i> Book Now
-                </button>
-                <button class="btn-secondary" onclick="dismissRecommendation(${rec.id})">
-                    <i class="material-icons">close</i> Dismiss
-                </button>
-            </div>
+    grid.innerHTML = recommendations.map((rec, index) => `
+      <div class="recommendation-card" style="animation: fadeInUp 0.5s ease ${index * 0.1}s forwards; opacity: 0;">
+        <div class="recommendation-header">
+          <i class="material-icons">${getServiceIcon(rec.service_type)}</i>
+          <h3>${rec.service_type}</h3>
         </div>
+        <div class="recommendation-score">
+          ${rec.match_score || '95'}% Match
+        </div>
+        <p>${rec.reason || rec.description || 'Personalized recommendation based on your preferences'}</p>
+        ${rec.metadata ? `
+          <div class="recommendation-meta">
+            ${rec.metadata.price ? `<span><i class="material-icons">payments</i>${rec.metadata.price}</span>` : ''}
+            ${rec.metadata.price_reason ? `<span class="price-reason-badge"><i class="material-icons">trending_up</i>${rec.metadata.price_reason}</span>` : ''}
+            ${rec.metadata.duration ? `<span><i class="material-icons">schedule</i>${rec.metadata.duration}</span>` : ''}
+          </div>
+        ` : ''}
+        <div class="recommendation-actions">
+          <button class="btn-primary" onclick="bookRecommendedService('${rec.service_type.replace(/'/g, "\\'")}')">
+            <i class="material-icons">check</i> Book Now
+          </button>
+          <button class="btn-secondary" onclick="dismissRecommendation(${rec.id || index})">
+            <i class="material-icons">close</i> Dismiss
+          </button>
+        </div>
+      </div>
     `).join('');
-    }
+  }
 
-    function displayEmptyRecommendations() {
-      const grid = document.getElementById('recommendations-grid');
-      grid.innerHTML = `
-        <div class="empty-state" style="grid-column: 1 / -1;">
-            <i class="material-icons">psychology</i>
-            <h3>Complete Your Profile</h3>
-            <p>Fill out your lifestyle preferences to get personalized AI recommendations</p>
-            <button class="btn-primary" onclick="window.location.href='/lifestyle_form'">
-                <i class="material-icons">edit</i> Complete Profile
-            </button>
-        </div>
+  function displayEmptyRecommendations(message = 'Complete your profile to get personalized recommendations') {
+    const grid = document.getElementById('recommendations-grid');
+    if (!grid) return;
+
+    grid.innerHTML = `
+      <div class="empty-state" style="grid-column: 1 / -1;">
+        <i class="material-icons">psychology</i>
+        <h3>${message.includes('profile') ? 'Complete Your Profile' : 'No Recommendations'}</h3>
+        <p>${message}</p>
+        ${message.includes('profile') ? 
+          `<button class="btn-primary" onclick="window.location.href='/lifestyle_form'">
+            <i class="material-icons">edit</i> Complete Profile
+          </button>` : 
+          `<button class="btn-primary" onclick="fetchLifestyleRecommendations()">
+            <i class="material-icons">refresh</i> Refresh
+          </button>`
+        }
+      </div>
     `;
-    }
+  }
 
-    function displayErrorRecommendations(errorMessage) {
-      const grid = document.getElementById('recommendations-grid');
-      grid.innerHTML = `
-        <div class="empty-state" style="grid-column: 1 / -1;">
-            <i class="material-icons">error_outline</i>
-            <h3>Unable to load recommendations</h3>
-            <p>${errorMessage || 'Please try again later'}</p>
-            <button class="btn-primary" onclick="fetchLifestyleRecommendations()">
-                <i class="material-icons">refresh</i> Retry
-            </button>
-        </div>
+  function displayErrorRecommendations(errorMessage) {
+    const grid = document.getElementById('recommendations-grid');
+    if (!grid) return;
+
+    grid.innerHTML = `
+      <div class="empty-state" style="grid-column: 1 / -1;">
+        <i class="material-icons">error_outline</i>
+        <h3>Unable to load recommendations</h3>
+        <p>${errorMessage || 'Please try again later'}</p>
+        <button class="btn-primary" onclick="fetchLifestyleRecommendations()">
+          <i class="material-icons">refresh</i> Retry
+        </button>
+      </div>
     `;
-    }
+  }
 
-    function bookRecommendedService(serviceType) {
-      // Get user's current location (from sidebar or stored)
-      const locationText = document.getElementById('location-text')?.textContent || 'Mumbai';
-      const city = locationText.split(',')[0].trim();
+  function getServiceIcon(serviceType) {
+    const icons = {
+      'Hotel Booking': 'hotel',
+      'Flight Booking': 'flight',
+      'Car Booking': 'directions_car',
+      'Luxury Cabs': 'directions_car',
+      'Technician Booking': 'build',
+      'Handyman Services': 'build',
+      'Courier Booking': 'local_shipping',
+      'Courier & Delivery': 'local_shipping'
+    };
+    return icons[serviceType] || 'business_center';
+  }
 
-      let url = '';
-      let params = new URLSearchParams();
+  function bookRecommendedService(serviceType) {
+    const locationText = document.getElementById('location-text')?.textContent || 'Mumbai';
+    const city = locationText.split(',')[0].trim();
 
-      if (serviceType.includes('Hotel')) {
+    let url = '';
+    let params = new URLSearchParams();
+
+    switch(serviceType) {
+      case 'Hotel Booking':
         url = '/submit-hotel-booking';
         params.set('destination', city);
         params.set('checkin', getTomorrowDate());
         params.set('checkout', getDayAfterTomorrowDate());
         params.set('rooms', '1');
         params.set('guests', '2');
-
-      } else if (serviceType.includes('Flight')) {
+        break;
+      case 'Flight Booking':
         url = '/submit-travel-booking';
         params.set('origin', city);
-        params.set('destination', 'Delhi'); // default popular
+        params.set('destination', 'Delhi');
         params.set('departure_date', getIn7Days());
         params.set('adults', '1');
-
-      } else if (serviceType.includes('Car') || serviceType.includes('Cab')) {
+        break;
+      case 'Car Booking':
+      case 'Luxury Cabs':
         url = '/submit_car_booking';
         params.set('pickup', locationText);
         params.set('dropoff', `${city} Airport`);
@@ -1426,16 +1871,18 @@
         params.set('pickup_time', '10:00');
         params.set('passengers', '2');
         params.set('cab_class', 'luxury');
-
-      } else if (serviceType.includes('Technician') || serviceType.includes('Handyman')) {
+        break;
+      case 'Technician Booking':
+      case 'Handyman Services':
         url = '/submit-technician-booking';
         params.set('location', locationText);
         params.set('service_date', getTomorrowDate());
         params.set('service_time', '14:00');
         params.set('service_type', 'ac_repair');
         params.set('urgency', 'normal');
-
-      } else if (serviceType.includes('Courier')) {
+        break;
+      case 'Courier Booking':
+      case 'Courier & Delivery':
         url = '/submit_courier_booking';
         params.set('pickup', locationText);
         params.set('dropoff', `${city} Downtown`);
@@ -1443,110 +1890,105 @@
         params.set('pickup_time', '11:00');
         params.set('package_weight', '2.0');
         params.set('courier_type', 'express');
-      }
+        break;
+    }
 
-      if (url) {
-        window.location.href = `${url}?${params.toString()}`;
-        showToast(`Searching best ${serviceType} options for you in ${city}...`, 'info');
+    if (url) {
+      window.location.href = `${url}?${params.toString()}`;
+      showToast(`Finding best ${serviceType} options in ${city}...`, 'info');
+    } else {
+      showToast('Service coming soon!', 'warning');
+    }
+  }
+
+  function getTomorrowDate() {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  }
+
+  function getDayAfterTomorrowDate() {
+    const d = new Date();
+    d.setDate(d.getDate() + 2);
+    return d.toISOString().split('T')[0];
+  }
+
+  function getIn7Days() {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().split('T')[0];
+  }
+
+  async function dismissRecommendation(recommendationId) {
+    if (!confirm('Dismiss this recommendation?')) return;
+
+    try {
+      const response = await fetch('/api/dismiss-recommendation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recommendation_id: recommendationId })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        showToast('Recommendation dismissed', 'success');
+        fetchLifestyleRecommendations();
       } else {
-        showToast('Service coming soon!', 'warning');
-      }
-    }
-
-    // Helper functions for dates
-    function getTomorrowDate() {
-      const d = new Date();
-      d.setDate(d.getDate() + 1);
-      return d.toISOString().split('T')[0];
-    }
-
-    function getDayAfterTomorrowDate() {
-      const d = new Date();
-      d.setDate(d.getDate() + 2);
-      return d.toISOString().split('T')[0];
-    }
-
-    function getIn7Days() {
-      const d = new Date();
-      d.setDate(d.getDate() + 7);
-      return d.toISOString().split('T')[0];
-    }
-
-    async function dismissRecommendation(recommendationId) {
-      if (!confirm('Dismiss this recommendation?')) {
-        return;
-      }
-
-      try {
-        const response = await fetch('/api/dismiss-recommendation', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ recommendation_id: recommendationId })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          showToast('Recommendation dismissed', 'success');
-          fetchLifestyleRecommendations();
-        } else {
-          showToast('Failed to dismiss recommendation', 'error');
-        }
-      } catch (error) {
-        console.error('Error dismissing recommendation:', error);
         showToast('Failed to dismiss recommendation', 'error');
       }
+    } catch (error) {
+      console.error('Error dismissing recommendation:', error);
+      showToast('Failed to dismiss recommendation', 'error');
     }
+  }
 
-    function refreshRecommendations() {
-      const btn = document.querySelector('.recommendations-container .refresh-btn');
-      if (btn) {
-        btn.innerHTML = '<div class="spinner"></div> Refreshing...';
-        btn.disabled = true;
-      }
+  function refreshRecommendations() {
+    const btn = document.querySelector('.recommendations-container .refresh-btn');
+    if (btn) {
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML = '<div class="spinner"></div> Refreshing...';
+      btn.disabled = true;
 
-      fetchLifestyleRecommendations()
-        .finally(() => {
-          if (btn) {
-            setTimeout(() => {
-              btn.innerHTML = '<i class="material-icons">refresh</i> Refresh';
-              btn.disabled = false;
-            }, 1000);
-          }
-        });
+      fetchLifestyleRecommendations();
+
+      setTimeout(() => {
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+      }, 1000);
     }
+  }
 
-    // ============================================
-    // REQUESTS MANAGEMENT
-    // ============================================
+  // ============================================
+  // REQUESTS MANAGEMENT
+  // ============================================
 
-    async function refreshRequests() {
-      const container = document.getElementById('requests-table-container');
-      const refreshBtn = document.querySelector('.requests-container .refresh-btn');
+  async function refreshRequests() {
+    const container = document.getElementById('requests-table-container');
+    const refreshBtn = document.querySelector('.requests-container .refresh-btn');
 
-      if (refreshBtn) {
-        refreshBtn.innerHTML = '<div class="spinner"></div> Refreshing...';
-        btn.disabled = true;
-      }
+    if (refreshBtn) {
+      const originalHTML = refreshBtn.innerHTML;
+      refreshBtn.innerHTML = '<div class="spinner"></div> Refreshing...';
+      refreshBtn.disabled = true;
 
       try {
         const response = await fetch('/user/requests');
         const data = await response.json();
 
         if (data.requests && data.requests.length > 0) {
-          // Reload page to update table
           window.location.reload();
         } else {
           container.innerHTML = `
-                <div class="empty-state">
-                    <i class="material-icons">event_busy</i>
-                    <h3>No bookings yet</h3>
-                    <p>Book your first service to see it here</p>
-                    <button class="btn-primary" onclick="showSection('services-section'); setActive(document.querySelector('[onclick*=services-section]'))">
-                        Browse Services
-                    </button>
-                </div>
-            `;
+            <div class="empty-state">
+              <i class="material-icons">event_busy</i>
+              <h3>No bookings yet</h3>
+              <p>Book your first service to see it here</p>
+              <button class="btn-primary" onclick="navigateToSection('services-section')">
+                Browse Services
+              </button>
+            </div>
+          `;
         }
 
         showToast('Requests refreshed', 'success');
@@ -1555,520 +1997,485 @@
         console.error('Error refreshing requests:', error);
         showToast('Failed to refresh requests', 'error');
       } finally {
-        if (refreshBtn) {
-          setTimeout(() => {
-            refreshBtn.innerHTML = '<i class="material-icons">refresh</i> Refresh';
-            refreshBtn.disabled = false;
-          }, 1000);
-        }
-      }
-    }
-
-    function downloadPDFTicket(pdfUrl) {
-      if (!pdfUrl) {
-        showToast('PDF ticket not available yet', 'error');
-        return;
-      }
-
-      // Create temporary link and trigger download
-      const link = document.createElement('a');
-      link.href = pdfUrl;
-      link.download = pdfUrl.split('/').pop() || 'ticket.pdf';
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      showToast('Downloading PDF ticket...', 'success');
-    }
-
-    function requestTicket(bookingId, serviceType) {
-      showToast('Requesting PDF ticket from admin...', 'info');
-
-      if (socket && socket.connected) {
-        socket.emit('request_ticket', {
-          booking_id: bookingId,
-          service_type: serviceType,
-          user_id: currentUserId
-        });
-
         setTimeout(() => {
-          showToast('Ticket request sent! You will be notified when ready.', 'success');
+          refreshBtn.innerHTML = originalHTML;
+          refreshBtn.disabled = false;
         }, 1000);
-      } else {
-        // Fallback to HTTP request
-        fetch('/admin/send-ticket', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            booking_id: bookingId,
-            user_id: currentUserId
-          })
+      }
+    }
+  }
+
+  function downloadPDFTicket(pdfUrl) {
+    if (!pdfUrl) {
+      showToast('PDF ticket not available yet', 'error');
+      return;
+    }
+
+    const link = document.createElement('a');
+    link.href = pdfUrl;
+    link.download = pdfUrl.split('/').pop() || 'ticket.pdf';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showToast('Downloading PDF ticket...', 'success');
+  }
+
+  function requestTicket(bookingId, serviceType) {
+    showToast('Requesting PDF ticket from admin...', 'info');
+
+    if (socket && socket.connected) {
+      socket.emit('request_ticket', {
+        booking_id: bookingId,
+        service_type: serviceType,
+        user_id: currentUserId
+      });
+
+      setTimeout(() => {
+        showToast('Ticket request sent! You will be notified when ready.', 'success');
+      }, 1000);
+    } else {
+      fetch('/admin/send-ticket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_id: bookingId,
+          user_id: currentUserId
         })
-          .then(response => response.json())
-          .then(data => {
-            if (data.success) {
-              showToast('PDF ticket request sent to admin!', 'success');
-            } else {
-              showToast('Error: ' + (data.error || 'Unknown error'), 'error');
-            }
-          })
-          .catch(error => {
-            console.error('Error requesting ticket:', error);
-            showToast('Error requesting ticket', 'error');
-          });
-      }
-    }
-
-    // ============================================
-    // UI INTERACTIONS
-    // ============================================
-
-    function toggleSidebar() {
-      const sidebar = document.getElementById('sidebar');
-      sidebar.classList.toggle('active');
-    }
-
-    function showSection(sectionId) {
-      // Hide all sections
-      document.querySelectorAll('.main-content-section').forEach(section => {
-        section.classList.remove('active');
-      });
-
-      // Show selected section
-      const section = document.getElementById(sectionId);
-      if (section) {
-        section.classList.add('active');
-
-        // Scroll to top
-        document.querySelector('.main').scrollTo(0, 0);
-
-        // Special initialization for certain sections
-        if (sectionId === 'nearby-section') {
-          setTimeout(() => {
-            initMap();
-          }, 100);
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          showToast('PDF ticket request sent to admin!', 'success');
+        } else {
+          showToast('Error: ' + (data.error || 'Unknown error'), 'error');
         }
-
-        if (sectionId === 'recommendations-section') {
-          setTimeout(() => {
-            fetchLifestyleRecommendations();
-          }, 100);
-        }
-
-        // If showing services section, ensure it's fully loaded
-        if (sectionId === 'services-section') {
-          setTimeout(() => {
-            // Re-initialize any date pickers in service modals
-            initDatePickers();
-          }, 100);
-        }
-      }
-    }
-
-    function setActive(element) {
-      document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
-      if (element) {
-        element.classList.add('active');
-      }
-    }
-
-    function initSidebar() {
-      // Close sidebar when clicking outside on mobile
-      document.addEventListener('click', function (event) {
-        const sidebar = document.getElementById('sidebar');
-        const hamburger = document.querySelector('.hamburger');
-
-        if (window.innerWidth <= 768) {
-          if (sidebar && hamburger &&
-            !sidebar.contains(event.target) &&
-            !hamburger.contains(event.target) &&
-            sidebar.classList.contains('active')) {
-            sidebar.classList.remove('active');
-          }
-        }
+      })
+      .catch(error => {
+        console.error('Error requesting ticket:', error);
+        showToast('Error requesting ticket', 'error');
       });
     }
+  }
 
-    // ============================================
-    // MODAL MANAGEMENT
-    // ============================================
-
-    function openModal(id) {
-      const modal = document.getElementById(id + '-modal');
-      if (modal) {
-        modal.style.display = 'block';
-        document.body.style.overflow = 'hidden';
-
-        // Ensure the modal is visible and on top
-        modal.style.opacity = '1';
-        modal.style.zIndex = '9999';
-
-        // Initialize date pickers if they exist in this modal
-        setTimeout(() => {
-          const dateInputs = modal.querySelectorAll('.date-input');
-          if (dateInputs.length > 0 && typeof flatpickr !== 'undefined') {
-            dateInputs.forEach(input => {
-              // Re-initialize date picker if needed
-              if (!input._flatpickr) {
-                flatpickr(input, {
-                  altInput: true,
-                  altFormat: "F j, Y",
-                  dateFormat: "Y-m-d",
-                  minDate: "today"
-                });
-              }
-            });
-          }
-        }, 100);
-      }
-    }
-
-    function closeModal(id) {
-      const modal = document.getElementById(id + '-modal');
-      if (modal) {
-        modal.style.display = 'none';
-        document.body.style.overflow = 'auto';
-      }
-    }
-
-    // Close modal when clicking outside
-    window.addEventListener('click', function (event) {
-      if (event.target.classList.contains('modal')) {
-        event.target.style.display = 'none';
-        document.body.style.overflow = 'auto';
-      }
+  function filterRequests() {
+    const search = document.getElementById('requestSearch')?.value.toLowerCase() || '';
+    const service = document.getElementById('serviceFilter')?.value || 'all';
+    const status = document.getElementById('statusFilter')?.value || 'all';
+    
+    const rows = document.querySelectorAll('.requests-table tbody tr');
+    
+    rows.forEach(row => {
+      const text = row.textContent.toLowerCase();
+      const serviceType = row.querySelector('.service-badge')?.textContent.trim() || '';
+      const statusBadge = row.querySelector('.status-badge')?.textContent.trim() || '';
+      const adminStatus = row.querySelector('.admin-status')?.textContent.trim() || '';
+      
+      const matchesSearch = text.includes(search);
+      const matchesService = service === 'all' || serviceType === service;
+      const matchesStatus = status === 'all' || statusBadge === status || adminStatus === status;
+      
+      row.style.display = matchesSearch && matchesService && matchesStatus ? '' : 'none';
     });
+  }
 
-    // ============================================
-    // FORM UTILITIES
-    // ============================================
+  // ============================================
+  // MODAL MANAGEMENT
+  // ============================================
 
-    function initDatePickers() {
-      flatpickr(".date-input", {
+  function openModal(id) {
+    const modal = document.getElementById(id + '-modal');
+    if (modal) {
+      modal.style.display = 'block';
+      document.body.style.overflow = 'hidden';
+      modal.style.opacity = '1';
+      modal.style.zIndex = '9999';
+
+      // Reinitialize date pickers
+      setTimeout(() => {
+        if (typeof initDatePickers === 'function') {
+          initDatePickers();
+        }
+      }, 150);
+    }
+  }
+
+  function closeModal(id) {
+    const modal = document.getElementById(id + '-modal');
+    if (modal) {
+      modal.style.display = 'none';
+      document.body.style.overflow = 'auto';
+    }
+  }
+
+  // Close modal when clicking outside
+  window.addEventListener('click', function (event) {
+    if (event.target.classList.contains('modal')) {
+      event.target.style.display = 'none';
+      document.body.style.overflow = 'auto';
+    }
+  });
+
+  // ============================================
+  // FORM UTILITIES
+  // ============================================
+
+  function initDatePickers() {
+    document.querySelectorAll('.date-input:not([data-fp-initialized])').forEach(function (input) {
+      const today = new Date();
+      const tomorrow = new Date();
+      tomorrow.setDate(today.getDate() + 1);
+
+      const todayFormatted = today.toISOString().split('T')[0];
+      const tomorrowFormatted = tomorrow.toISOString().split('T')[0];
+
+      const isCheckout = input.name === 'checkout' || 
+                        input.id === 'checkout' ||
+                        input.placeholder?.toLowerCase().includes('check-out');
+
+      let defaultDate = todayFormatted;
+      let minDate = "today";
+
+      if (isCheckout) {
+        defaultDate = tomorrowFormatted;
+        minDate = tomorrowFormatted;
+      }
+
+      flatpickr(input, {
         altInput: true,
         altFormat: "F j, Y",
         dateFormat: "Y-m-d",
-        minDate: "today"
+        minDate: minDate,
+        defaultDate: defaultDate
       });
-    }
 
-    function updateCount(field, change) {
-      const inputId = {
-        "room": "roomCount",
-        "guests": "guestCount",
-        "adults": "adultCount",
-        "children": "childCount",
-        "passengers": "passengerCount"
-      }[field];
-
-      const input = document.getElementById(inputId);
-      if (!input) return;
-
-      let current = parseInt(input.value) || 1;
-      const min = parseInt(input.min) || 0;
-      const max = parseInt(input.max) || Infinity;
-
-      let newValue = current + change;
-      newValue = Math.max(min, Math.min(max, newValue));
-
-      input.value = newValue;
-    }
-
-    function showLoading(btn) {
-      btn.disabled = true;
-      const originalHTML = btn.innerHTML;
-      btn.innerHTML = '<div class="spinner"></div> Loading...';
-
-      // Submit form
-      const form = btn.closest('form');
-      if (form) {
-        setTimeout(() => form.submit(), 100);
+      input.setAttribute('data-fp-initialized', 'true');
+      
+      if (!input.value) {
+        input.value = defaultDate;
       }
+    });
+  }
 
+  function updateCount(field, change) {
+    const inputId = {
+      "room": "roomCount",
+      "guests": "guestCount",
+      "adults": "adultCount",
+      "children": "childCount",
+      "passengers": "passengerCount"
+    }[field];
+
+    const input = document.getElementById(inputId);
+    if (!input) return;
+
+    let current = parseInt(input.value) || 1;
+    const min = parseInt(input.min) || 0;
+    const max = parseInt(input.max) || Infinity;
+
+    let newValue = current + change;
+    newValue = Math.max(min, Math.min(max, newValue));
+
+    input.value = newValue;
+  }
+
+  function showLoading(btn) {
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner"></div> Loading...';
+
+    const form = btn.closest('form');
+    if (form) {
+      setTimeout(() => form.submit(), 100);
+    }
+
+    return false;
+  }
+
+  function validateHotelForm(form) {
+    const destination = form.querySelector('input[name="destination"]');
+    const checkin = form.querySelector('input[name="checkin"]');
+    const checkout = form.querySelector('input[name="checkout"]');
+
+    if (!destination || !destination.value.trim()) {
+      showToast('Please enter destination city', 'error');
+      destination?.focus();
       return false;
     }
 
-    // ============================================
-    // TOAST NOTIFICATIONS
-    // ============================================
-
-    function showToast(message, type = 'success') {
-      const container = document.getElementById('toast-container');
-      if (!container) return;
-
-      const toast = document.createElement('div');
-      toast.className = `toast ${type}`;
-
-      const icon = {
-        success: 'check_circle',
-        error: 'error',
-        warning: 'warning',
-        info: 'info'
-      }[type] || 'notifications';
-
-      toast.innerHTML = `
-        <i class="material-icons">${icon}</i>
-        <span>${message}</span>
-    `;
-
-      container.appendChild(toast);
-
-      // Auto-remove after 4 seconds
-      setTimeout(() => {
-        toast.style.animation = 'slideOut 0.3s ease forwards';
-        setTimeout(() => toast.remove(), 300);
-      }, 4000);
+    if (!checkin || !checkin.value) {
+      showToast('Please select check-in date', 'error');
+      checkin?.focus();
+      return false;
     }
 
-    // ============================================
-    // UTILITY FUNCTIONS
-    // ============================================
+    if (!checkout || !checkout.value) {
+      showToast('Please select check-out date', 'error');
+      checkout?.focus();
+      return false;
+    }
 
-    function getServiceIcon(serviceType) {
-      const icons = {
-        'Hotel Booking': 'hotel',
-        'Flight Booking': 'flight',
-        'Car Booking': 'directions_car',
-        'Luxury Cabs': 'directions_car',
-        'Technician Booking': 'build',
-        'Handyman Services': 'build',
-        'Courier Booking': 'local_shipping',
-        'Courier & Delivery': 'local_shipping'
+    const checkinDate = new Date(checkin.value);
+    const checkoutDate = new Date(checkout.value);
+
+    if (checkoutDate <= checkinDate) {
+      showToast('Check-out date must be after check-in date', 'error');
+      checkout?.focus();
+      return false;
+    }
+
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn) {
+      showLoading(submitBtn);
+    }
+
+    return false;
+  }
+
+  // ============================================
+  // TOAST NOTIFICATIONS
+  // ============================================
+
+  function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+
+    const icon = {
+      success: 'check_circle',
+      error: 'error',
+      warning: 'warning',
+      info: 'info'
+    }[type] || 'notifications';
+
+    toast.innerHTML = `
+      <i class="material-icons">${icon}</i>
+      <span>${message}</span>
+    `;
+
+    container.appendChild(toast);
+
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+      toast.style.animation = 'slideOut 0.3s ease forwards';
+      setTimeout(() => toast.remove(), 300);
+    }, 4000);
+  }
+
+  // ============================================
+  // NEARBY SERVICES
+  // ============================================
+
+  async function fetchNearbyServices(radius = 10) {
+    if (!userLocation) {
+      console.warn('User location not set');
+      getUserLocation();
+      return;
+    }
+
+    const listElement = document.getElementById('nearby-services-list');
+    if (!listElement) return;
+
+    listElement.innerHTML = `
+      <div class="loading-state">
+        <div class="spinner-large"></div>
+        <p>Scanning within ${radius}km...</p>
+      </div>
+    `;
+
+    try {
+      const payload = {
+        lat: userLocation.lat,
+        lng: userLocation.lng,
+        radius: radius
       };
 
-      return icons[serviceType] || 'business_center';
-    }
+      const response = await fetch('/api/nearby-services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
 
-    // ============================================
-    // NEARBY SERVICES FUNCTIONS
-    // ============================================
-
-    async function fetchNearbyServices() {
-      const listElement = document.getElementById('nearby-services-list');
-
-      if (!userLocation) {
-        displayErrorNearbyServices('Location not detected. Please enable location services.');
-        return;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      try {
-        // Show loading
-        listElement.innerHTML = `
-            <div class="loading-state" style="grid-column: 1 / -1;">
-                <div class="spinner-large"></div>
-                <p>Searching for nearby services...</p>
-            </div>
-        `;
+      const data = await response.json();
 
-        const response = await fetch('/api/nearby-services', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(userLocation)
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        console.log('Nearby services response:', data);
-
-        if (!data.success) {
-          throw new Error(data.message || 'Failed to load services');
-        }
-
-        if (data.services && data.services.length > 0) {
-          displayNearbyServices(data.services);
-
-          // Update count
-          const countElement = document.getElementById('nearby-count');
-          if (countElement) {
-            countElement.textContent = data.services.length;
-          }
-
-          // Add markers to map
-          addServiceMarkersToMap(data.services);
-
-          showToast(`Found ${data.services.length} services nearby`, 'success');
-        } else {
-          displayEmptyNearbyServices();
-        }
-      } catch (error) {
-        console.error('Error fetching nearby services:', error);
-        displayErrorNearbyServices(error.message);
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to load services');
       }
-    }
 
-    function displayNearbyServices(services) {
-      const listElement = document.getElementById('nearby-services-list');
+      // Update count
       const countElement = document.getElementById('nearby-count');
-
-      if (countElement) {
-        countElement.textContent = services.length;
+      if (countElement && data.services) {
+        countElement.textContent = data.services.length;
       }
 
-      listElement.innerHTML = services.map((service, index) => `
-        <div class="nearby-service-card" style="animation: fadeInUp 0.5s ease ${index * 0.1}s forwards; opacity: 0;">
-            <div class="service-distance">
-                <i class="material-icons">near_me</i>
-                ${service.distance} km away
-            </div>
-            <div class="recommendation-header">
-                <i class="material-icons">${getServiceIcon(service.type)}</i>
-                <h3>${service.name}</h3>
-            </div>
-            <p>${service.description}</p>
-            ${service.address ? `<p class="service-address"><i class="material-icons">location_on</i>${service.address}</p>` : ''}
-            ${service.rating ? `
-                <div class="recommendation-meta">
-                    <span><i class="material-icons">star</i>${service.rating}/5</span>
-                    ${service.price ? `<span><i class="material-icons">payments</i>${service.price}</span>` : ''}
-                </div>
-            ` : ''}
-            <div class="recommendation-actions">
-                <button class="btn-primary" onclick="bookNearbyService('${service.type}', '${service.name.replace(/'/g, "\\'")}', ${service.id})">
-                    <i class="material-icons">event</i> Book Now
-                </button>
-                <button class="btn-secondary" onclick="showOnMap(${service.lat}, ${service.lng}, '${service.name.replace(/'/g, "\\'")}')">
-                    <i class="material-icons">location_on</i> Show on Map
-                </button>
-            </div>
+      if (data.services && data.services.length > 0) {
+        displayNearbyServices(data.services);
+        addServiceMarkersToMap(data.services);
+      } else {
+        displayEmptyNearbyServices();
+      }
+    } catch (error) {
+      console.error('Error fetching nearby services:', error);
+      displayErrorNearbyServices(error.message);
+    }
+  }
+
+  function displayNearbyServices(services) {
+    const listElement = document.getElementById('nearby-services-list');
+    if (!listElement) return;
+
+    listElement.innerHTML = services.map((service, index) => `
+      <div class="nearby-service-card" style="animation: fadeInUp 0.5s ease ${index * 0.1}s forwards; opacity: 0;">
+        <div class="service-distance">
+          <i class="material-icons">near_me</i>
+          ${service.distance} km away
         </div>
+        <div class="recommendation-header">
+          <i class="material-icons">${getServiceIcon(service.type)}</i>
+          <h3>${service.name}</h3>
+        </div>
+        <p>${service.description}</p>
+        ${service.address ? `<p class="service-address"><i class="material-icons">location_on</i>${service.address}</p>` : ''}
+        ${service.rating ? `
+          <div class="recommendation-meta">
+            <span><i class="material-icons">star</i>${service.rating}/5</span>
+            ${service.price ? `<span><i class="material-icons">payments</i>${service.price}</span>` : ''}
+          </div>
+        ` : ''}
+        <div class="recommendation-actions">
+          <button class="btn-primary" onclick="bookNearbyService('${service.type.replace(/'/g, "\\'")}', '${service.name.replace(/'/g, "\\'")}')">
+            <i class="material-icons">event</i> Book Now
+          </button>
+          <button class="btn-secondary" onclick="showOnMap(${service.lat}, ${service.lng}, '${service.name.replace(/'/g, "\\'")}')">
+            <i class="material-icons">location_on</i> Show on Map
+          </button>
+        </div>
+      </div>
     `).join('');
-    }
+  }
 
-    console.log('✅ Dashboard fixes loaded successfully!');
+  function displayEmptyNearbyServices() {
+    const listElement = document.getElementById('nearby-services-list');
+    if (!listElement) return;
 
-    function displayEmptyNearbyServices() {
-      const listElement = document.getElementById('nearby-services-list');
-      listElement.innerHTML = `
-        <div class="empty-state" style="grid-column: 1 / -1;">
-            <i class="material-icons">location_off</i>
-            <h3>No nearby services found</h3>
-            <p>We couldn't find any services in your area</p>
-            <button class="btn-primary" onclick="getUserLocation(); setTimeout(fetchNearbyServices, 1000);">
-                <i class="material-icons">refresh</i> Retry
-            </button>
-        </div>
+    listElement.innerHTML = `
+      <div class="empty-state" style="grid-column: 1 / -1;">
+        <i class="material-icons">location_off</i>
+        <h3>No nearby services found</h3>
+        <p>We couldn't find any services in your area</p>
+        <button class="btn-primary" onclick="getUserLocation(); setTimeout(fetchNearbyServices, 1000);">
+          <i class="material-icons">refresh</i> Retry
+        </button>
+      </div>
     `;
-    }
+  }
 
-    function displayErrorNearbyServices(errorMessage) {
-      const listElement = document.getElementById('nearby-services-list');
-      listElement.innerHTML = `
-        <div class="empty-state" style="grid-column: 1 / -1;">
-            <i class="material-icons">error_outline</i>
-            <h3>Unable to load nearby services</h3>
-            <p>${errorMessage || 'Please try again later'}</p>
-            <button class="btn-primary" onclick="getUserLocation(); setTimeout(fetchNearbyServices, 1000);">
-                <i class="material-icons">refresh</i> Retry
-            </button>
-        </div>
+  function displayErrorNearbyServices(errorMessage) {
+    const listElement = document.getElementById('nearby-services-list');
+    if (!listElement) return;
+
+    listElement.innerHTML = `
+      <div class="empty-state" style="grid-column: 1 / -1;">
+        <i class="material-icons">error_outline</i>
+        <h3>Unable to load nearby services</h3>
+        <p>${errorMessage || 'Please try again later'}</p>
+        <button class="btn-primary" onclick="fetchNearbyServices()">
+          <i class="material-icons">refresh</i> Retry
+        </button>
+      </div>
     `;
-    }
+  }
 
-    function addServiceMarkersToMap(services) {
-      if (!map) {
-        console.warn('Map not initialized');
-        return;
+  function addServiceMarkersToMap(services) {
+    if (!map || !services.length) return;
+
+    // Clear existing service markers
+    map.eachLayer(layer => {
+      if (layer instanceof L.Marker && layer !== userMarker) {
+        map.removeLayer(layer);
       }
+    });
 
-      // Clear existing markers (except user marker)
-      map.eachLayer(layer => {
-        if (layer instanceof L.Marker && layer !== userMarker) {
-          map.removeLayer(layer);
-        }
+    // Add new markers
+    services.forEach(service => {
+      const iconColor = {
+        'Hotel Booking': '#27ae60',
+        'Car Booking': '#3498db',
+        'Technician Booking': '#e67e22',
+        'Courier Booking': '#1abc9c'
+      }[service.type] || '#9b59b6';
+
+      const serviceIcon = L.divIcon({
+        className: 'service-marker',
+        html: `<div style="background: ${iconColor}; width: 32px; height: 32px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
+                <i class="material-icons" style="transform: rotate(45deg); color: white; font-size: 16px;">${getServiceIcon(service.type)}</i>
+              </div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -32]
       });
 
-      // Add service markers
-      services.forEach(service => {
-        const iconColor = {
-          'Hotel Booking': '#27ae60',
-          'Car Booking': '#3498db',
-          'Technician Booking': '#e67e22',
-          'Courier Booking': '#1abc9c'
-        }[service.type] || '#9b59b6';
+      L.marker([service.lat, service.lng], { icon: serviceIcon })
+        .addTo(map)
+        .bindPopup(`
+          <div style="text-align: center; min-width: 200px;">
+            <b>${service.name}</b><br>
+            <span style="color: #666;">${service.type}</span><br>
+            <span style="color: #3498db; font-weight: bold;">${service.distance} km away</span><br>
+            ${service.rating ? `<span style="color: #f39c12;">★ ${service.rating}/5</span><br>` : ''}
+            ${service.price ? `<span style="color: #27ae60;">${service.price}</span>` : ''}
+          </div>
+        `);
+    });
 
-        const serviceIcon = L.divIcon({
-          className: 'service-marker',
-          html: `<div style="background: ${iconColor}; width: 32px; height: 32px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
-                    <i class="material-icons" style="transform: rotate(45deg); color: white; font-size: 16px;">${getServiceIcon(service.type)}</i>
-                </div>`,
-          iconSize: [32, 32],
-          iconAnchor: [16, 32],
-          popupAnchor: [0, -32]
-        });
+    // Fit map to show all markers
+    const bounds = L.latLngBounds(
+      services.map(s => [s.lat, s.lng]).concat([[userLocation.lat, userLocation.lng]])
+    );
+    map.fitBounds(bounds, { padding: [50, 50] });
+  }
 
-        L.marker([service.lat, service.lng], { icon: serviceIcon })
-          .addTo(map)
-          .bindPopup(`
-                <div style="text-align: center; min-width: 200px;">
-                    <b>${service.name}</b><br>
-                    <span style="color: #666;">${service.type}</span><br>
-                    <span style="color: #3498db; font-weight: bold;">${service.distance} km away</span><br>
-                    ${service.rating ? `<span style="color: #f39c12;">★ ${service.rating}/5</span><br>` : ''}
-                    ${service.price ? `<span style="color: #27ae60;">${service.price}</span>` : ''}
-                </div>
-            `);
-      });
-
-      // Fit map to show all markers
-      if (services.length > 0) {
-        const bounds = L.latLngBounds(
-          services.map(s => [s.lat, s.lng]).concat([[userLocation.lat, userLocation.lng]])
-        );
-        map.fitBounds(bounds, { padding: [50, 50] });
-      }
+  function showOnMap(lat, lng, serviceName) {
+    if (!map) {
+      showToast('Map not available', 'error');
+      return;
     }
 
-    function showOnMap(lat, lng, serviceName) {
-      if (!map) {
-        showToast('Map not available', 'error');
-        return;
-      }
+    map.setView([lat, lng], 16);
+    showToast(`Showing ${serviceName} on map`, 'info');
+  }
 
-      // Zoom to location
-      map.setView([lat, lng], 16);
+  function bookNearbyService(serviceType, serviceName) {
+    const locationText = document.getElementById('location-text')?.textContent || 'Mumbai';
+    const city = locationText.split(',')[0].trim();
 
-      // Find and open popup
-      map.eachLayer(layer => {
-        if (layer instanceof L.Marker) {
-          const pos = layer.getLatLng();
-          if (Math.abs(pos.lat - lat) < 0.00001 && Math.abs(pos.lng - lng) < 0.00001) {
-            layer.openPopup();
-          }
-        }
-      });
+    let url = '';
+    let params = new URLSearchParams();
 
-      showToast(`Showing ${serviceName} on map`, 'info');
-    }
-
-    function bookNearbyService(serviceType, serviceName, serviceId) {
-      // Get user's current location
-      const locationText = document.getElementById('location-text')?.textContent || 'Mumbai';
-      const city = locationText.split(',')[0].trim();
-
-      let url = '';
-      let params = new URLSearchParams();
-
-      if (serviceType === 'Hotel Booking') {
+    switch(serviceType) {
+      case 'Hotel Booking':
         url = '/submit-hotel-booking';
         params.set('destination', city);
         params.set('checkin', getTomorrowDate());
         params.set('checkout', getDayAfterTomorrowDate());
         params.set('rooms', '1');
         params.set('guests', '2');
-
-      } else if (serviceType === 'Flight Booking') {
+        break;
+      case 'Flight Booking':
         url = '/submit-travel-booking';
         params.set('origin', city);
         params.set('destination', 'Delhi');
         params.set('departure_date', getIn7Days());
         params.set('adults', '1');
-
-      } else if (serviceType === 'Car Booking') {
+        break;
+      case 'Car Booking':
         url = '/submit_car_booking';
         params.set('pickup', locationText);
         params.set('dropoff', `${city} Airport`);
@@ -2076,16 +2483,16 @@
         params.set('pickup_time', '10:00');
         params.set('passengers', '2');
         params.set('cab_class', 'standard');
-
-      } else if (serviceType === 'Technician Booking') {
+        break;
+      case 'Technician Booking':
         url = '/submit-technician-booking';
         params.set('location', locationText);
         params.set('service_date', getTomorrowDate());
         params.set('service_time', '14:00');
-        params.set('service_type', 'ac_repair');  // common default
+        params.set('service_type', 'ac_repair');
         params.set('urgency', 'normal');
-
-      } else if (serviceType === 'Courier Booking') {
+        break;
+      case 'Courier Booking':
         url = '/submit_courier_booking';
         params.set('pickup', locationText);
         params.set('dropoff', `${city} Downtown`);
@@ -2093,522 +2500,250 @@
         params.set('pickup_time', '11:00');
         params.set('package_weight', '2.0');
         params.set('courier_type', 'express');
-      }
-
-      if (url) {
-        window.location.href = `${url}?${params.toString()}`;
-        showToast(`Finding best ${serviceType}: ${serviceName} in ${city}...`, 'info');
-      } else {
-        showToast('Service coming soon!', 'warning');
-      }
+        break;
     }
 
-    // Reuse the same helper date functions (already in your JS from AI rec fix)
-    function getTomorrowDate() {
-      const d = new Date();
-      d.setDate(d.getDate() + 1);
-      return d.toISOString().split('T')[0];
+    if (url) {
+      window.location.href = `${url}?${params.toString()}`;
+      showToast(`Finding best ${serviceType}: ${serviceName} in ${city}...`, 'info');
+    } else {
+      showToast('Service coming soon!', 'warning');
     }
+  }
 
-    function getDayAfterTomorrowDate() {
-      const d = new Date();
-      d.setDate(d.getDate() + 2);
-      return d.toISOString().split('T')[0];
+  function updateRadius(val) {
+    document.getElementById('radiusValue').textContent = val + 'km';
+    
+    if (this.radiusTimeout) clearTimeout(this.radiusTimeout);
+    this.radiusTimeout = setTimeout(() => {
+      fetchNearbyServices(parseInt(val));
+    }, 300);
+  }
+
+  // ============================================
+  // AI CHATBOT FUNCTIONS
+  // ============================================
+
+  function toggleChatbot() {
+    chatbotOpen = !chatbotOpen;
+    const window = document.getElementById('chatbot-window');
+
+    if (chatbotOpen) {
+      window.classList.add('active');
+      document.getElementById('chatbot-input').focus();
+      
+      // Hide notification badge
+      const badge = document.getElementById('chatbot-notification');
+      if (badge) badge.style.display = 'none';
+
+      // Load history if empty
+      if (chatMessages && chatMessages.length === 0) {
+        loadChatHistory();
+      }
+    } else {
+      window.classList.remove('active');
     }
+  }
 
-    function getIn7Days() {
-      const d = new Date();
-      d.setDate(d.getDate() + 7);
-      return d.toISOString().split('T')[0];
-    }
-
-    // ============================================
-    // PRE-FILL FUNCTIONS FOR EACH SERVICE
-    // ============================================
-
-    function prefillHotelForm(data) {
-      // Get current date for check-in (today)
-      const today = new Date();
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-
-      const checkin = today.toISOString().split('T')[0];
-      const checkout = tomorrow.toISOString().split('T')[0];
-
-      // Pre-fill hotel booking form
-      const destinationInput = document.querySelector('#hotel-modal input[name="destination"]');
-      const checkinInput = document.querySelector('#hotel-modal input[name="checkin"]');
-      const checkoutInput = document.querySelector('#hotel-modal input[name="checkout"]');
-
-      if (destinationInput) {
-        // Extract city from service name or use user location
-        const userLocation = document.getElementById('location-text')?.textContent || 'Mumbai';
-        destinationInput.value = userLocation.split(',')[0];
-      }
-
-      if (checkinInput) checkinInput.value = checkin;
-      if (checkoutInput) checkout.value = checkout;
-
-      // Re-initialize date pickers
-      if (typeof flatpickr !== 'undefined') {
-        flatpickr(checkinInput, {
-          dateFormat: "Y-m-d",
-          minDate: "today",
-          defaultDate: checkin
-        });
-
-        flatpickr(checkoutInput, {
-          dateFormat: "Y-m-d",
-          minDate: tomorrow,
-          defaultDate: checkout
-        });
-      }
-
-      showToast('Hotel form pre-filled with location', 'success');
-    }
-
-    function prefillTechnicianForm(data) {
-      // Pre-fill technician booking form
-      const locationInput = document.querySelector('#event-modal input[name="location"]');
-      const serviceDateInput = document.querySelector('#event-modal input[name="service_date"]');
-      const serviceTimeInput = document.querySelector('#event-modal input[name="service_time"]');
-
-      if (locationInput) {
-        const userLocation = document.getElementById('location-text')?.textContent || '';
-        locationInput.value = userLocation;
-      }
-
-      if (serviceDateInput) {
-        const today = new Date().toISOString().split('T')[0];
-        serviceDateInput.value = today;
-      }
-
-      if (serviceTimeInput) {
-        // Set time to 2 hours from now
-        const now = new Date();
-        now.setHours(now.getHours() + 2);
-        const timeString = now.toTimeString().slice(0, 5);
-        serviceTimeInput.value = timeString;
-      }
-
-      // Re-initialize date picker
-      if (typeof flatpickr !== 'undefined' && serviceDateInput) {
-        flatpickr(serviceDateInput, {
-          dateFormat: "Y-m-d",
-          minDate: "today"
-        });
-      }
-
-      showToast('Technician form pre-filled', 'success');
-    }
-
-    function prefillCarForm(data) {
-      // Pre-fill car booking form
-      const pickupInput = document.querySelector('#car-modal input[name="pickup"]');
-      const dropoffInput = document.querySelector('#car-modal input[name="dropoff"]');
-      const pickupDateInput = document.querySelector('#car-modal input[name="pickup_date"]');
-      const pickupTimeInput = document.querySelector('#car-modal input[name="pickup_time"]');
-
-      if (pickupInput) {
-        const userLocation = document.getElementById('location-text')?.textContent || '';
-        pickupInput.value = userLocation;
-      }
-
-      if (pickupDateInput) {
-        const today = new Date().toISOString().split('T')[0];
-        pickupDateInput.value = today;
-      }
-
-      if (pickupTimeInput) {
-        const now = new Date();
-        now.setHours(now.getHours() + 1);
-        const timeString = now.toTimeString().slice(0, 5);
-        pickupTimeInput.value = timeString;
-      }
-
-      // Re-initialize date picker
-      if (typeof flatpickr !== 'undefined' && pickupDateInput) {
-        flatpickr(pickupDateInput, {
-          dateFormat: "Y-m-d",
-          minDate: "today"
-        });
-      }
-
-      showToast('Car booking form pre-filled', 'success');
-    }
-
-    function prefillCourierForm(data) {
-      // Pre-fill courier booking form
-      const pickupInput = document.querySelector('#courier-modal input[name="pickup"]');
-      const pickupDateInput = document.querySelector('#courier-modal input[name="pickup_date"]');
-      const pickupTimeInput = document.querySelector('#courier-modal input[name="pickup_time"]');
-
-      if (pickupInput) {
-        const userLocation = document.getElementById('location-text')?.textContent || '';
-        pickupInput.value = userLocation;
-      }
-
-      if (pickupDateInput) {
-        const today = new Date().toISOString().split('T')[0];
-        pickupDateInput.value = today;
-      }
-
-      if (pickupTimeInput) {
-        const now = new Date();
-        now.setHours(now.getHours() + 2);
-        const timeString = now.toTimeString().slice(0, 5);
-        pickupTimeInput.value = timeString;
-      }
-
-      // Re-initialize date picker
-      if (typeof flatpickr !== 'undefined' && pickupDateInput) {
-        flatpickr(pickupDateInput, {
-          dateFormat: "Y-m-d",
-          minDate: "today"
-        });
-      }
-
-      showToast('Courier form pre-filled', 'success');
-    }
-
-    // ============================================
-    // AI CHATBOT FUNCTIONS
-    // ============================================
-
-    let chatbotOpen = false;
-    let chatMessages = [];
-
-    function toggleChatbot() {
-      chatbotOpen = !chatbotOpen;
-      const window = document.getElementById('chatbot-window');
-
-      if (chatbotOpen) {
-        window.classList.add('active');
-        document.getElementById('chatbot-input').focus();
-
-        // Add welcome message if first time
-        if (chatMessages.length === 0) {
-          setTimeout(() => {
-            addBotMessage("Hello! 👋 I'm your Concierge Lifestyle assistant. How can I help you today?");
-          }, 500);
+  async function loadChatHistory() {
+    try {
+      const response = await fetch('/api/chat/history');
+      const data = await response.json();
+      
+      if (data.success && data.messages) {
+        const container = document.getElementById('chatbot-messages');
+        if (container) {
+          data.messages.forEach(msg => {
+            if (msg.is_me) {
+              addUserMessage(msg.message, false);
+            } else {
+              addBotMessage(msg.message, true, false);
+            }
+          });
+          container.scrollTop = container.scrollHeight;
         }
-      } else {
-        window.classList.remove('active');
       }
+    } catch (e) {
+      console.error('Error loading chat history:', e);
+    }
+  }
+
+  function sendChatMessage() {
+    const input = document.getElementById('chatbot-input');
+    const message = input.value.trim();
+
+    if (!message) return;
+
+    // Add user message
+    addUserMessage(message);
+    input.value = '';
+
+    // Send via socket
+    if (socket && socket.connected) {
+      socket.emit('send_chat_message', {
+        sender_id: currentUserId,
+        message: message,
+        role: 'user'
+      });
     }
 
-    function sendChatMessage() {
-      const input = document.getElementById('chatbot-input');
-      const message = input.value.trim();
-
-      if (!message) return;
-
-      // Add user message
-      addUserMessage(message);
-      input.value = '';
-
-      // Show typing indicator
-      showTypingIndicator();
-
-      // Send to backend
-      fetch('/api/chatbot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: message })
-      })
-        .then(response => response.json())
-        .then(data => {
-          removeTypingIndicator();
-          if (data.success) {
-            addBotMessage(data.response, data.quick_replies || null);  // Pass quick_replies here!
-          } else {
-            addBotMessage("Sorry, I'm having trouble right now. Please try again!");
-          }
-        })
-        .catch(error => {
-          console.error('Chatbot error:', error);
-          removeTypingIndicator();
-          addBotMessage("Oops! Something went wrong. Please try again.");
-        });
-    }
-
-    function sendQuickMessage(message) {
-      document.getElementById('chatbot-input').value = message;
-      sendChatMessage();
-    }
-
-    function addUserMessage(text) {
-      const container = document.getElementById('chatbot-messages');
-
-      // Remove welcome message
-      const welcome = container.querySelector('.chat-welcome');
-      if (welcome) {
-        welcome.remove();
+    // Also try AI endpoint
+    fetch('/api/chatbot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: message })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success && data.response) {
+        addBotMessage(data.response, false);
       }
+    })
+    .catch(error => console.error('Chat error:', error));
+  }
 
-      const messageDiv = document.createElement('div');
-      messageDiv.className = 'chat-message user';
-      messageDiv.innerHTML = `
-        <div class="chat-message-content">
-            <div class="chat-message-bubble">${escapeHtml(text)}</div>
-            <div class="chat-message-time">${getCurrentTime()}</div>
-        </div>
-        <div class="chat-message-avatar">
-            <i class="material-icons">person</i>
-        </div>
-    `;
+  function addUserMessage(text) {
+    const container = document.getElementById('chatbot-messages');
+    if (!container) return;
 
-      container.appendChild(messageDiv);
-      scrollToBottom();
-
-      chatMessages.push({ type: 'user', text: text, time: new Date() });
+    // Remove welcome message
+    const welcome = container.querySelector('.chat-welcome');
+    if (welcome) {
+      welcome.remove();
     }
 
-    function addBotMessage(text, quickReplies = null) {
-      const container = document.getElementById('chatbot-messages');
-      const messageDiv = document.createElement('div');
-      messageDiv.className = 'chat-message bot';
-      let html = `
-    <div class="chat-message-avatar">
-        <i class="material-icons">smart_toy</i>
-    </div>
-    <div class="chat-message-content">
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'chat-message user';
+    messageDiv.innerHTML = `
+      <div class="chat-message-content">
         <div class="chat-message-bubble">${escapeHtml(text)}</div>
         <div class="chat-message-time">${getCurrentTime()}</div>
-  `;
-
-      // ADD QUICK REPLY BUTTONS IF PRESENT
-      if (quickReplies && quickReplies.length > 0) {
-        html += `<div class="chat-quick-actions">`;
-        quickReplies.forEach(btn => {
-          html += `<button class="chat-quick-action" onclick="handleQuickReply('${btn.payload}')">${btn.title}</button>`;
-        });
-        html += `</div>`;
-      }
-
-      html += `
-    </div>
-  `;
-      messageDiv.innerHTML = html;
-      container.appendChild(messageDiv);
-      scrollToBottom();
-      chatMessages.push({ type: 'bot', text: text, quickReplies: quickReplies, time: new Date() });
-    }
-
-    function showTypingIndicator() {
-      const container = document.getElementById('chatbot-messages');
-
-      const typingDiv = document.createElement('div');
-      typingDiv.className = 'chat-message bot';
-      typingDiv.id = 'typing-indicator';
-      typingDiv.innerHTML = `
-        <div class="chat-message-avatar">
-            <i class="material-icons">smart_toy</i>
-        </div>
-        <div class="chat-message-content">
-            <div class="typing-indicator">
-                <div class="typing-dot"></div>
-                <div class="typing-dot"></div>
-                <div class="typing-dot"></div>
-            </div>
-        </div>
+      </div>
+      <div class="chat-message-avatar">
+        <i class="material-icons">person</i>
+      </div>
     `;
 
-      container.appendChild(typingDiv);
+    container.appendChild(messageDiv);
+    scrollToBottom();
+  }
+
+  function addBotMessage(text, isHuman = false, scroll = true) {
+    const container = document.getElementById('chatbot-messages');
+    if (!container) return;
+
+    const messageDiv = document.createElement('div');
+    
+    if (isHuman) {
+      messageDiv.className = 'chat-message admin';
+      messageDiv.innerHTML = `
+        <div class="message-avatar human" style="background: #e67e22;">
+          <i class="material-icons">support_agent</i>
+        </div>
+        <div class="message-content" style="background: #fff3e0; border-color: #ffe0b2; color: #333;">${text}</div>
+      `;
+    } else {
+      messageDiv.className = 'chat-message bot';
+      messageDiv.innerHTML = `
+        <div class="message-avatar">
+          <i class="material-icons">smart_toy</i>
+        </div>
+        <div class="message-content">${text}</div>
+      `;
+    }
+
+    container.appendChild(messageDiv);
+    
+    if (scroll) {
       scrollToBottom();
     }
+  }
 
-    function removeTypingIndicator() {
-      const indicator = document.getElementById('typing-indicator');
-      if (indicator) {
-        indicator.remove();
-      }
-    }
-
-    function scrollToBottom() {
-      const container = document.getElementById('chatbot-messages');
+  function scrollToBottom() {
+    const container = document.getElementById('chatbot-messages');
+    if (container) {
       setTimeout(() => {
         container.scrollTop = container.scrollHeight;
       }, 100);
     }
+  }
 
-    function getCurrentTime() {
-      const now = new Date();
-      return now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  function getCurrentTime() {
+    const now = new Date();
+    return now.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function handleQuickReply(payload) {
+    let message = '';
+    let modalId = '';
+
+    switch (payload) {
+      case 'hotels':
+        message = 'Hotels';
+        modalId = 'hotel';
+        break;
+      case 'flights':
+        message = 'Flights';
+        modalId = 'travel';
+        break;
+      case 'cabs':
+        message = 'Cabs';
+        modalId = 'car';
+        break;
+      case 'technician':
+        message = 'Technician';
+        modalId = 'event';
+        break;
+      case 'courier':
+        message = 'Courier';
+        modalId = 'courier';
+        break;
+      default:
+        message = payload.replace(/_/g, ' ');
     }
 
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-    if (data.quick_replies) {
-      const buttonsDiv = document.createElement('div');
-      buttonsDiv.className = 'chat-quick-actions';
-      data.quick_replies.forEach(btn => {
-        const button = document.createElement('button');
-        button.className = 'chat-quick-action';
-        button.textContent = btn.title;
-        button.onclick = () => sendQuickMessage(btn.payload);  // or handle specially
-        buttonsDiv.appendChild(button);
-      });
-      messageContent.appendChild(buttonsDiv);
-    }
+    addUserMessage(message);
 
-    function handleQuickReply(payload) {
-      console.log('Quick reply clicked:', payload);
-
-      let message = '';
-      let city = '';
-      let modalId = '';
-
-      switch (payload) {
-        case 'hotel_mumbai':
-          message = 'Mumbai';
-          city = 'Mumbai';
-          modalId = 'hotel';
-          break;
-        case 'hotel_pune':
-          message = 'Pune';
-          city = 'Pune';
-          modalId = 'hotel';
-          break;
-        case 'hotel_nashik':
-          message = 'Nashik';
-          city = 'Nashik';
-          modalId = 'hotel';
-          break;
-        case 'search_flights':
-          message = 'Search Flights';
-          modalId = 'travel';
-          break;
-        case 'ac_repair':
-          message = 'AC Repair';
-          modalId = 'event';
-          break;
-        case 'plumbing':
-          message = 'Plumbing';
-          modalId = 'event';
-          break;
-        case 'electrical':
-          message = 'Electrical';
-          modalId = 'event';
-          break;
-        case 'airport_cab':
-          message = 'Airport Cab';
-          modalId = 'car';
-          break;
-        case 'same_day_courier':
-          message = 'Same Day Courier';
-          modalId = 'courier';
-          break;
-        case 'hotels':
-          message = 'Hotels';
-          modalId = 'hotel';
-          break;
-        case 'flights':
-          message = 'Flights';
-          modalId = 'travel';
-          break;
-        case 'cabs':
-          message = 'Cabs';
-          modalId = 'car';
-          break;
-        case 'technician':
-          message = 'Technician';
-          modalId = 'event';
-          break;
-        case 'courier':
-          message = 'Courier';
-          modalId = 'courier';
-          break;
-        default:
-          message = payload.replace(/_/g, ' ');
-      }
-
-      // Show as user message
-      addUserMessage(message);
-
-      // Open the appropriate modal
-      if (modalId) {
-        // First, make sure the Services section is visible
-        showSection('services-section');
-
-        // Then open the modal after a short delay
-        setTimeout(() => {
-          console.log('Opening modal:', modalId);
-          openModal(modalId);
-
-          // Pre-fill data based on service type
-          const userLocation = document.getElementById('location-text')?.textContent || '';
-          const userCity = userLocation.split(',')[0].trim() || 'Mumbai';
-
-          switch (modalId) {
-            case 'hotel':
-              if (city) {
-                const destinationInput = document.querySelector('#hotel-modal input[name="destination"]');
-                if (destinationInput) {
-                  destinationInput.value = city;
-                  destinationInput.focus();
-                }
-                addBotMessage(`Perfect! I've opened the hotel booking form with ${city} as your destination. 🏨`);
-              } else {
-                addBotMessage(`I've opened the hotel booking form for you! 🏨`);
-              }
-              break;
-            case 'event':
-              addBotMessage(`Got it! Let me help you with technician services. Opening the booking form... 🔧`);
-              // Pre-fill location for technician
-              const locationInput = document.querySelector('#event-modal input[name="location"]');
-              if (locationInput && userCity) {
-                locationInput.value = userCity;
-              }
-              break;
-            case 'car':
-              addBotMessage(`Excellent choice! I've opened the luxury cab booking form for you. 🚗`);
-              // Pre-fill pickup location
-              const pickupInput = document.querySelector('#car-modal input[name="pickup"]');
-              if (pickupInput && userLocation) {
-                pickupInput.value = userLocation;
-              }
-              break;
-            case 'courier':
-              addBotMessage(`Great! I've opened the courier booking form for you. 📦`);
-              // Pre-fill pickup location
-              const courierPickupInput = document.querySelector('#courier-modal input[name="pickup"]');
-              if (courierPickupInput && userLocation) {
-                courierPickupInput.value = userLocation;
-              }
-              break;
-            case 'travel':
-              addBotMessage(`✈️ Perfect! I've opened the flight booking form. Where would you like to fly?`);
-              break;
-            default:
-              addBotMessage(`Got it! Let me help you with ${message}. Opening the booking form...`);
-          }
-        }, 300); // Small delay to ensure modal is ready
-      } else {
-        // Generic response for other services
-        addBotMessage(`Got it! Let me help you with ${message}. You can book this service from the Services section.`);
-      }
-    }
-    function openServiceAndModal(modalId) {
-      // First show the Services section
-      showSection('services-section');
-
-      // Set the sidebar menu to active
-      const servicesLink = document.querySelector('[onclick*="services-section"]');
-      if (servicesLink) {
-        setActive(servicesLink);
-      }
-
-      // Then open the modal
+    if (modalId) {
+      navigateToSection('services-section');
       setTimeout(() => {
         openModal(modalId);
-      }, 100);
+      }, 300);
     }
+  }
 
-  </script>
+  // ============================================
+  // UTILITY FUNCTIONS
+  // ============================================
+
+  // Debug function
+  function debugDashboard() {
+    console.log('=== DASHBOARD DEBUG ===');
+    console.log('Current section:', currentActiveSection);
+    console.log('User location:', userLocation);
+    console.log('Socket connected:', socket?.connected);
+    console.log('Unread notifications:', unreadNotifications);
+  }
+
+  // Initialize debug on F12
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'F12') {
+      debugDashboard();
+    }
+  });
+
+  console.log('✅ Dashboard JavaScript loaded successfully!');
+</script>
 </body>
 
 </html>

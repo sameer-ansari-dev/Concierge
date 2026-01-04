@@ -2,6 +2,7 @@ from flask import (
     Flask, render_template, request, redirect, url_for, flash, session,
     make_response, jsonify, send_from_directory, current_app
 )
+from werkzeug.utils import secure_filename
 from flask_socketio import SocketIO, emit, join_room
 import random
 from db import save_user_profile_comprehensive, get_user_profile
@@ -34,6 +35,18 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+
+# File Upload Configuration
+UPLOAD_FOLDER = os.path.join('static', 'uploads', 'profile_pictures')
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Ensure upload directory exists
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # ---------------------- Flask-Login ----------------------
 login_manager = LoginManager()
@@ -334,7 +347,7 @@ def inject_common_variables():
         contact = {}
         try:
             cur.execute("""
-                SELECT full_name, email, phone, address, whatsapp, instagram, facebook
+                SELECT full_name, email, phone, address, whatsapp, instagram, facebook, profile_picture
                 FROM users WHERE id = %s
             """, (user_id,))
             contact_data = cur.fetchone()
@@ -346,7 +359,8 @@ def inject_common_variables():
                     'address': contact_data[3] or '',
                     'whatsapp': contact_data[4] or '',
                     'instagram': contact_data[5] or '',
-                    'facebook': contact_data[6] or ''
+                    'facebook': contact_data[6] or '',
+                    'profile_picture': contact_data[7] or ''
                 }
         except:
             pass
@@ -491,6 +505,9 @@ def save_lifestyle():
                     dietary_pref, city, area, latitude, longitude, home_owner,
                     interests_str, preferred_services_str
                 ))
+            
+            # Clear existing AI recommendations to force regeneration
+            cur.execute("DELETE FROM ai_recommendations WHERE user_id = %s", (user_id,))
             
             conn.commit()
             flash('✅ Your lifestyle profile has been saved! You will now get personalized AI suggestions.', 'success')
@@ -822,7 +839,6 @@ def admin_generate_ticket():
     finally:
         cur.close()
         conn.close()
-
 # ---------------------- Static Mock Data ----------------------
 hotels_data = {
     "Mumbai": [
@@ -2589,6 +2605,129 @@ def confirm_courier():
         cur.close()
         conn.close()
 
+# ---------------------- Chat System ----------------------
+@app.route('/api/chat/history', methods=['GET'])
+@login_required
+def get_chat_history():
+    user_id = current_user.get_id()
+    # If admin is requesting, they might want a specific user's history
+    target_user_id = request.args.get('user_id')
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        if session.get('is_admin') and target_user_id:
+            # Admin viewing a user's chat
+            chat_partner_id = target_user_id
+        else:
+            # User viewing their own chat with admin (admin ID is usually 0 or handled logically)
+            # For simplicity, let's assume admin messages have sender_id = 0 or specific admin ID
+            # In this simple model, we filter by the user's ID involved in the message
+            chat_partner_id = user_id 
+
+        # Fetch messages where this user is sender or receiver
+        # We assume admin sends with role 'admin' and user with role 'user'
+        # Messages are linked to the non-admin user's ID
+        
+        query = """
+            SELECT id, sender_id, message, timestamp, sender_role, is_read
+            FROM chat_messages 
+            WHERE (sender_id = %s OR receiver_id = %s)
+            ORDER BY timestamp ASC
+        """
+        # For a user, they see all messages exchanged with them
+        # For admin (viewing a specific user), they see all messages exchanged with that user
+        
+        # NOTE: logic assumes 1:1 chat between User X and Admin. 
+        # So we just filter by the User X's ID being either sender or receiver.
+        # The other party is implicitly the Admin/System.
+        
+        cur.execute(query, (chat_partner_id, chat_partner_id))
+        rows = cur.fetchall()
+        
+        messages = []
+        for r in rows:
+            messages.append({
+                'id': r[0],
+                'sender_id': r[1],
+                'message': r[2],
+                'timestamp': r[3].isoformat(),
+                'sender_role': r[4],
+                'is_read': r[5],
+                'is_me': str(r[1]) == str(user_id) # True if current user sent it
+            })
+            
+        return jsonify({'success': True, 'messages': messages})
+    except Exception as e:
+        logger.error(f"Chat history error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+@socketio.on('send_chat_message')
+def handle_chat_message(data):
+    """Handle real-time chat messages"""
+    sender_id = data.get('sender_id')
+    message = data.get('message')
+    role = data.get('role', 'user')
+    target_user_id = data.get('target_user_id') # Required if admin is sending
+    
+    if not message:
+        return
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        # Determine receiver
+        receiver_id = None
+        if role == 'user':
+            # User sending to Admin (Receiver ID 0 or NULL implies admin)
+            receiver_id = 0 
+            chat_room = f"admin_chat" # Admin listens to this
+            user_room = f"user_{sender_id}" # Also emit back to user's room for confirmation
+        else:
+            # Admin sending to User
+            receiver_id = target_user_id
+            chat_room = f"user_{target_user_id}"
+            user_room = f"user_{target_user_id}"
+
+        # Save to DB
+        cur.execute("""
+            INSERT INTO chat_messages (sender_id, receiver_id, message, sender_role)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id, timestamp
+        """, (sender_id, receiver_id, message, role))
+        
+        msg_id, timestamp = cur.fetchone()
+        conn.commit()
+        
+        msg_data = {
+            'id': msg_id,
+            'sender_id': sender_id,
+            'receiver_id': receiver_id,
+            'message': message,
+            'timestamp': timestamp.isoformat(),
+            'sender_role': role
+        }
+        
+        # Broadcast to specific room
+        # If user sends: emit to their room (so they see it) AND admin room
+        # If admin sends: emit to target user's room
+        
+        if role == 'user':
+            emit('new_chat_message', msg_data, room=f"user_{sender_id}") # To user
+            emit('new_chat_message', msg_data, broadcast=True) # To admins (simplified, ideally admin room)
+        else:
+            emit('new_chat_message', msg_data, room=f"user_{target_user_id}")
+            
+    except Exception as e:
+        logger.error(f"Chat error: {e}")
+        conn.rollback()
+    finally:
+        cur.close()
+        conn.close()
+
 # ---------------------- User Details ----------------------
 @app.route('/get_user_details', methods=['GET'])
 @login_required
@@ -2773,6 +2912,42 @@ def save_contact():
         cur.close()
         conn.close()
     
+    return redirect(url_for('dashboard'))
+
+@app.route('/upload_profile_picture', methods=['POST'])
+@login_required
+def upload_profile_picture():
+    if 'profile_picture' not in request.files:
+        flash('No file part', 'error')
+        return redirect(url_for('dashboard'))
+    
+    file = request.files['profile_picture']
+    
+    if file.filename == '':
+        flash('No selected file', 'error')
+        return redirect(url_for('dashboard'))
+        
+    if file and allowed_file(file.filename):
+        filename = secure_filename(f"user_{current_user.get_id()}_{int(time.time())}.{file.filename.rsplit('.', 1)[1].lower()}")
+        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        
+        # Save to database
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("UPDATE users SET profile_picture = %s WHERE id = %s", (filename, current_user.get_id()))
+            conn.commit()
+            flash('Profile picture updated successfully!', 'success')
+        except Exception as e:
+            conn.rollback()
+            flash(f'Error updating profile picture: {e}', 'error')
+        finally:
+            cur.close()
+            conn.close()
+            
+    else:
+        flash('Allowed file types are png, jpg, jpeg, gif', 'error')
+        
     return redirect(url_for('dashboard'))
 
 # ---------------------- Hotel / Travel ----------------------
@@ -3368,6 +3543,45 @@ def api_lifestyle_recommendations():
     """Get AI-powered recommendations based on comprehensive lifestyle profile"""
     try:
         user_id = current_user.get_id()
+        
+        # 1. Check if we already have fresh recommendations in the database
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                SELECT service_type, title, description, reason, match_score, metadata 
+                FROM ai_recommendations 
+                WHERE user_id = %s AND is_dismissed = FALSE
+                ORDER BY match_score DESC
+            """, (user_id,))
+            rows = cur.fetchall()
+            
+            if rows:
+                recommendations = []
+                for r in rows:
+                    recommendations.append({
+                        'service_type': r[0],
+                        'title': r[1],
+                        'description': r[2],
+                        'reason': r[3],
+                        'match_score': r[4],
+                        'metadata': r[5] if isinstance(r[5], dict) else json.loads(r[5] or '{}')
+                    })
+                return jsonify({
+                    'success': True,
+                    'has_profile': True,
+                    'recommendations': recommendations,
+                    'source': 'database'
+                })
+        except Exception as e:
+            logger.error(f"Error fetching from ai_recommendations: {e}")
+        finally:
+            cur.close()
+            conn.close()
+
+        # 2. If no recommendations found, GENERATE NEW ONES
+        logger.info(f"Generating NEW recommendations for user {user_id}")
+        
         profile = get_user_profile(user_id)
         
         if not profile:
@@ -3376,8 +3590,9 @@ def api_lifestyle_recommendations():
                 'has_profile': False,
                 'recommendations': [],
                 'message': 'Complete your lifestyle profile to get personalized recommendations'
-            })
+            }), 200
 
+        # ... (rest of the generation logic) ...
         # Handle interests whether it's string or list
         interests_raw = profile.get('interests', '')
         if isinstance(interests_raw, list):
@@ -3407,57 +3622,152 @@ def api_lifestyle_recommendations():
         city = profile.get('city', '')
         profession = profile.get('profession', '')
 
+        # Get past bookings to boost scores based on frequency
+        conn = get_db_connection()
+        cur = conn.cursor()
+        past_services_counts = {}
+        try:
+            cur.execute("""
+                SELECT service_type, COUNT(*) 
+                FROM requests 
+                WHERE user_id = %s 
+                GROUP BY service_type
+            """, (user_id,))
+            rows = cur.fetchall()
+            for r in rows:
+                past_services_counts[r[0]] = r[1]
+        except Exception as e:
+            logger.error(f"Error fetching past services: {e}")
+        finally:
+            cur.close()
+            conn.close()
+
+        # Dynamic Pricing Helper
+        def get_dynamic_price_info(service_type, base_price_min, base_price_max):
+            now = datetime.now()
+            hour = now.hour
+            weekday = now.weekday() # 0=Mon, 6=Sun
+            
+            multiplier = 1.0
+            reasons = []
+            
+            # Time-based Logic
+            if service_type in ['Car Booking', 'Luxury Cabs']:
+                if hour in [8, 9, 10, 17, 18, 19]:
+                    multiplier += 0.4
+                    reasons.append("Peak Traffic")
+                elif hour >= 22 or hour <= 5:
+                    multiplier += 0.2
+                    reasons.append("Night Fare")
+                    
+            elif service_type == 'Hotel Booking':
+                if weekday in [4, 5, 6]: # Fri-Sun
+                    multiplier += 0.3
+                    reasons.append("Weekend Demand")
+                elif hour >= 20: # Late night booking
+                    multiplier -= 0.1 # Last minute deal potential
+                    reasons.append("Late Night Deal")
+
+            elif service_type == 'Flight Booking':
+                if weekday in [4, 5, 6]:
+                    multiplier += 0.2
+                    reasons.append("Weekend Travel")
+                if hour <= 6:
+                    multiplier -= 0.1
+                    reasons.append("Early Bird")
+
+            elif service_type == 'Technician Booking':
+                if weekday == 6:
+                    multiplier += 0.5
+                    reasons.append("Sunday Service")
+                elif hour >= 18:
+                    multiplier += 0.25
+                    reasons.append("After Hours")
+
+            # Calculate final prices
+            final_min = int(base_price_min * multiplier)
+            final_max = int(base_price_max * multiplier)
+            
+            price_str = f"₹{final_min:,}-{final_max:,}"
+            if "night" in service_type.lower() or service_type == 'Hotel Booking':
+                price_str += "/night"
+            elif "car" in service_type.lower() or "cab" in service_type.lower():
+                price_str += "/trip"
+                
+            reason_str = f"{', '.join(reasons)} (+{int((multiplier-1)*100)}%)" if reasons and multiplier > 1.0 else ""
+            if multiplier < 1.0 and reasons:
+                 reason_str = f"{', '.join(reasons)} ({int((multiplier-1)*100)}%)"
+            
+            return price_str, reason_str
+
         recommendations = []
 
-        # SCORING LOGIC
-        # Base score depends on how well the recommendation matches user's profile
+        # SCORING LOGIC & GENERATION
         
         # 1. HOTEL RECOMMENDATIONS
         hotel_score = 0
         hotel_reasons = []
         
-        # Check if user travels frequently
         if travel_frequency in ['monthly', 'weekly', 'frequent']:
             hotel_score += 25
             hotel_reasons.append("frequent traveler")
         
-        # Check if luxury lifestyle
         if lifestyle_type == 'luxury':
             hotel_score += 30
             hotel_reasons.append("luxury lifestyle")
         elif lifestyle_type == 'comfort':
             hotel_score += 20
         
-        # Check interests related to hotels
-        hotel_interests = ['fine_dining', 'spa', 'shopping', 'fitness']
-        matched_interests = [i for i in hotel_interests if i in interests]
+        # Interest check
+        matched_interests = [i for i in ['fine_dining', 'spa', 'shopping', 'fitness'] if i in interests]
         if matched_interests:
             hotel_score += len(matched_interests) * 10
             hotel_reasons.append(f"interests: {', '.join(matched_interests)}")
         
-        # Check if hotels are a preferred service
         if 'hotel' in preferred_services:
             hotel_score += 25
             hotel_reasons.append("preferred service")
+            
+        # Boost based on history frequency
+        hist_count = past_services_counts.get('Hotel Booking', 0)
+        if hist_count > 0:
+            hotel_score += min(30, 10 + (hist_count * 5))
+            hotel_reasons.append(f"booked {hist_count} times")
         
         # Check budget
-        if monthly_budget in ['high', 'premium'] and hotel_score > 0:
-            hotel_score += 15
-            hotel_reasons.append("premium budget")
+        hotel_budget_ok = True
+        base_min, base_max = 4000, 8000 # Default medium
         
-        if hotel_score >= 50:
-            hotel_type = "Luxury Hotels" if lifestyle_type == 'luxury' else "Comfort Hotels"
-            price_range = "₹8,000-25,000/night" if monthly_budget in ['high', 'premium'] else "₹3,000-8,000/night"
-            
+        if monthly_budget == 'low':
+            if lifestyle_type == 'luxury': hotel_score -= 30; hotel_budget_ok = False
+            base_min, base_max = 2000, 5000
+            hotel_type = "Budget Hotels"
+        elif monthly_budget == 'medium':
+            if lifestyle_type == 'luxury' and 'fine_dining' not in interests: hotel_score -= 10
+            base_min, base_max = 4000, 8000
+            hotel_type = "Comfort Hotels"
+        elif monthly_budget == 'high':
+            if hotel_score > 0: hotel_score += 15; hotel_reasons.append("premium budget")
+            base_min, base_max = 8000, 15000
+            hotel_type = "Premium Hotels"
+        else: # premium
+            if hotel_score > 0: hotel_score += 15; hotel_reasons.append("premium budget")
+            base_min, base_max = 15000, 40000
+            hotel_type = "Luxury Resorts"
+        
+        if hotel_score >= 50 and hotel_budget_ok:
+            price_str, price_reason = get_dynamic_price_info('Hotel Booking', base_min, base_max)
             recommendations.append({
                 'id': 1,
                 'service_type': 'Hotel Booking',
                 'reason': f'Perfect for {", ".join(hotel_reasons[:2])}.',
                 'match_score': min(95, hotel_score),
                 'metadata': {
-                    'price': price_range,
+                    'price': price_str,
+                    'price_reason': price_reason,
+                    'hotel_type': hotel_type,
                     'location': city or 'Major Cities',
-                    'amenities': 'Premium services based on your interests'
+                    'amenities': 'Matched to your preferences'
                 }
             })
 
@@ -3466,31 +3776,47 @@ def api_lifestyle_recommendations():
         flight_reasons = []
         
         if travel_frequency in ['weekly', 'frequent']:
-            flight_score += 40
-            flight_reasons.append("frequent flyer")
+            flight_score += 40; flight_reasons.append("frequent flyer")
         elif travel_frequency == 'monthly':
-            flight_score += 25
-            flight_reasons.append("monthly traveler")
+            flight_score += 25; flight_reasons.append("monthly traveler")
         
         if 'flight' in preferred_services:
-            flight_score += 30
-            flight_reasons.append("preferred service")
-        
-        # Business travel style
-        if travel_style == 'business':
-            flight_score += 20
-            flight_reasons.append("business travel")
-        
-        if flight_score >= 40:
-            travel_class = "Business Class" if travel_style == 'business' or lifestyle_type == 'luxury' else "Premium Economy"
+            flight_score += 30; flight_reasons.append("preferred service")
             
+        hist_count = past_services_counts.get('Flight Booking', 0)
+        if hist_count > 0:
+            flight_score += min(30, 10 + (hist_count * 5))
+            flight_reasons.append(f"booked {hist_count} times")
+        
+        if travel_style == 'business':
+            flight_score += 20; flight_reasons.append("business travel")
+        
+        flight_budget_ok = True
+        base_min, base_max = 3000, 8000
+        
+        if monthly_budget == 'low' and travel_style in ['business', 'luxury']:
+             flight_score -= 20; flight_budget_ok = False
+
+        if flight_score >= 40 and flight_budget_ok:
+            if monthly_budget in ['high', 'premium'] and (travel_style == 'business' or lifestyle_type == 'luxury'):
+                travel_class = "Business Class"
+                base_min, base_max = 15000, 40000
+            elif monthly_budget == 'high' or travel_style == 'comfort':
+                travel_class = "Premium Economy"
+                base_min, base_max = 8000, 15000
+            else:
+                travel_class = "Economy"
+                base_min, base_max = 3000, 8000
+            
+            price_str, price_reason = get_dynamic_price_info('Flight Booking', base_min, base_max)
             recommendations.append({
                 'id': 2,
                 'service_type': 'Flight Booking',
                 'reason': f'Ideal for {", ".join(flight_reasons)}.',
                 'match_score': min(90, flight_score),
                 'metadata': {
-                    'price': '₹5,000-50,000',
+                    'price': price_str,
+                    'price_reason': price_reason,
                     'class': travel_class,
                     'routes': 'Domestic & International'
                 }
@@ -3501,30 +3827,48 @@ def api_lifestyle_recommendations():
         car_reasons = []
         
         if typical_group_size > 3:
-            car_score += 25
-            car_reasons.append(f"group of {typical_group_size}")
+            car_score += 25; car_reasons.append(f"group of {typical_group_size}")
         
         if preferred_cab_type == 'luxury' or lifestyle_type == 'luxury':
-            car_score += 30
-            car_reasons.append("luxury preference")
+            car_score += 30; car_reasons.append("luxury preference")
         elif preferred_cab_type in ['suv', 'sedan']:
-            car_score += 20
-            car_reasons.append(f"{preferred_cab_type} preference")
+            car_score += 20; car_reasons.append(f"{preferred_cab_type} preference")
         
         if 'cab' in preferred_services:
-            car_score += 25
-            car_reasons.append("preferred service")
-        
-        if car_score >= 40:
-            cab_type = "Luxury Cabs" if preferred_cab_type == 'luxury' else f"{preferred_cab_type.title()} Cabs"
+            car_score += 25; car_reasons.append("preferred service")
             
+        hist_count = past_services_counts.get('Car Booking', 0)
+        if hist_count > 0:
+            car_score += min(30, 10 + (hist_count * 5))
+            car_reasons.append(f"booked {hist_count} times")
+        
+        car_budget_ok = True
+        if monthly_budget == 'low' and preferred_cab_type == 'luxury':
+            car_score -= 25; car_budget_ok = False
+        
+        if car_score >= 40 and car_budget_ok:
+            if monthly_budget in ['high', 'premium'] and (preferred_cab_type == 'luxury' or lifestyle_type == 'luxury'):
+                cab_type = "Luxury Cabs (BMW/Merc)"
+                base_min, base_max = 2500, 5000
+            elif monthly_budget != 'low' and (preferred_cab_type == 'suv' or typical_group_size > 3):
+                cab_type = "Premium SUV"
+                base_min, base_max = 1500, 3000
+            elif monthly_budget == 'low':
+                cab_type = "Budget Sedan"
+                base_min, base_max = 500, 1200
+            else:
+                cab_type = "Comfort Sedan"
+                base_min, base_max = 800, 1500
+            
+            price_str, price_reason = get_dynamic_price_info('Car Booking', base_min, base_max)
             recommendations.append({
                 'id': 3,
                 'service_type': 'Car Booking',
                 'reason': f'Best for {", ".join(car_reasons)}.',
                 'match_score': min(85, car_score),
                 'metadata': {
-                    'price': '₹1,500-5,000/trip',
+                    'price': price_str,
+                    'price_reason': price_reason,
                     'vehicle': cab_type,
                     'capacity': f'Up to {max(4, typical_group_size)} passengers'
                 }
@@ -3535,23 +3879,26 @@ def api_lifestyle_recommendations():
             tech_score = 60
             tech_reasons = ["home owner"]
             
-            # Add bonus for interests
-            home_interests = ['tech', 'fitness', 'music', 'art']
-            if any(i in interests for i in home_interests):
-                tech_score += 15
-                tech_reasons.append("home maintenance needs")
+            if any(i in interests for i in ['tech', 'fitness', 'music', 'art']):
+                tech_score += 15; tech_reasons.append("home maintenance needs")
             
             if 'technician' in preferred_services:
-                tech_score += 20
-                tech_reasons.append("preferred service")
+                tech_score += 20; tech_reasons.append("preferred service")
             
+            hist_count = past_services_counts.get('Technician Booking', 0)
+            if hist_count > 0:
+                tech_score += min(30, 10 + (hist_count * 5))
+                tech_reasons.append(f"booked {hist_count} times")
+            
+            price_str, price_reason = get_dynamic_price_info('Technician Booking', 500, 2000)
             recommendations.append({
                 'id': 4,
                 'service_type': 'Technician Booking',
                 'reason': f'Essential for {", ".join(tech_reasons)}.',
                 'match_score': min(90, tech_score),
                 'metadata': {
-                    'price': '₹500-2,000',
+                    'price': price_str,
+                    'price_reason': price_reason,
                     'availability': 'Same-day & Emergency',
                     'services': 'AC, Plumbing, Electrical, Carpentry'
                 }
@@ -3562,31 +3909,73 @@ def api_lifestyle_recommendations():
         courier_reasons = []
         
         if 'courier' in preferred_services:
-            courier_score += 40
-            courier_reasons.append("preferred service")
+            courier_score += 40; courier_reasons.append("preferred service")
         
         if travel_style == 'business' or profile.get('profession', '') in ['business', 'working', 'freelancer']:
-            courier_score += 25
-            courier_reasons.append(f"{profession} needs")
+            courier_score += 25; courier_reasons.append(f"{profession} needs")
         
-        if monthly_budget in ['medium', 'high', 'premium']:
-            courier_score += 15
-            courier_reasons.append("express delivery budget")
+        delivery_type = "Standard Delivery"
+        base_min, base_max = 100, 300
+        
+        if monthly_budget in ['high', 'premium']:
+            courier_score += 15; courier_reasons.append("express delivery budget")
+            delivery_type = "Express Delivery"
+            base_min, base_max = 300, 800
+        elif monthly_budget == 'medium':
+             delivery_type = "Standard/Express"
+             base_min, base_max = 150, 500
+            
+        hist_count = past_services_counts.get('Courier Booking', 0)
+        if hist_count > 0:
+            courier_score += min(30, 10 + (hist_count * 5))
+            courier_reasons.append(f"booked {hist_count} times")
         
         if courier_score >= 40:
-            delivery_type = "Express Delivery" if monthly_budget in ['high', 'premium'] else "Standard Delivery"
-            
+            price_str, price_reason = get_dynamic_price_info('Courier Booking', base_min, base_max)
             recommendations.append({
                 'id': 5,
                 'service_type': 'Courier Booking',
                 'reason': f'Useful for {", ".join(courier_reasons)}.',
                 'match_score': min(80, courier_score),
                 'metadata': {
-                    'price': '₹100-500',
+                    'price': price_str,
+                    'price_reason': price_reason,
                     'delivery': delivery_type,
                     'tracking': 'Real-time GPS Tracking'
                 }
             })
+
+        # Save recommendations to database
+        if recommendations:
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                
+                # Clear old recommendations first
+                cur.execute("DELETE FROM ai_recommendations WHERE user_id = %s", (user_id,))
+                
+                # Insert new ones
+                for rec in recommendations:
+                    cur.execute("""
+                        INSERT INTO ai_recommendations (
+                            user_id, service_type, title, description, reason, match_score, metadata, created_at
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                    """, (
+                        user_id, 
+                        rec['service_type'],
+                        rec['service_type'], # Title
+                        rec['reason'], # Description
+                        rec['reason'], 
+                        rec['match_score'],
+                        json.dumps(rec.get('metadata', {}))
+                    ))
+                conn.commit()
+            except Exception as e:
+                logger.error(f"Error saving recommendations: {e}")
+                if conn: conn.rollback()
+            finally:
+                if cur: cur.close()
+                if conn: conn.close()
 
         # If no specific recommendations, show generic ones
         if not recommendations:
@@ -3638,9 +4027,11 @@ def api_lifestyle_recommendations():
         logger.error(f"Error generating recommendations: {str(e)}")
         import traceback
         traceback.print_exc()
+        # Return proper JSON error response
         return jsonify({
             'success': False,
             'error': 'Internal server error',
+            'message': 'Unable to load recommendations. Please try again.',
             'recommendations': [],
             'has_profile': True
         }), 500
@@ -3648,167 +4039,191 @@ def api_lifestyle_recommendations():
 @app.route('/api/nearby-services', methods=['POST'])
 @login_required
 def api_nearby_services():
-    """Get services near user location with PROPER booking data"""
+    """Get services near user location with PROPER booking data and BUDGET filtering"""
     try:
         data = request.json
         lat = data.get('lat')
         lng = data.get('lng')
+        radius = data.get('radius', 10)  # Default 10km radius
+        user_id = current_user.get_id()
         
+        using_fallback = False
         if not lat or not lng:
-            return jsonify({'success': False, 'error': 'Location required'}), 400
+            # Fallback to Mumbai coordinates
+            lat = 19.0760
+            lng = 72.8777
+            using_fallback = True
+            
+        # Get user profile for budget filtering
+        profile = get_user_profile(user_id)
+        budget = profile.get('monthly_budget', 'medium') if profile else 'medium'
         
-        logger.info(f"Finding services near: {lat}, {lng}")
+        logger.info(f"Finding services near: {lat}, {lng} (radius: {radius}km) for budget: {budget}")
         
-        # Get user location from OpenStreetMap (reverse geocode)
-        try:
-            import requests
-            response = requests.get(
-                f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lng}&zoom=10",
-                headers={'User-Agent': 'ConciergeLifestyle/1.0'}
-            )
-            location_data = response.json()
-            city = location_data.get('address', {}).get('city') or location_data.get('address', {}).get('town') or 'Mumbai'
-        except:
-            city = 'Mumbai'  # Fallback
+        # Get location name
+        city = 'Mumbai'
+        if not using_fallback:
+            try:
+                import requests
+                # Use a timeout to prevent hanging
+                response = requests.get(
+                    f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lng}&zoom=10",
+                    headers={'User-Agent': 'ConciergeLifestyle/1.0'},
+                    timeout=2
+                )
+                if response.ok:
+                    location_data = response.json()
+                    city = location_data.get('address', {}).get('city') or location_data.get('address', {}).get('town') or 'Unknown Location'
+            except:
+                pass
         
         services = []
         
-        # Hotels - with actual booking data
-        hotels = [
+        # Helper to generate random coords within radius (approx 1deg lat ~= 111km)
+        def get_nearby_coords(center_lat, center_lng, max_dist_km):
+            # Simple approximation
+            max_offset = max_dist_km / 111.0
+            new_lat = center_lat + random.uniform(-max_offset, max_offset)
+            new_lng = center_lng + random.uniform(-max_offset, max_offset)
+            return new_lat, new_lng, round(random.uniform(0.1, max_dist_km), 1)
+
+        # Hotels - Filtered by budget
+        all_hotels = [
             {
                 'id': 1,
                 'name': 'The Taj Majestic',
                 'type': 'Hotel Booking',
                 'description': 'Luxury 5-star hotel with world-class amenities and spa',
-                'distance': round(random.uniform(0.5, 3.0), 1),
-                'lat': lat + random.uniform(-0.02, 0.02),
-                'lng': lng + random.uniform(-0.02, 0.02),
                 'rating': 4.8,
-                'price': '₹8,000/night',
+                'price_val': 12000,
+                'price': '₹12,000/night',
+                'budget_cat': 'high',
                 'address': f'{city} Downtown',
-                'booking_data': {
-                    'destination': city,
-                    'hotel_name': 'The Taj Majestic',
-                    'price_per_night': 8000,
-                    'available_rooms': 15
-                }
+                'booking_data': { 'destination': city, 'hotel_name': 'The Taj Majestic', 'price_per_night': 12000, 'available_rooms': 15 }
             },
             {
                 'id': 2,
                 'name': 'Grand Plaza Hotel',
                 'type': 'Hotel Booking',
-                'description': 'Business hotel with conference facilities',
-                'distance': round(random.uniform(1.0, 4.0), 1),
-                'lat': lat + random.uniform(-0.03, 0.03),
-                'lng': lng + random.uniform(-0.03, 0.03),
+                'description': 'Modern business hotel with premium facilities',
                 'rating': 4.4,
-                'price': '₹4,500/night',
+                'price_val': 6500,
+                'price': '₹6,500/night',
+                'budget_cat': 'medium',
                 'address': f'{city} City Center',
-                'booking_data': {
-                    'destination': city,
-                    'hotel_name': 'Grand Plaza Hotel',
-                    'price_per_night': 4500,
-                    'available_rooms': 20
-                }
-            }
-        ]
-        
-        # Technicians - with booking data
-        technicians = [
-            {
-                'id': 3,
-                'name': 'QuickFix Home Services',
-                'type': 'Technician Booking',
-                'description': 'AC repair, plumbing, electrical - Available 24/7',
-                'distance': round(random.uniform(0.3, 2.0), 1),
-                'lat': lat + random.uniform(-0.015, 0.015),
-                'lng': lng + random.uniform(-0.015, 0.015),
-                'rating': 4.6,
-                'price': '₹500-1,200',
-                'address': f'{city} Residential Area',
-                'booking_data': {
-                    'technician_id': 'TECH-001',
-                    'service_types': ['AC Repair', 'Plumbing', 'Electrical'],
-                    'location': f'{city} Area',
-                    'hourly_rate': 800
-                }
+                'booking_data': { 'destination': city, 'hotel_name': 'Grand Plaza Hotel', 'price_per_night': 6500, 'available_rooms': 20 }
             },
             {
-                'id': 4,
-                'name': 'Expert Repairs',
-                'type': 'Technician Booking',
-                'description': 'Professional technicians for all home repairs',
-                'distance': round(random.uniform(0.5, 2.5), 1),
-                'lat': lat + random.uniform(-0.02, 0.02),
-                'lng': lng + random.uniform(-0.02, 0.02),
-                'rating': 4.7,
-                'price': '₹600-1,500',
-                'address': f'{city} Service Area',
-                'booking_data': {
-                    'technician_id': 'TECH-002',
-                    'service_types': ['Carpentry', 'Painting', 'General Repair'],
-                    'location': f'{city} Area',
-                    'hourly_rate': 900
-                }
-            }
-        ]
-        
-        # Cars - with booking data
-        cars = [
+                'id': 10,
+                'name': 'City Stay Inn',
+                'type': 'Hotel Booking',
+                'description': 'Clean and comfortable budget stay',
+                'rating': 4.1,
+                'price_val': 2500,
+                'price': '₹2,500/night',
+                'budget_cat': 'low',
+                'address': f'{city} Hub',
+                'booking_data': { 'destination': city, 'hotel_name': 'City Stay Inn', 'price_per_night': 2500, 'available_rooms': 10 }
+            },
             {
-                'id': 5,
-                'name': 'Premium Cab Services',
-                'type': 'Car Booking',
-                'description': 'Luxury cabs with professional drivers',
-                'distance': round(random.uniform(1.0, 5.0), 1),
-                'lat': lat + random.uniform(-0.04, 0.04),
-                'lng': lng + random.uniform(-0.04, 0.04),
-                'rating': 4.7,
-                'price': '₹1,500-3,000',
-                'address': f'{city} Main Road',
-                'booking_data': {
-                    'cab_class': 'luxury',
-                    'vehicle_model': 'BMW 5 Series',
-                    'pickup_location': f'{city}',
-                    'base_fare': 1500
-                }
+                'id': 11,
+                'name': 'Royal Palace & Spa',
+                'type': 'Hotel Booking',
+                'description': 'Exclusive ultra-luxury palace experience',
+                'rating': 4.9,
+                'price_val': 25000,
+                'price': '₹25,000/night',
+                'budget_cat': 'premium',
+                'address': f'{city} Royal District',
+                'booking_data': { 'destination': city, 'hotel_name': 'Royal Palace', 'price_per_night': 25000, 'available_rooms': 5 }
             }
         ]
         
-        # Couriers - with booking data
-        couriers = [
-            {
-                'id': 6,
-                'name': 'Express Courier Hub',
-                'type': 'Courier Booking',
-                'description': 'Same-day delivery across the city',
-                'distance': round(random.uniform(0.8, 3.5), 1),
-                'lat': lat + random.uniform(-0.025, 0.025),
-                'lng': lng + random.uniform(-0.025, 0.025),
-                'rating': 4.5,
-                'price': '₹100-500',
-                'address': f'{city} Commercial District',
-                'booking_data': {
-                    'courier_type': 'express',
-                    'max_weight': 20,
-                    'pickup_location': f'{city}',
-                    'price_per_kg': 50
-                }
-            }
+        # Filter hotels by budget
+        target_hotels = []
+        if budget == 'low':
+            target_hotels = [h for h in all_hotels if h['budget_cat'] == 'low']
+        elif budget == 'medium':
+            target_hotels = [h for h in all_hotels if h['budget_cat'] in ['low', 'medium']]
+        elif budget == 'high':
+            target_hotels = [h for h in all_hotels if h['budget_cat'] in ['medium', 'high']]
+        else: # premium
+            target_hotels = [h for h in all_hotels if h['budget_cat'] in ['high', 'premium']]
+            
+        if not target_hotels: target_hotels = all_hotels[:2] # Fallback
+
+        # Generate nearby instances for hotels
+        for h in target_hotels:
+            h_lat, h_lng, dist = get_nearby_coords(lat, lng, radius)
+            h_copy = h.copy()
+            h_copy.update({'lat': h_lat, 'lng': h_lng, 'distance': dist})
+            services.append(h_copy)
+
+        # Technicians
+        tech_lat, tech_lng, tech_dist = get_nearby_coords(lat, lng, radius)
+        services.append({
+            'id': 3,
+            'name': 'QuickFix Home Services',
+            'type': 'Technician Booking',
+            'description': 'AC repair, plumbing, electrical - Available 24/7',
+            'distance': tech_dist,
+            'lat': tech_lat,
+            'lng': tech_lng,
+            'rating': 4.6,
+            'price': '₹500-1,200',
+            'address': f'{city} Residential Area',
+            'booking_data': { 'technician_id': 'TECH-001', 'service_types': ['AC Repair', 'Plumbing'], 'location': f'{city} Area', 'hourly_rate': 800 }
+        })
+
+        # Cars
+        all_cars = [
+            { 'id': 5, 'name': 'Premium Cab Services', 'type': 'Car Booking', 'description': 'Luxury cabs', 'rating': 4.7, 'price': '₹2,500+', 'budget_cat': 'high', 'model': 'BMW 5 Series', 'class': 'luxury' },
+            { 'id': 15, 'name': 'Reliable City Cabs', 'type': 'Car Booking', 'description': 'Comfortable sedans', 'rating': 4.3, 'price': '₹800+', 'budget_cat': 'medium', 'model': 'Toyota Etios', 'class': 'standard' }
         ]
         
-        # Combine all services
-        services = hotels + technicians + cars + couriers
+        target_cars = [c for c in all_cars if (budget in ['low', 'medium'] and c['budget_cat'] == 'medium') or (budget in ['high', 'premium'] and c['budget_cat'] == 'high')]
+        if not target_cars: target_cars = all_cars # Fallback
+
+        for c in target_cars:
+            c_lat, c_lng, c_dist = get_nearby_coords(lat, lng, radius)
+            services.append({
+                'id': c['id'],
+                'name': c['name'],
+                'type': c['type'],
+                'description': c['description'],
+                'distance': c_dist,
+                'lat': c_lat,
+                'lng': c_lng,
+                'rating': c['rating'],
+                'price': c['price'],
+                'address': f'{city} Road',
+                'booking_data': { 'cab_class': c['class'], 'vehicle_model': c['model'], 'pickup_location': city, 'base_fare': 1000 }
+            })
+
+        # Couriers
+        cour_lat, cour_lng, cour_dist = get_nearby_coords(lat, lng, radius)
+        services.append({
+            'id': 6,
+            'name': 'Express Courier Hub',
+            'type': 'Courier Booking',
+            'description': 'Same-day delivery across the city',
+            'distance': cour_dist,
+            'lat': cour_lat,
+            'lng': cour_lng,
+            'rating': 4.5,
+            'price': '₹100-500',
+            'address': f'{city} Commercial District',
+            'booking_data': { 'courier_type': 'express', 'max_weight': 20, 'pickup_location': city, 'price_per_kg': 50 }
+        })
         
         # Sort by distance
         services.sort(key=lambda x: x['distance'])
         
-        logger.info(f"Found {len(services)} services near {city}")
-        
         return jsonify({
             'success': True,
-            'services': services[:8],
-            'user_location': {'lat': lat, 'lng': lng, 'city': city}
+            'services': services[:10],
+            'user_location': {'lat': lat, 'lng': lng, 'city': city},
+            'using_fallback': using_fallback
         })
         
     except Exception as e:
