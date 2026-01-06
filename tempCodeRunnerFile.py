@@ -193,29 +193,6 @@ def save_support_message(user_id, sender_type, message, message_type='text', fil
         cur.close()
         conn.close()
 
-def save_support_file(file):
-    """Save support file and return URL"""
-    try:
-        if file and allowed_support_file(file.filename):
-            # Create unique filename
-            timestamp = int(time.time())
-            original_name = secure_filename(file.filename)
-            filename = f"{timestamp}_{uuid.uuid4().hex}_{original_name}"
-            
-            # Ensure directory exists
-            os.makedirs(SUPPORT_UPLOAD_FOLDER, exist_ok=True)
-            
-            # Save file
-            file_path = os.path.join(SUPPORT_UPLOAD_FOLDER, filename)
-            file.save(file_path)
-            
-            # Return relative URL
-            return f"/static/uploads/support_files/{filename}"
-    except Exception as e:
-        logger.error(f"Error saving support file: {e}")
-    
-    return None
-
 # ---------------------- SUPPORT CHAT ROUTES ----------------------
 
 @app.route('/api/support/chat/history', methods=['GET'])
@@ -238,7 +215,7 @@ def api_support_chat_history():
 @app.route('/api/support/chat/send', methods=['POST'])
 @login_required
 def api_support_chat_send():
-    """Send a support message (User -> Admin)"""
+    """Send a support message"""
     try:
         user_id = current_user.get_id()
         
@@ -281,8 +258,8 @@ def api_support_chat_send():
             'is_me': True
         }
         
-        # Emit to admins only (prevents echo to user)
-        socketio.emit('support_message_received', response_data, room='admin_support')
+        # Emit socket event for admin
+        socketio.emit('support_message_sent', response_data, broadcast=True)
         
         return jsonify({
             'success': True,
@@ -295,45 +272,30 @@ def api_support_chat_send():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/admin/support/users', methods=['GET'])
+@login_required
 def api_admin_support_users():
-    """Get list of users who contacted support - IMPROVED VERSION"""
+    """Get list of users who contacted support"""
     if not session.get('is_admin'):
         return jsonify({"error": "Unauthorized"}), 403
     
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # Get users with recent support messages - FIXED QUERY
+        # Get users with recent support messages
         cur.execute("""
-            SELECT 
+            SELECT DISTINCT ON (u.id) 
                 u.id,
-                COALESCE(u.full_name, u.email) as name,
+                u.full_name,
                 u.email,
                 u.profile_picture,
                 COALESCE(u.unread_support_count, 0) as unread_count,
                 sm.message as last_message,
                 sm.created_at as last_message_at,
-                sm.sender_type as last_sender,
-                CASE 
-                    WHEN EXISTS (
-                        SELECT 1 FROM support_messages sm2 
-                        WHERE sm2.user_id = u.id 
-                        AND sm2.sender_type = 'user' 
-                        AND sm2.created_at > NOW() - INTERVAL '5 minutes'
-                    ) THEN 'online'
-                    ELSE 'offline'
-                END as status
+                sm.sender_type as last_sender
             FROM users u
             LEFT JOIN support_messages sm ON u.id = sm.user_id
-            WHERE u.id IN (
-                SELECT DISTINCT user_id FROM support_messages
-            )
-            AND sm.id = (
-                SELECT MAX(id) 
-                FROM support_messages 
-                WHERE user_id = u.id
-            )
-            ORDER BY sm.created_at DESC NULLS LAST
+            WHERE sm.id IS NOT NULL
+            ORDER BY u.id, sm.created_at DESC
         """)
         
         rows = cur.fetchall()
@@ -346,11 +308,13 @@ def api_admin_support_users():
                 'email': row[2],
                 'profile_picture': row[3] or '',
                 'unread_count': row[4],
-                'last_message': (row[5] or '')[:50] + ('...' if len(row[5] or '') > 50 else ''),
+                'last_message': row[5] or '',
                 'last_message_at': row[6].isoformat() if row[6] else '',
-                'last_sender': row[7] or 'user',
-                'status': row[8] or 'offline'
+                'last_sender': row[7] or 'user'
             })
+        
+        # Sort by last message time (most recent first)
+        users.sort(key=lambda x: x.get('last_message_at', ''), reverse=True)
         
         return jsonify({'success': True, 'users': users})
     except Exception as e:
@@ -361,8 +325,9 @@ def api_admin_support_users():
         conn.close()
 
 @app.route('/api/admin/support/messages/<int:user_id>', methods=['GET'])
+@login_required
 def api_admin_support_messages(user_id):
-    """Get support messages for a specific user - IMPROVED VERSION"""
+    """Get support messages for a specific user"""
     if not session.get('is_admin'):
         return jsonify({"error": "Unauthorized"}), 403
     
@@ -384,11 +349,10 @@ def api_admin_support_messages(user_id):
             'id': user_row[0],
             'name': user_row[1] or user_row[2].split('@')[0],
             'email': user_row[2],
-            'profile_picture': user_row[3] or '',
-            'profile_picture_url': f"/static/uploads/profile_pictures/{user_row[3]}" if user_row[3] else ''
+            'profile_picture': user_row[3] or ''
         }
         
-        # Get messages with better ordering
+        # Get messages
         cur.execute("""
             SELECT 
                 id,
@@ -401,29 +365,21 @@ def api_admin_support_messages(user_id):
             FROM support_messages 
             WHERE user_id = %s 
             ORDER BY created_at ASC
-            LIMIT 200
+            LIMIT 100
         """, (user_id,))
         
         messages = []
         rows = cur.fetchall()
         for row in rows:
-            file_path = row[4]
-            # Ensure file path is a full URL if it exists
-            if file_path and not file_path.startswith('http') and not file_path.startswith('/'):
-                if 'support_files' in file_path:
-                    file_path = f"/static/uploads/support_files/{file_path.split('/')[-1]}"
-                elif 'profile_pictures' in file_path:
-                    file_path = f"/static/uploads/profile_pictures/{file_path.split('/')[-1]}"
-            
             messages.append({
                 'id': row[0],
                 'sender_type': row[1],
                 'message': row[2],
                 'message_type': row[3],
-                'file_path': file_path,
+                'file_path': row[4],
                 'timestamp': row[5].isoformat() if row[5] else '',
                 'is_read': row[6],
-                'is_admin': row[1] == 'admin'
+                'is_admin': row[1] == 'admin'  # For admin's perspective
             })
         
         # Mark messages as read (admin viewed them)
@@ -432,7 +388,6 @@ def api_admin_support_messages(user_id):
             SET is_read = TRUE 
             WHERE user_id = %s 
             AND sender_type = 'user'
-            AND is_read = FALSE
         """, (user_id,))
         
         # Reset user's unread count
@@ -458,6 +413,7 @@ def api_admin_support_messages(user_id):
         if 'conn' in locals(): conn.close()
 
 @app.route('/api/admin/support/send', methods=['POST'])
+@login_required
 def api_admin_support_send():
     """Admin sends message to user"""
     if not session.get('is_admin'):
@@ -511,6 +467,7 @@ def api_admin_support_send():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/admin/support/send-report', methods=['POST'])
+@login_required
 def api_admin_support_send_report():
     """Admin sends booking report to user"""
     if not session.get('is_admin'):
@@ -648,96 +605,6 @@ def generate_booking_report(user_id, booking_id, report_type):
         if 'cur' in locals(): cur.close()
         if 'conn' in locals(): conn.close()
 
-# ========================
-# ADMIN SUPPORT CHAT - UPLOAD & CLEAR CHAT
-# ========================
-
-@app.route('/api/admin/support/upload', methods=['POST'])
-@login_required
-def api_admin_support_upload():
-    """Admin uploads file to send to user"""
-    if not session.get('is_admin'):
-        return jsonify({"error": "Unauthorized"}), 403
-    
-    try:
-        user_id = request.form.get('user_id')
-        file = request.files.get('file')
-        
-        if not user_id or not file:
-            return jsonify({'success': False, 'error': 'User ID and file required'}), 400
-        
-        # Validate file
-        if not allowed_support_file(file.filename):
-            return jsonify({'success': False, 'error': 'File type not allowed'}), 400
-        
-        # Save file
-        file_url = save_support_file(file)
-        if not file_url:
-            return jsonify({'success': False, 'error': 'Failed to save file'}), 500
-        
-        # Save message with file
-        message = f"File: {file.filename}"
-        msg_id, timestamp = save_support_message(
-            user_id=user_id,
-            sender_type='admin',
-            message=message,
-            message_type='file',
-            file_path=file_url
-        )
-        
-        # Prepare response
-        response_data = {
-            'id': msg_id,
-            'user_id': user_id,
-            'sender_type': 'admin',
-            'message': message,
-            'message_type': 'file',
-            'file_path': file_url,
-            'timestamp': timestamp.isoformat(),
-            'is_admin': True
-        }
-        
-        # Notify user via socket
-        socketio.emit('support_message_received', response_data, room=f"user_{user_id}")
-        
-        return jsonify({
-            'success': True,
-            'message': 'File sent successfully',
-            'data': response_data
-        })
-        
-    except Exception as e:
-        logger.error(f"Admin file upload error: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/admin/support/clear-chat/<int:user_id>', methods=['DELETE'])
-@login_required
-def api_admin_clear_chat(user_id):
-    """Admin clears chat history with user"""
-    if not session.get('is_admin'):
-        return jsonify({"error": "Unauthorized"}), 403
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        # Delete chat messages
-        cur.execute("DELETE FROM support_messages WHERE user_id = %s", (user_id,))
-        
-        # Reset unread count
-        cur.execute("UPDATE users SET unread_support_count = 0 WHERE id = %s", (user_id,))
-        
-        conn.commit()
-        
-        return jsonify({'success': True, 'message': 'Chat cleared successfully'})
-        
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Clear chat error: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        cur.close()
-        conn.close()
-
 # ---------------------- SOCKET.IO HANDLERS FOR SUPPORT CHAT ----------------------
 
 @socketio.on('support_message')
@@ -776,8 +643,8 @@ def handle_support_message(data):
         # Emit to appropriate recipients
         if sender_type == 'user':
             # User sent message: notify admin
-            socketio.emit('support_message_received', response_data, room='admin_support')
-            # Also send back to user for confirmation (if they use socket to send)
+            socketio.emit('support_message_received', response_data, broadcast=True)
+            # Also send back to user for confirmation
             socketio.emit('support_message_sent', response_data, room=f"user_{user_id}")
         else:
             # Admin sent message: notify user
@@ -794,15 +661,13 @@ def handle_support_typing(data):
         is_typing = data.get('is_typing', False)
         sender_type = data.get('sender_type', 'user')
         
-        if sender_type == 'user':
+        if sender_type == 'user' and session.get('is_admin'):
             # User typing, notify admin
             socketio.emit('support_user_typing', {
                 'user_id': user_id,
                 'is_typing': is_typing
-            }, room='admin_support')
+            }, broadcast=True)
         elif sender_type == 'admin':
-            if not session.get('is_admin'):
-                return
             # Admin typing, notify user
             socketio.emit('support_admin_typing', {
                 'is_typing': is_typing
@@ -825,88 +690,6 @@ def handle_support_mark_read(data):
     except Exception as e:
         logger.error(f"Socket mark read error: {e}")
 
-# ========================
-# NEW SOCKET EVENTS FOR ADMIN SUPPORT CHAT
-# ========================
-
-@socketio.on('admin_support_message')
-def handle_admin_support_message(data):
-    """Handle admin support messages via WebSocket"""
-    try:
-        user_id = data.get('user_id')
-        message = data.get('message', '').strip()
-        
-        if not user_id or not message:
-            return
-        
-        # Save message
-        msg_id, timestamp = save_support_message(
-            user_id=user_id,
-            sender_type='admin',
-            message=message,
-            message_type='text'
-        )
-        
-        # Prepare response
-
-        response_data = {
-            'id': msg_id,
-            'user_id': user_id,
-            'sender_type': 'admin',
-            'message': message,
-            'timestamp': timestamp.isoformat(),
-            'is_admin': True
-        }
-        
-        # Emit to user
-        socketio.emit('support_message_received', response_data, room=f"user_{user_id}")
-        
-        # Also send back to admin for confirmation
-        emit('support_message_sent', response_data)
-        
-    except Exception as e:
-        logger.error(f"Admin support message error: {e}")
-
-@socketio.on('admin_support_file')
-def handle_admin_support_file(data):
-    """Handle admin file sharing via WebSocket"""
-    try:
-        user_id = data.get('user_id')
-        file_url = data.get('file_url')
-        file_name = data.get('file_name')
-        
-        if not user_id or not file_url:
-            return
-        
-        message = f"File shared: {file_name}"
-        
-        # Save message with file
-        msg_id, timestamp = save_support_message(
-            user_id=user_id,
-            sender_type='admin',
-            message=message,
-            message_type='file',
-            file_path=file_url
-        )
-        
-        # Prepare response
-        response_data = {
-            'id': msg_id,
-            'user_id': user_id,
-            'sender_type': 'admin',
-            'message': message,
-            'message_type': 'file',
-            'file_path': file_url,
-            'timestamp': timestamp.isoformat(),
-            'is_admin': True
-        }
-        
-        # Emit to user
-        socketio.emit('support_message_received', response_data, room=f"user_{user_id}")
-        
-    except Exception as e:
-        logger.error(f"Admin support file error: {e}")
-        
 # ---------------------- Flask-Login ----------------------
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -1789,7 +1572,7 @@ def get_active_users():
         cur.close()
         conn.close()
 
-def get_analytics_data(days=7):
+def get_analytics_data():
     """Get comprehensive analytics data"""
     conn = get_db_connection()
     cur = conn.cursor()
@@ -1815,22 +1598,21 @@ def get_analytics_data(days=7):
         cur.execute("SELECT COUNT(DISTINCT user_id) FROM requests WHERE DATE(created_at) = CURRENT_DATE")
         active_users_today = cur.fetchone()[0]
         
-        # Use parameterized query for safety, although days is int
-        cur.execute(f"""
+        cur.execute("""
             SELECT service_type, COUNT(*) 
             FROM requests 
-            WHERE created_at >= CURRENT_DATE - INTERVAL '{days} days'
+            WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'
             GROUP BY service_type
         """)
         service_data = cur.fetchall()
         
         timeline_labels = []
         timeline_data = []
-        for i in range(days - 1, -1, -1):
-            date_val = (datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d')
-            cur.execute("SELECT COUNT(*) FROM requests WHERE DATE(created_at) = %s", (date_val,))
+        for i in range(6, -1, -1):
+            date = (datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d')
+            cur.execute("SELECT COUNT(*) FROM requests WHERE DATE(created_at) = %s", (date,))
             count = cur.fetchone()[0]
-            timeline_labels.append(date_val)
+            timeline_labels.append(date)
             timeline_data.append(count)
         
         return {
@@ -1962,10 +1744,7 @@ def admin():
     if not session.get('is_admin'):
         flash("Access denied. Admin only.", "danger")
         return redirect(url_for('login'))
-
-    # Ensure admin also joins a socket room for admin-specific events
-    session['socket_room'] = 'admin_support'
-
+    
     analytics_data = get_analytics_data()
     active_users = get_active_users()
     
@@ -1999,7 +1778,7 @@ def admin():
 def handle_connect(auth):
     try:
         if session.get('is_admin'):
-            socketio.server.emit('update_requests', {'requests': get_requests_json()}, namespace='/')
+            emit('update_requests', {'requests': get_requests_json()}, broadcast=True)
             analytics_data = get_analytics_data()
             emit('analytics_update', {'analytics': analytics_data})
             
@@ -2008,10 +1787,6 @@ def handle_connect(auth):
                 'active_users': active_users,
                 'active_count': len(active_users)
             })
-            
-            # ADD THIS: Join admin room for support chat notifications
-            join_room('admin_support')
-            
     except Exception as e:
         logger.error(f"connect error: {e}")
 
@@ -2063,7 +1838,7 @@ def handle_approve_request(data):
             'message': f'Your {service_type} has been approved!'
         }, room=f"user_{user_id}")
 
-        socketio.server.emit('update_requests', {'requests': get_requests_json()}, namespace='/')
+        emit('update_requests', {'requests': get_requests_json()}, broadcast=True)
         
         emit('approve_success', {
             'request_id': request_id,
@@ -2145,7 +1920,7 @@ def handle_confirm_payment(data):
     try:
         cur.execute("UPDATE requests SET payment_status = 'Confirmed' WHERE id = %s", (request_id,))
         conn.commit()
-        socketio.server.emit('update_requests', {'requests': get_requests_json()}, namespace='/')
+        emit('update_requests', {'requests': get_requests_json()}, broadcast=True)
     except Exception as e:
         emit('error', {'message': str(e)})
     finally:
@@ -2193,14 +1968,14 @@ def handle_delete_request(data):
             type="error"
         )
 
-        socketio.server.emit('request_deleted', {
+        emit('request_deleted', {
             'request_id': request_id,
             'booking_id': booking_id,
             'user_id': user_id,
             'message': f'Request #{request_id} deleted successfully'
-        }, namespace='/')
+        }, broadcast=True)
         
-        socketio.server.emit('update_requests', {'requests': get_requests_json()}, namespace='/')
+        emit('update_requests', {'requests': get_requests_json()}, broadcast=True)
 
     except Exception as e:
         conn.rollback()
@@ -2381,11 +2156,11 @@ def handle_send_ticket_to_user(data):
         
         pdf_filename = create_pdf_ticket_for_booking(booking_id, service_type, details_obj, user_id)
         
-        socketio.server.emit('ticket_sent_to_user', {
+        emit('ticket_sent_to_user', {
             'user_id': user_id,
             'booking_id': booking_id,
             'ticket_pdf_url': f"/static/tickets/{pdf_filename}"
-        }, namespace='/')
+        }, broadcast=True)
         
         emit('ticket_ready', {
             'booking_id': booking_id,
@@ -2617,33 +2392,6 @@ def admin_send_ticket():
     finally:
         cur.close()
         conn.close()
-
-@app.route('/admin/analytics')
-def admin_analytics():
-    if not session.get('is_admin'):
-        return jsonify({"error": "Unauthorized"}), 403
-
-    # days param is accepted for UI compatibility; current analytics are computed for recent ranges.
-    _days = request.args.get('days', default=7, type=int)
-    return jsonify(get_analytics_data(days=_days))
-
-
-@app.route('/admin/stats')
-def admin_stats():
-    if not session.get('is_admin'):
-        return jsonify({"error": "Unauthorized"}), 403
-
-    analytics = get_analytics_data() or {}
-    return jsonify({
-        "total_users": analytics.get("total_users", 0),
-        "total_requests": analytics.get("total_requests", 0),
-        "new_users_today": analytics.get("new_users_today", 0),
-        "active_users_today": analytics.get("active_users_today", 0),
-        "pending_requests": analytics.get("pending_requests", 0),
-        "confirmed_requests": analytics.get("confirmed_requests", 0),
-        "active_requests_today": analytics.get("active_requests_today", 0)
-    })
-
 
 @app.route('/admin/requests')
 def admin_requests():
@@ -3732,7 +3480,7 @@ def handle_chat_message(data):
         
         # 2. If User sent it, also Broadcast to Admins so their list updates
         if role == 'user':
-            socketio.server.emit('admin_new_message_alert', msg_data, namespace='/')
+            emit('admin_new_message_alert', msg_data, broadcast=True)
             
     except Exception as e:
         logger.error(f"Chat socket error: {e}")
@@ -4110,12 +3858,12 @@ def submit_hotel_booking():
         return redirect(url_for('dashboard'))
 
     try:
-        check_in_date = datetime.strptime(checkin, '%Y-%m-%d').date()
-        check_out_date = datetime.strptime(checkout, '%Y-%m-%d').date()
+        check_in_date = datetime.strptime(checkin, '%Y-%m-%d')
+        check_out_date = datetime.strptime(checkout, '%Y-%m-%d')
         if check_out_date <= check_in_date:
             flash("Check-out date must be after check-in date.", "danger")
             return redirect(url_for('dashboard'))
-        if check_in_date < date.today():
+        if check_in_date < datetime.now():
             flash("Check-in date cannot be in the past.", "danger")
             return redirect(url_for('dashboard'))
     except ValueError:

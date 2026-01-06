@@ -567,13 +567,17 @@
 
     function initializeDatePickers() {
       checkoutPicker = flatpickr("#checkout, #booking-checkout", {
-        dateFormat: "d-m-Y",
+        altInput: true,
+        altFormat: "F j, Y",
+        dateFormat: "Y-m-d",
         minDate: new Date().fp_incr(1),
         onChange: updateSearchSummary
       });
 
       checkinPicker = flatpickr("#checkin, #booking-checkin", {
-        dateFormat: "d-m-Y",
+        altInput: true,
+        altFormat: "F j, Y",
+        dateFormat: "Y-m-d",
         minDate: "today",
         onChange: function (selectedDates) {
           if (selectedDates[0]) {
@@ -873,8 +877,8 @@
     function calculateNights(checkin, checkout) {
       try {
         if (!checkin || !checkout) return 1;
-        const checkinDate = new Date(checkin.split('-').reverse().join('-'));
-        const checkoutDate = new Date(checkout.split('-').reverse().join('-'));
+        const checkinDate = new Date(checkin);
+        const checkoutDate = new Date(checkout);
         if (isNaN(checkinDate) || isNaN(checkoutDate)) return 1;
         const diff = (checkoutDate - checkinDate) / (1000 * 60 * 60 * 24);
         return Math.max(1, Math.round(diff));
