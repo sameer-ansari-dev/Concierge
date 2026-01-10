@@ -1577,6 +1577,16 @@
             .bindPopup('<b>You are here</b>')
             .openPopup();
 
+        // Add initial radius circle
+        const initialRadius = parseInt(document.getElementById('radiusSlider').value) || 10;
+        window.radiusCircle = L.circle([userLocation.lat, userLocation.lng], {
+            radius: initialRadius * 1000, // Convert km to meters
+            color: '#667eea',
+            fillColor: '#667eea',
+            fillOpacity: 0.1,
+            weight: 2
+        }).addTo(map);
+
         // Add nearby services to map
         addServiceMarkersToMap([]); // Will be populated by fetchNearbyServices
     }
@@ -2492,12 +2502,43 @@
     }
 
     function updateRadius(val) {
-        document.getElementById('radiusValue').textContent = val + 'km';
+        const radiusValue = document.getElementById('radiusValue');
+        const radiusSlider = document.getElementById('radiusSlider');
 
+        radiusValue.textContent = val + 'km';
+
+        // Visual feedback for radius change
+        radiusValue.style.transform = 'scale(1.2)';
+        radiusValue.style.color = '#d4af37';
+
+        setTimeout(() => {
+            radiusValue.style.transform = 'scale(1)';
+            radiusValue.style.color = '';
+        }, 200);
+
+        // Update circle on map if map exists
+        if (map && userLocation) {
+            // Remove old circle if exists
+            if (window.radiusCircle) {
+                map.removeLayer(window.radiusCircle);
+            }
+
+            // Add new circle
+            window.radiusCircle = L.circle([userLocation.lat, userLocation.lng], {
+                radius: val * 1000, // Convert km to meters
+                color: '#667eea',
+                fillColor: '#667eea',
+                fillOpacity: 0.1,
+                weight: 2
+            }).addTo(map);
+        }
+
+        // Debounced fetch
         if (radiusTimeout) clearTimeout(radiusTimeout);
         radiusTimeout = setTimeout(() => {
+            showToast(`Searching within ${val}km radius...`, 'info');
             fetchNearbyServices(parseInt(val));
-        }, 300);
+        }, 500); // Increased to 500ms for better UX
     }
 
     // ============================================

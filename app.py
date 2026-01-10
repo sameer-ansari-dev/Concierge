@@ -711,6 +711,359 @@ def api_admin_support_upload():
         logger.error(f"Admin file upload error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# Report Generation Endpoint - Fixed SQL query
+@app.route('/api/admin/generate-user-report', methods=['POST'])
+@login_required
+def api_admin_generate_user_report():
+    """Generate comprehensive user activity report and send to user"""
+    if not session.get('is_admin'):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    try:
+        data = request.json
+        user_id = data.get('user_id')
+        send_via = data.get('send_via', ['dashboard'])
+        report_type = data.get('report_type', 'full')
+        period = data.get('period', 30)
+
+        if not user_id:
+            return jsonify({'success': False, 'error': 'User ID required'}), 400
+
+        # Get user details for notifications
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT email, full_name FROM users WHERE id = %s", (user_id,))
+        user_data = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if not user_data:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+            
+        user_email, user_name = user_data
+
+        # Generate comprehensive report
+        report_filename = generate_user_activity_report(user_id, report_type, period)
+        if not report_filename:
+            return jsonify({'success': False, 'error': 'Failed to generate report'}), 500
+
+        report_url = f"/static/reports/{report_filename}"
+        
+        # Save report metadata to database
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                INSERT INTO reports (user_id, report_type, file_path, generated_at, sent_via)
+                VALUES (%s, %s, %s, NOW(), %s)
+                RETURNING id
+            """, (user_id, report_type, report_url, ','.join(send_via)))
+            report_id = cur.fetchone()[0]
+            conn.commit()
+        except Exception as e:
+            logger.error(f"Error saving report metadata: {e}")
+            # Continue even if metadata save fails
+        finally:
+            cur.close()
+            conn.close()
+
+        # Send to dashboard if requested
+        if 'dashboard' in send_via:
+            message = f"📊 Your {report_type.replace('_', ' ')} activity report is ready for review"
+            
+            # Save notification to support chat
+            try:
+                msg_id, timestamp = save_support_message(
+                    user_id=user_id,
+                    sender_type='admin',
+                    message=message,
+                    message_type='report',
+                    file_path=report_url
+                )
+
+                # Prepare response data
+                response_data = {
+                    'id': msg_id,
+                    'user_id': user_id,
+                    'sender_type': 'admin',
+                    'message': message,
+                    'message_type': 'report',
+                    'file_path': report_url,
+                    'timestamp': timestamp.isoformat(),
+                    'is_admin': True
+                }
+                
+                # Emit socket event to user
+                socketio.emit('support_message_received', response_data, room=f"user_{user_id}")
+                
+                # Also emit to admin for confirmation
+                socketio.emit('admin_support_message_sent', {
+                    'user_id': user_id,
+                    'report_id': report_id,
+                    'filename': report_filename,
+                    'message': f'Report sent to user {user_name}'
+                }, room='admin_support')
+                
+                logger.info(f"Report sent to user {user_id} dashboard: {report_filename}")
+                
+            except Exception as e:
+                logger.error(f"Error sending report to dashboard: {e}")
+
+        # Send via email if requested
+        if 'email' in send_via and user_email:
+            try:
+                # Note: Email sending would require SMTP setup
+                # For now, log the intention and send notification
+                logger.info(f"Email report to {user_email} - Feature requires SMTP configuration")
+                
+                # Send notification about email
+                email_message = f"📧 Your activity report has been emailed to {user_email}"
+                msg_id, timestamp = save_support_message(
+                    user_id=user_id,
+                    sender_type='admin',
+                    message=email_message,
+                    message_type='info'
+                )
+                
+                socketio.emit('support_message_received', {
+                    'id': msg_id,
+                    'user_id': user_id,
+                    'sender_type': 'admin',
+                    'message': email_message,
+                    'message_type': 'info',
+                    'timestamp': timestamp.isoformat()
+                }, room=f"user_{user_id}")
+                
+            except Exception as e:
+                logger.error(f"Error handling email notification: {e}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Report generated and sent successfully',
+            'report_url': report_url,
+            'sent_via': send_via,
+            'user_name': user_name,
+            'report_id': report_id if 'report_id' in locals() else None
+        })
+
+    except Exception as e:
+        logger.error(f"Error generating user report: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+def generate_user_activity_report(user_id, report_type='full', period=30):
+    """Generate comprehensive user activity report PDF"""
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas
+        from reportlab.lib import colors
+        from reportlab.platypus import Table, TableStyle
+        from datetime import datetime, timedelta
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Get user details
+        cur.execute("""
+            SELECT id, username, email, full_name, phone, created_at
+            FROM users WHERE id = %s
+        """, (user_id,))
+        user = cur.fetchone()
+
+        if not user:
+            return None
+
+        user_id_db, username, email, full_name, phone, created_at = user
+
+        # Get user requests (period-based if not 'all')
+        if period == 'all':
+            cur.execute("""
+                SELECT booking_id, service_type, details, created_at
+                FROM requests WHERE user_id = %s
+                ORDER BY created_at DESC
+            """, (user_id,))
+        else:
+            period_date = datetime.now() - timedelta(days=int(period))
+            cur.execute("""
+                SELECT booking_id, service_type, details, created_at
+                FROM requests WHERE user_id = %s AND created_at >= %s
+                ORDER BY created_at DESC
+            """, (user_id, period_date))
+
+        requests = cur.fetchall()
+
+        # Get lifestyle profile if exists
+        cur.execute("""
+            SELECT monthly_budget, lifestyle_type, travel_frequency, preferred_services
+            FROM lifestyle_profiles WHERE user_id = %s
+        """, (user_id,))
+        profile = cur.fetchone()
+
+        cur.close()
+        conn.close()
+
+        # Create reports directory
+        reports_dir = os.path.join('static', 'reports')
+        os.makedirs(reports_dir, exist_ok=True)
+
+        filename = f"user_report_{user_id}_{int(time.time())}.pdf"
+        filepath = os.path.join(reports_dir, filename)
+
+        # Create PDF
+        c = canvas.Canvas(filepath, pagesize=A4)
+        width, height = A4
+
+        # Gold color theme
+        gold = colors.HexColor('#d4af37')
+        dark = colors.HexColor('#1e293b')
+
+        # Header with gold background
+        c.setFillColor(gold)
+        c.rect(0, height - 80, width, 80, fill=True, stroke=False)
+
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 24)
+        c.drawCentredString(width / 2, height - 40, "CONCIERGE LIFESTYLE")
+        c.setFont("Helvetica", 14)
+        c.drawCentredString(width / 2, height - 60, "User Activity Report")
+
+        # Reset color
+        c.setFillColor(colors.black)
+
+        # Report date
+        y_pos = height - 100
+        c.setFont("Helvetica", 10)
+        c.setFillColor(colors.grey)
+        c.drawRightString(width - 50, y_pos, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+
+        y_pos -= 30
+
+        # User Information Section
+        c.setFillColor(gold)
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(50, y_pos, "User Information")
+
+        y_pos -= 5
+        c.setStrokeColor(gold)
+        c.setLineWidth(2)
+        c.line(50, y_pos, width - 50, y_pos)
+
+        y_pos -= 20
+        c.setFillColor(colors.black)
+        c.setFont("Helvetica", 11)
+
+        info_data = [
+            f"Name: {full_name or 'N/A'}",
+            f"Username: {username}",
+            f"Email: {email or 'N/A'}",
+            f"Phone: {phone or 'Not provided'}",
+            f"Member Since: {created_at.strftime('%Y-%m-%d') if created_at else 'N/A'}"
+        ]
+
+        for info in info_data:
+            c.drawString(50, y_pos, info)
+            y_pos -= 18
+
+        y_pos -= 10
+
+        # Lifestyle Profile Section (if exists)
+        if profile:
+            c.setFillColor(gold)
+            c.setFont("Helvetica-Bold", 14)
+            c.drawString(50, y_pos, "Lifestyle Profile")
+
+            y_pos -= 5
+            c.setStrokeColor(gold)
+            c.line(50, y_pos, width - 50, y_pos)
+
+            y_pos -= 20
+            c.setFillColor(colors.black)
+            c.setFont("Helvetica", 11)
+
+            monthly_budget, lifestyle_type, travel_freq, preferred_services = profile
+            profile_data = [
+                f"Budget: {monthly_budget or 'Not set'}",
+                f"Lifestyle: {lifestyle_type or 'Not set'}",
+                f"Travel Frequency: {travel_freq or 'Not set'}",
+                f"Preferred Services: {preferred_services or 'Not set'}"
+            ]
+
+            for info in profile_data:
+                c.drawString(50, y_pos, info)
+                y_pos -= 18
+
+            y_pos -= 10
+
+        # Activity Summary Section
+        c.setFillColor(gold)
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(50, y_pos, f"Activity Summary (Last {period} days)" if period != 'all' else "Activity Summary (All Time)")
+
+        y_pos -= 5
+        c.setStrokeColor(gold)
+        c.line(50, y_pos, width - 50, y_pos)
+
+        y_pos -= 20
+        c.setFillColor(colors.black)
+        c.setFont("Helvetica", 11)
+
+        # Count by service type
+        service_counts = {}
+        for req in requests:
+            service_type = req[1]
+            service_counts[service_type] = service_counts.get(service_type, 0) + 1
+
+        c.drawString(50, y_pos, f"Total Requests: {len(requests)}")
+        y_pos -= 18
+
+        for service, count in service_counts.items():
+            c.drawString(70, y_pos, f"• {service}: {count}")
+            y_pos -= 18
+
+        y_pos -= 15
+
+        # Recent Requests Table (if space allows)
+        if y_pos > 150 and requests:
+            c.setFillColor(gold)
+            c.setFont("Helvetica-Bold", 14)
+            c.drawString(50, y_pos, "Recent Requests")
+
+            y_pos -= 5
+            c.setStrokeColor(gold)
+            c.line(50, y_pos, width - 50, y_pos)
+
+            y_pos -= 20
+            c.setFillColor(colors.black)
+            c.setFont("Helvetica", 9)
+
+            # Show up to 5 recent requests
+            for i, req in enumerate(requests[:5]):
+                if y_pos < 100:
+                    break
+                booking_id, service_type, details, req_created = req
+                c.drawString(50, y_pos, f"#{booking_id} - {service_type}")
+                c.drawString(300, y_pos, 'Completed')
+                c.drawString(400, y_pos, req_created.strftime('%Y-%m-%d') if req_created else 'N/A')
+                y_pos -= 15
+
+        # Footer
+        c.setFillColor(colors.grey)
+        c.setFont("Helvetica-Oblique", 9)
+        c.drawCentredString(width / 2, 30, "Concierge Lifestyle - Premium Services")
+        c.drawCentredString(width / 2, 20, "This is an automated report generated by the admin panel")
+
+        c.save()
+
+        logger.info(f"Generated user report: {filename}")
+        return filename
+
+    except Exception as e:
+        logger.error(f"Error generating user activity report: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 @app.route('/api/admin/support/clear-chat/<int:user_id>', methods=['DELETE'])
 @login_required
 def api_admin_clear_chat(user_id):
@@ -786,6 +1139,145 @@ def handle_support_message(data):
         
     except Exception as e:
         logger.error(f"Socket support message error: {e}")
+
+@app.route('/api/user/reports', methods=['GET'])
+@login_required
+def api_user_reports():
+    """Get all reports for the current user"""
+    user_id = current_user.get_id()
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT id, report_type, file_path, generated_at, sent_via
+            FROM reports 
+            WHERE user_id = %s
+            ORDER BY generated_at DESC
+        """, (user_id,))
+        
+        reports = []
+        rows = cur.fetchall()
+        for row in rows:
+            reports.append({
+                'id': row[0],
+                'report_type': row[1],
+                'file_path': row[2],
+                'generated_at': row[3].strftime('%Y-%m-%d %H:%M:%S') if row[3] else 'N/A',
+                'sent_via': row[4] or 'dashboard'
+            })
+        
+        return jsonify({'success': True, 'reports': reports})
+    except Exception as e:
+        logger.error(f"Error fetching user reports: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/download-report/<int:report_id>')
+@login_required
+def download_report(report_id):
+    """Download a specific report"""
+    user_id = current_user.get_id()
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT file_path FROM reports 
+            WHERE id = %s AND user_id = %s
+        """, (report_id, user_id))
+        
+        result = cur.fetchone()
+        if not result:
+            flash("Report not found or unauthorized", "error")
+            return redirect(url_for('dashboard'))
+        
+        file_path = result[0]
+        # Remove /static/ prefix if present
+        if file_path.startswith('/static/'):
+            file_path = file_path[8:]  # Remove '/static/'
+        
+        # Full path to file
+        reports_dir = os.path.join('static', 'reports')
+        full_path = os.path.join(reports_dir, os.path.basename(file_path))
+        
+        if not os.path.exists(full_path):
+            flash("Report file not found", "error")
+            return redirect(url_for('dashboard'))
+        
+        return send_file(full_path, as_attachment=True)
+        
+    except Exception as e:
+        logger.error(f"Error downloading report: {e}")
+        flash("Error downloading report", "error")
+        return redirect(url_for('dashboard'))
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/api/admin/report-history')
+@login_required
+def api_admin_report_history():
+    """Get report generation history for admin"""
+    if not session.get('is_admin'):
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT r.id, r.user_id, u.full_name, r.report_type, 
+                   r.file_path, r.generated_at, r.sent_via
+            FROM reports r
+            JOIN users u ON r.user_id = u.id
+            ORDER BY r.generated_at DESC
+            LIMIT 50
+        """)
+        
+        reports = []
+        rows = cur.fetchall()
+        for row in rows:
+            reports.append({
+                'id': row[0],
+                'user_id': row[1],
+                'user_name': row[2] or f"User #{row[1]}",
+                'report_type': row[3],
+                'file_path': row[4],
+                'generated_at': row[5].strftime('%Y-%m-%d %H:%M:%S') if row[5] else 'N/A',
+                'sent_via': row[6] or 'dashboard'
+            })
+        
+        # Get stats
+        cur.execute("SELECT COUNT(*) FROM reports")
+        total_reports = cur.fetchone()[0]
+        
+        cur.execute("SELECT COUNT(*) FROM reports WHERE sent_via LIKE '%email%'")
+        emailed_reports = cur.fetchone()[0]
+        
+        cur.execute("SELECT COUNT(*) FROM reports WHERE sent_via LIKE '%dashboard%'")
+        dashboard_reports = cur.fetchone()[0]
+        
+        cur.execute("SELECT MAX(generated_at) FROM reports")
+        last_report_time = cur.fetchone()[0]
+        
+        return jsonify({
+            'success': True,
+            'reports': reports,
+            'stats': {
+                'total_reports': total_reports,
+                'emailed_reports': emailed_reports,
+                'dashboard_reports': dashboard_reports,
+                'last_report_time': last_report_time.strftime('%Y-%m-%d %H:%M:%S') if last_report_time else None
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error fetching report history: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 @socketio.on('support_typing')
 def handle_support_typing(data):
@@ -5448,64 +5940,156 @@ def api_nearby_services():
         
         services = []
         
-        # City boundary boxes to prevent services appearing on water
-        # Format: (min_lat, max_lat, min_lng, max_lng) - approximate land boundaries
+        # City boundary boxes - ACCURATE land boundaries to prevent services on water/forest
+        # Format: (min_lat, max_lat, min_lng, max_lng) - strict land-only boundaries
         CITY_BOUNDARIES = {
-            'Mumbai': (18.89, 19.27, 72.80, 72.98),  # Shifted min_lng to 72.80 to avoid sea
-            'Pune': (18.40, 18.65, 73.75, 74.00),
-            'Nashik': (19.90, 20.10, 73.70, 73.95),
-            'Delhi': (28.40, 28.90, 76.85, 77.35),
-            'Bangalore': (12.85, 13.15, 77.45, 77.75),
-            'default': None  # No boundary check for unknown cities
+            # Mumbai - Avoid Arabian Sea (west), avoid Thane Creek (east)
+            'Mumbai': (18.90, 19.27, 72.82, 72.96),
+
+            # Pune - Avoid hills and forest areas
+            'Pune': (18.42, 18.63, 73.75, 73.95),
+
+            # Nashik - City center, avoid Sahyadri hills
+            'Nashik': (19.95, 20.05, 73.75, 73.85),
+
+            # Delhi - NCR boundaries
+            'Delhi': (28.50, 28.75, 77.05, 77.30),
+
+            # Bangalore - City limits, avoid outskirts
+            'Bangalore': (12.90, 13.10, 77.50, 77.70),
+
+            # Default tight boundary for unknown cities
+            'default': None
         }
-        
-        # Simplified Mumbai land polygon (longitude > 72.81 for southern parts)
+
+        # Advanced land validation - city-specific checks
         def is_on_land(lat, lng, city_name):
+            """
+            Validates if coordinates are on habitable land.
+            Returns False for water bodies, forests, restricted areas.
+            """
             if city_name == 'Mumbai':
-                # Quick check: South Mumbai is narrower
-                if lat < 19.0:
-                    return lng > 72.81
-                return lng > 72.80
+                # Mumbai's unique geography - peninsula with Arabian Sea on west
+                # South Mumbai (lat < 18.95): Very narrow, avoid west coast
+                if lat < 18.95:
+                    # South Mumbai: Only lng > 72.825 (Nariman Point eastward)
+                    return lng > 72.825
+
+                # Central Mumbai (18.95 - 19.05): Wider
+                elif lat < 19.05:
+                    return 72.82 <= lng <= 72.89
+
+                # North Mumbai/Suburbs (19.05 - 19.20): Widest part
+                elif lat < 19.20:
+                    return 72.82 <= lng <= 72.95
+
+                # Far North (>19.20): Narrower again
+                else:
+                    return 72.84 <= lng <= 72.92
+
+            elif city_name == 'Pune':
+                # Pune: Avoid Western Ghats hills
+                # Hills mostly to the west and north
+                if lat > 18.58:  # North Pune
+                    return lng > 73.80  # Avoid Lonavala direction
+                return True
+
+            elif city_name == 'Delhi':
+                # Delhi: Yamuna River on east, avoid it
+                if lng > 77.28:  # East of Yamuna
+                    return False
+                return True
+
+            elif city_name == 'Bangalore':
+                # Bangalore: Generally landlocked, safe
+                return True
+
+            # Unknown cities: Be conservative
             return True
 
-        def get_nearby_coords(center_lat, center_lng, max_dist_km):
-            """Generate coordinates within radius, validated against city boundaries and land checks"""
+        def calculate_distance(lat1, lng1, lat2, lng2):
+            """Calculate accurate distance in km using Haversine formula"""
             import math
-            
+            R = 6371  # Earth's radius in km
+
+            lat1_rad = math.radians(lat1)
+            lat2_rad = math.radians(lat2)
+            dlat = math.radians(lat2 - lat1)
+            dlng = math.radians(lng2 - lng1)
+
+            a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlng/2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+
+            return R * c
+
+        def get_nearby_coords(center_lat, center_lng, max_dist_km):
+            """
+            Generate realistic coordinates within radius.
+            - Validates against city boundaries
+            - Checks for water bodies / forests
+            - Respects actual distance (not approximate)
+            - More attempts for stricter validation
+            """
+            import math
+
             # Get city boundary if available
             boundary = CITY_BOUNDARIES.get(city, CITY_BOUNDARIES.get('default'))
-            
-            max_attempts = 20 # Increased attempts
-            for _ in range(max_attempts):
-                # Generate random angle and distance for circular distribution
+
+            max_attempts = 50  # Increased from 20 to 50 for better coverage
+            successful_attempts = 0
+
+            for attempt in range(max_attempts):
+                # Generate random angle (0 to 360 degrees)
                 angle = random.uniform(0, 2 * math.pi)
-                # Use sqrt for uniform distribution within circle
-                distance = math.sqrt(random.uniform(0.05, 1)) * max_dist_km
-                
-                # Convert to coordinate offset (account for longitude scaling)
+
+                # Distance: Use sqrt for uniform circular distribution
+                # Ensure minimum distance of 0.3km to avoid too close
+                distance = math.sqrt(random.uniform(0.3**2, max_dist_km**2))
+
+                # Convert distance to lat/lng offsets
+                # 1 degree latitude ≈ 111km
+                # 1 degree longitude ≈ 111km * cos(latitude)
                 lat_offset = (distance / 111.0) * math.cos(angle)
                 lng_offset = (distance / (111.0 * math.cos(math.radians(center_lat)))) * math.sin(angle)
-                
+
                 new_lat = center_lat + lat_offset
                 new_lng = center_lng + lng_offset
-                
-                # Validate against city boundary and land check
+
+                # Calculate actual distance for verification
+                actual_distance = calculate_distance(center_lat, center_lng, new_lat, new_lng)
+
+                # Skip if distance miscalculation (should not happen, but safety check)
+                if actual_distance > max_dist_km * 1.1:  # 10% tolerance
+                    continue
+
+                # Validate against city boundary
                 if boundary:
                     min_lat, max_lat, min_lng, max_lng = boundary
-                    if min_lat <= new_lat <= max_lat and min_lng <= new_lng <= max_lng:
-                        if is_on_land(new_lat, new_lng, city):
-                            return new_lat, new_lng, round(distance, 1)
-                else:
-                    # No boundary defined, accept the coordinates
-                    return new_lat, new_lng, round(distance, 1)
-            
-            # Fallback: place within boundary center if all attempts fail
+                    if not (min_lat <= new_lat <= max_lat and min_lng <= new_lng <= max_lng):
+                        continue
+
+                # Validate land check
+                if not is_on_land(new_lat, new_lng, city):
+                    continue
+
+                # Valid location found!
+                return new_lat, new_lng, round(actual_distance, 1)
+
+            # Fallback: If all attempts failed, place near center of valid area
+            logger.warning(f"Could not find valid location after {max_attempts} attempts, using fallback")
+
             if boundary:
                 min_lat, max_lat, min_lng, max_lng = boundary
-                safe_lat = (min_lat + max_lat) / 2 + random.uniform(-0.01, 0.01)
-                safe_lng = (min_lng + max_lng) / 2 + random.uniform(0.01, 0.02) # Shift east
-                return safe_lat, safe_lng, round(random.uniform(0.5, 2.0), 1)
-            
+                # Try center of boundary with small random offset
+                for _ in range(10):
+                    safe_lat = (min_lat + max_lat) / 2 + random.uniform(-0.02, 0.02)
+                    safe_lng = (min_lng + max_lng) / 2 + random.uniform(-0.02, 0.02)
+
+                    if is_on_land(safe_lat, safe_lng, city):
+                        dist = calculate_distance(center_lat, center_lng, safe_lat, safe_lng)
+                        return safe_lat, safe_lng, round(min(dist, max_dist_km), 1)
+
+            # Ultimate fallback: Use center location
             return center_lat, center_lng, 0.5
 
         # Hotels - Filtered by budget

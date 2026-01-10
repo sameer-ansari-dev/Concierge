@@ -3,7 +3,9 @@
     "allow": [
       "Bash(python -m compileall:*)",
       "Bash(python:*)",
-      "Bash(timeout /t 3)"
+      "Bash(timeout /t 3)",
+      "Bash(curl:*)",
+      "Bash(ls:*)"
     ]
   }
 }
