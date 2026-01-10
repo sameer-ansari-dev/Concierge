@@ -1726,9 +1726,73 @@
         return icons[serviceType] || 'business_center';
     }
 
-    function bookRecommendedService(serviceType) {
+    // Cache for user profile
+    let userProfileCache = null;
+
+    async function getUserProfile() {
+        if (userProfileCache) {
+            return userProfileCache;
+        }
+
+        try {
+            const response = await fetch('/api/user-profile');
+            const data = await response.json();
+            if (data.success && data.has_profile) {
+                userProfileCache = data.profile;
+                return data.profile;
+            }
+        } catch (error) {
+            console.error('Error fetching user profile:', error);
+        }
+
+        return null;
+    }
+
+    function calculateRoomsNeeded(guests) {
+        // 2 guests per room (comfortable), max 3 per room
+        return Math.ceil(guests / 2);
+    }
+
+    function getCabClass(profile) {
+        if (!profile) return 'standard';
+
+        const lifestyleType = profile.lifestyle_type || 'comfort';
+        const preferredCab = profile.preferred_cab_type || 'sedan';
+
+        if (lifestyleType === 'luxury' || preferredCab === 'luxury') {
+            return 'luxury';
+        } else if (preferredCab === 'suv') {
+            return 'premium';
+        } else if (preferredCab === 'sedan') {
+            return 'comfort';
+        }
+        return 'standard';
+    }
+
+    function getFlightClass(profile) {
+        if (!profile) return 'economy';
+
+        const lifestyleType = profile.lifestyle_type || 'comfort';
+        const travelStyle = profile.travel_style || 'comfort';
+        const budget = profile.monthly_budget || 'medium';
+
+        if (lifestyleType === 'luxury' && (budget === 'high' || budget === 'premium')) {
+            return 'business';
+        } else if (travelStyle === 'business' && budget !== 'low') {
+            return 'business';
+        } else if (budget === 'high' || budget === 'premium') {
+            return 'premium_economy';
+        }
+        return 'economy';
+    }
+
+    async function bookRecommendedService(serviceType) {
         const locationText = document.getElementById('location-text')?.textContent || 'Mumbai';
         const city = locationText.split(',')[0].trim();
+
+        // Fetch user profile for smart pre-filling
+        const profile = await getUserProfile();
+        const groupSize = profile?.typical_group_size || 2;
 
         let url = '';
         let params = new URLSearchParams();
@@ -1739,15 +1803,18 @@
                 params.set('destination', city);
                 params.set('checkin', getTomorrowDate());
                 params.set('checkout', getDayAfterTomorrowDate());
-                params.set('rooms', '1');
-                params.set('guests', '2');
+                // Smart room calculation based on group size
+                params.set('rooms', calculateRoomsNeeded(groupSize).toString());
+                params.set('guests', groupSize.toString());
                 break;
             case 'Flight Booking':
                 url = '/submit-travel-booking';
                 params.set('origin', city);
                 params.set('destination', 'Delhi');
                 params.set('departure_date', getIn7Days());
-                params.set('adults', '1');
+                // Use actual group size
+                params.set('adults', groupSize.toString());
+                params.set('class', getFlightClass(profile));
                 break;
             case 'Car Booking':
             case 'Luxury Cabs':
@@ -1756,8 +1823,9 @@
                 params.set('dropoff', `${city} Airport`);
                 params.set('pickup_date', getTomorrowDate());
                 params.set('pickup_time', '10:00');
-                params.set('passengers', '2');
-                params.set('cab_class', 'luxury');
+                // Use actual group size
+                params.set('passengers', groupSize.toString());
+                params.set('cab_class', getCabClass(profile));
                 break;
             case 'Technician Booking':
             case 'Handyman Services':
@@ -1776,13 +1844,13 @@
                 params.set('pickup_date', getTomorrowDate());
                 params.set('pickup_time', '11:00');
                 params.set('package_weight', '2.0');
-                params.set('courier_type', 'express');
+                params.set('courier_type', profile?.monthly_budget === 'premium' || profile?.monthly_budget === 'high' ? 'express' : 'standard');
                 break;
         }
 
         if (url) {
             window.location.href = `${url}?${params.toString()}`;
-            showToast(`Finding best ${serviceType} options in ${city}...`, 'info');
+            showToast(`Finding best ${serviceType} options for ${groupSize} ${groupSize > 1 ? 'people' : 'person'}...`, 'info');
         } else {
             showToast('Service coming soon!', 'warning');
         }

@@ -3093,19 +3093,44 @@ def submit_car_booking():
         class_map = {
             'economy': 'Standard',
             'standard': 'Standard',
+            'comfort': 'Standard',
+            'premium': 'SUV',
             'luxury': 'Luxury',
             'suv': 'SUV'
         }
         target_class = class_map.get(car_class, 'Standard')
 
+        # Get user profile for budget filtering
+        user_id = current_user.get_id()
+        profile = get_user_profile(user_id)
+
+        # Budget-based max prices (per trip)
+        max_price = float('inf')
+        if profile:
+            monthly_budget = profile.get('monthly_budget', 'medium')
+            if monthly_budget == 'low':
+                max_price = 1000  # Budget cabs only
+            elif monthly_budget == 'medium':
+                max_price = 1800  # Standard to mid-range SUV
+            elif monthly_budget == 'high':
+                max_price = 2500  # Premium SUVs and some luxury
+            # premium budget has no limit
+
         # ── Filter cars ─────────────────────────────────────────────
         filtered_cars = []
         for car in cars_data:
-            cab_class = car.get('cab_class', '').lower()
-            if target_class.lower() == 'standard' and cab_class == 'standard':
+            cab_class_car = car.get('cab_class', '').lower()
+            car_price = car.get('price', 0)
+
+            # Apply budget filter
+            if car_price > max_price:
+                continue
+
+            # Apply class and capacity filter
+            if target_class.lower() == 'standard' and cab_class_car == 'standard':
                 if car.get('seats', 4) >= passengers:
                     filtered_cars.append(car)
-            elif cab_class == target_class.lower():
+            elif cab_class_car == target_class.lower():
                 if car.get('seats', 4) >= passengers:
                     filtered_cars.append(car)
 
@@ -4168,10 +4193,48 @@ def submit_hotel_booking():
                                rooms=rooms,
                                guests=guests)
 
-    # Fetch and randomize hotels
+    # Fetch hotels and filter by user budget
     all_hotels = hotels_data[destination]
-    random.shuffle(all_hotels)
-    selected_hotels = all_hotels[:min(len(all_hotels), 6)]  # Show up to 6
+
+    # Get user profile to filter by budget
+    user_id = current_user.get_id()
+    profile = get_user_profile(user_id)
+
+    # Filter hotels based on budget
+    filtered_hotels = all_hotels
+    if profile:
+        monthly_budget = profile.get('monthly_budget', 'medium')
+        lifestyle_type = profile.get('lifestyle_type', 'comfort')
+
+        # Budget price ranges per night (aligned with lifestyle/engine.py)
+        # low: Under Rs 25,000/month → max Rs 3,000/night
+        # medium: Rs 25,000-75,000/month → max Rs 6,000/night
+        # high: Rs 75,000-1,50,000/month → max Rs 15,000/night
+        # premium: Above Rs 1,50,000/month → unlimited
+
+        if monthly_budget == 'low':
+            max_price = 3000
+            # For low budget, strictly exclude luxury
+            if lifestyle_type == 'luxury':
+                max_price = 0  # Show no results - budget mismatch
+        elif monthly_budget == 'medium':
+            max_price = 6000
+            # Medium budget with luxury preference gets slightly higher range
+            if lifestyle_type == 'luxury':
+                max_price = 7500
+        elif monthly_budget == 'high':
+            max_price = 15000
+        else:  # premium
+            max_price = float('inf')  # No limit
+
+        # Filter hotels by price
+        if max_price > 0:
+            filtered_hotels = [h for h in all_hotels if h.get('price', 0) <= max_price]
+        else:
+            filtered_hotels = []
+
+    random.shuffle(filtered_hotels)
+    selected_hotels = filtered_hotels[:min(len(filtered_hotels), 6)]  # Show up to 6
 
     # Render results page
     return render_template('hotel_results.html',
@@ -4180,7 +4243,8 @@ def submit_hotel_booking():
                            checkin=checkin,
                            checkout=checkout,
                            rooms=rooms,
-                           guests=guests)
+                           guests=guests,
+                           user_budget=profile.get('monthly_budget', 'medium') if profile else 'medium')
 
 @app.route('/submit-travel-booking', methods=['GET', 'POST'])
 @login_required
@@ -4769,22 +4833,57 @@ def api_dismiss_recommendation():
     
     return jsonify({'success': True, 'message': 'Recommendation dismissed'})
 
+@app.route('/api/user-profile')
+@login_required
+def api_user_profile():
+    """Get user lifestyle profile data for pre-filling booking forms"""
+    try:
+        user_id = current_user.get_id()
+        profile = get_user_profile(user_id)
+
+        if profile:
+            return jsonify({
+                'success': True,
+                'has_profile': True,
+                'profile': {
+                    'typical_group_size': profile.get('typical_group_size', 2),
+                    'monthly_budget': profile.get('monthly_budget', 'medium'),
+                    'lifestyle_type': profile.get('lifestyle_type', 'comfort'),
+                    'travel_style': profile.get('travel_style', 'comfort'),
+                    'preferred_cab_type': profile.get('preferred_cab_type', 'sedan'),
+                    'city': profile.get('city', 'Mumbai'),
+                    'preferred_services': profile.get('preferred_services', '').split(',') if profile.get('preferred_services') else []
+                }
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'has_profile': False,
+                'profile': None
+            })
+    except Exception as e:
+        logger.error(f"Error fetching user profile: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Unable to fetch profile'
+        }), 500
+
 @app.route('/api/lifestyle-recommendations')
 @login_required
 def api_lifestyle_recommendations():
     """Get AI-powered recommendations based on comprehensive lifestyle profile.
-    
+
     This endpoint now uses the modular lifestyle/service.py for recommendation generation,
     eliminating code duplication and ensuring consistent behavior.
     """
     try:
         user_id = current_user.get_id()
-        
+
         # Use the modular recommendation service
         from lifestyle.service import recompute_recommendations
-        
+
         result = recompute_recommendations(user_id, force=False, algorithm_version="v2")
-        
+
         return jsonify({
             'success': True,
             'has_profile': result.get('has_profile', False),
@@ -4793,7 +4892,7 @@ def api_lifestyle_recommendations():
             'profile_updated_at': result.get('profile_updated_at'),
             'algorithm_version': result.get('algorithm_version', 'v2')
         })
-        
+
     except Exception as e:
         logger.error(f"Error generating recommendations: {str(e)}")
         import traceback
