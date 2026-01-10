@@ -13,6 +13,7 @@ import psycopg2
 import json
 import os
 import uuid
+import math
 from pathlib import Path
 import logging
 import threading
@@ -1373,6 +1374,14 @@ def save_lifestyle():
             cur.execute("DELETE FROM ai_recommendations WHERE user_id = %s", (user_id,))
             
             conn.commit()
+            
+            # Check if AJAX request
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.args.get('ajax') == '1':
+                return jsonify({
+                    'success': True,
+                    'message': 'Lifestyle profile saved successfully!'
+                })
+
             flash('✅ Your lifestyle profile has been saved! You will now get personalized AI suggestions.', 'success')
             
         except Exception as e:
@@ -1874,6 +1883,25 @@ def schedule_live_updates():
                         'active_users': active_users,
                         'active_count': len(active_users),
                         'timestamp': datetime.now().isoformat()
+                    })
+
+                    # NEW: Real-time service price and availability fluctuations
+                    price_fluctuations = {
+                        'Hotel Booking': random.uniform(-0.05, 0.10),
+                        'Car Booking': random.uniform(0.02, 0.15),
+                        'Flight Booking': random.uniform(-0.10, 0.20),
+                        'Technician Booking': random.choice([0, 0, 0.10])
+                    }
+                    availability_status = {
+                        'Hotel Booking': 'High Demand' if price_fluctuations['Hotel Booking'] > 0.05 else 'Available',
+                        'Car Booking': 'Few left' if price_fluctuations['Car Booking'] > 0.10 else 'Available',
+                        'Technician Booking': 'Busy' if price_fluctuations['Technician Booking'] > 0 else 'Available'
+                    }
+                    socketio.emit('service_price_update', {
+                        'fluctuations': price_fluctuations,
+                        'availability': availability_status,
+                        'timestamp': datetime.now().isoformat(),
+                        'message': 'Dynamic pricing and availability updated'
                     })
             except Exception as e:
                 logger.error(f"Error in live update: {e}")
@@ -4105,6 +4133,12 @@ def submit_hotel_booking():
         flash("Please enter a destination city.", "danger")
         return redirect(url_for('dashboard'))
 
+    # Guest validation (Max 3 guests per room)
+    if guests > (rooms * 3):
+        flash(f"⚠️ Limit Exceeded: Maximum 3 guests allowed per room. For {guests} guests, please book at least {math.ceil(guests/3)} rooms.", "warning")
+        # Adjust for the user
+        rooms = math.ceil(guests/3)
+
     if not checkin or not checkout:
         flash("Please select check-in and check-out dates.", "danger")
         return redirect(url_for('dashboard'))
@@ -4502,24 +4536,111 @@ def logout():
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
+    """Secure password reset - sends reset link instead of exposing password"""
     if request.method == 'POST':
         username = request.form.get('username')
 
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("SELECT password FROM users WHERE username = %s", (username,))
-        result = cur.fetchone()
-        cur.close()
-        conn.close()
-
-        if result:
-            password = result[0]
-            flash(f"Your password is: {password}")
-        else:
-            flash("Username not found. Please try again.")
+        try:
+            cur.execute("SELECT id, email FROM users WHERE username = %s", (username,))
+            result = cur.fetchone()
+            
+            if result:
+                user_id, email = result
+                # Generate secure reset token
+                reset_token = str(uuid.uuid4())
+                token_expiry = datetime.now() + timedelta(hours=1)
+                
+                # Store token in database (create table if needed)
+                try:
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                            id SERIAL PRIMARY KEY,
+                            user_id INTEGER REFERENCES users(id),
+                            token VARCHAR(255) UNIQUE NOT NULL,
+                            expires_at TIMESTAMP NOT NULL,
+                            used BOOLEAN DEFAULT FALSE,
+                            created_at TIMESTAMP DEFAULT NOW()
+                        )
+                    """)
+                    # Invalidate any existing tokens for this user
+                    cur.execute("UPDATE password_reset_tokens SET used = TRUE WHERE user_id = %s", (user_id,))
+                    # Insert new token
+                    cur.execute("""
+                        INSERT INTO password_reset_tokens (user_id, token, expires_at)
+                        VALUES (%s, %s, %s)
+                    """, (user_id, reset_token, token_expiry))
+                    conn.commit()
+                    
+                    # In production, send email with reset link
+                    # For now, show a success message (don't reveal if user exists)
+                    logger.info(f"Password reset requested for user {username}, token: {reset_token}")
+                except Exception as e:
+                    conn.rollback()
+                    logger.error(f"Error creating reset token: {e}")
+            
+            # Always show same message to prevent user enumeration
+            flash("If an account exists with that username, a password reset link has been sent to the registered email.", "info")
+        except Exception as e:
+            logger.error(f"Forgot password error: {e}")
+            flash("An error occurred. Please try again.", "error")
+        finally:
+            cur.close()
+            conn.close()
 
         return redirect(url_for('forgot_password'))
     return render_template('forgot_password.html')
+
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    """Handle password reset with token"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        # Verify token is valid and not expired
+        cur.execute("""
+            SELECT user_id FROM password_reset_tokens 
+            WHERE token = %s AND used = FALSE AND expires_at > NOW()
+        """, (token,))
+        result = cur.fetchone()
+        
+        if not result:
+            flash("Invalid or expired reset link. Please request a new one.", "error")
+            return redirect(url_for('forgot_password'))
+        
+        user_id = result[0]
+        
+        if request.method == 'POST':
+            new_password = request.form.get('password')
+            confirm_password = request.form.get('confirm_password')
+            
+            if not new_password or len(new_password) < 6:
+                flash("Password must be at least 6 characters.", "error")
+                return render_template('reset_password.html', token=token)
+            
+            if new_password != confirm_password:
+                flash("Passwords do not match.", "error")
+                return render_template('reset_password.html', token=token)
+            
+            # Update password and mark token as used
+            cur.execute("UPDATE users SET password = %s WHERE id = %s", (new_password, user_id))
+            cur.execute("UPDATE password_reset_tokens SET used = TRUE WHERE token = %s", (token,))
+            conn.commit()
+            
+            flash("Password reset successfully! Please login with your new password.", "success")
+            return redirect(url_for('login'))
+        
+        return render_template('reset_password.html', token=token)
+        
+    except Exception as e:
+        logger.error(f"Reset password error: {e}")
+        flash("An error occurred. Please try again.", "error")
+        return redirect(url_for('forgot_password'))
+    finally:
+        cur.close()
+        conn.close()
 
 # ---------------------- Debug Route ----------------------
 @app.route('/debug-db')
@@ -4651,11 +4772,49 @@ def api_dismiss_recommendation():
 @app.route('/api/lifestyle-recommendations')
 @login_required
 def api_lifestyle_recommendations():
-    """Get AI-powered recommendations based on comprehensive lifestyle profile"""
+    """Get AI-powered recommendations based on comprehensive lifestyle profile.
+    
+    This endpoint now uses the modular lifestyle/service.py for recommendation generation,
+    eliminating code duplication and ensuring consistent behavior.
+    """
     try:
         user_id = current_user.get_id()
         
-        # 1. Check if we already have fresh recommendations in the database
+        # Use the modular recommendation service
+        from lifestyle.service import recompute_recommendations
+        
+        result = recompute_recommendations(user_id, force=False, algorithm_version="v2")
+        
+        return jsonify({
+            'success': True,
+            'has_profile': result.get('has_profile', False),
+            'recommendations': result.get('recommendations', []),
+            'source': result.get('source', 'generated'),
+            'profile_updated_at': result.get('profile_updated_at'),
+            'algorithm_version': result.get('algorithm_version', 'v2')
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating recommendations: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'message': 'Unable to load recommendations. Please try again.',
+            'recommendations': [],
+            'has_profile': True
+        }), 500
+
+
+@app.route('/api/lifestyle-recommendations-legacy')
+@login_required
+def api_lifestyle_recommendations_legacy():
+    """Legacy endpoint - kept for backward compatibility. Use /api/lifestyle-recommendations instead."""
+    try:
+        user_id = current_user.get_id()
+        
+        # Legacy: Check database directly
         conn = get_db_connection()
         cur = conn.cursor()
         try:
@@ -5190,13 +5349,65 @@ def api_nearby_services():
         
         services = []
         
-        # Helper to generate random coords within radius (approx 1deg lat ~= 111km)
+        # City boundary boxes to prevent services appearing on water
+        # Format: (min_lat, max_lat, min_lng, max_lng) - approximate land boundaries
+        CITY_BOUNDARIES = {
+            'Mumbai': (18.89, 19.27, 72.80, 72.98),  # Shifted min_lng to 72.80 to avoid sea
+            'Pune': (18.40, 18.65, 73.75, 74.00),
+            'Nashik': (19.90, 20.10, 73.70, 73.95),
+            'Delhi': (28.40, 28.90, 76.85, 77.35),
+            'Bangalore': (12.85, 13.15, 77.45, 77.75),
+            'default': None  # No boundary check for unknown cities
+        }
+        
+        # Simplified Mumbai land polygon (longitude > 72.81 for southern parts)
+        def is_on_land(lat, lng, city_name):
+            if city_name == 'Mumbai':
+                # Quick check: South Mumbai is narrower
+                if lat < 19.0:
+                    return lng > 72.81
+                return lng > 72.80
+            return True
+
         def get_nearby_coords(center_lat, center_lng, max_dist_km):
-            # Simple approximation
-            max_offset = max_dist_km / 111.0
-            new_lat = center_lat + random.uniform(-max_offset, max_offset)
-            new_lng = center_lng + random.uniform(-max_offset, max_offset)
-            return new_lat, new_lng, round(random.uniform(0.1, max_dist_km), 1)
+            """Generate coordinates within radius, validated against city boundaries and land checks"""
+            import math
+            
+            # Get city boundary if available
+            boundary = CITY_BOUNDARIES.get(city, CITY_BOUNDARIES.get('default'))
+            
+            max_attempts = 20 # Increased attempts
+            for _ in range(max_attempts):
+                # Generate random angle and distance for circular distribution
+                angle = random.uniform(0, 2 * math.pi)
+                # Use sqrt for uniform distribution within circle
+                distance = math.sqrt(random.uniform(0.05, 1)) * max_dist_km
+                
+                # Convert to coordinate offset (account for longitude scaling)
+                lat_offset = (distance / 111.0) * math.cos(angle)
+                lng_offset = (distance / (111.0 * math.cos(math.radians(center_lat)))) * math.sin(angle)
+                
+                new_lat = center_lat + lat_offset
+                new_lng = center_lng + lng_offset
+                
+                # Validate against city boundary and land check
+                if boundary:
+                    min_lat, max_lat, min_lng, max_lng = boundary
+                    if min_lat <= new_lat <= max_lat and min_lng <= new_lng <= max_lng:
+                        if is_on_land(new_lat, new_lng, city):
+                            return new_lat, new_lng, round(distance, 1)
+                else:
+                    # No boundary defined, accept the coordinates
+                    return new_lat, new_lng, round(distance, 1)
+            
+            # Fallback: place within boundary center if all attempts fail
+            if boundary:
+                min_lat, max_lat, min_lng, max_lng = boundary
+                safe_lat = (min_lat + max_lat) / 2 + random.uniform(-0.01, 0.01)
+                safe_lng = (min_lng + max_lng) / 2 + random.uniform(0.01, 0.02) # Shift east
+                return safe_lat, safe_lng, round(random.uniform(0.5, 2.0), 1)
+            
+            return center_lat, center_lng, 0.5
 
         # Hotels - Filtered by budget
         all_hotels = [

@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -96,7 +95,7 @@
           <i class="material-icons">business_center</i>
           <span>Services</span>
         </a></li>
-        <li><a href="javascript:void(0)" onclick="navigateToSection('nearby-section')">
+         <li><a href="javascript:void(0)" onclick="navigateToSection('nearby-section')">
           <i class="material-icons">near_me</i>
           <span>Nearby</span>
         </a></li>
@@ -338,10 +337,13 @@
                             <div class="detail-item"><i class="material-icons">build</i> {{ request.details.service_type or 'N/A' }}</div>
                             <div class="detail-item"><i class="material-icons">location_on</i> {{ request.details.location or 'N/A' }}</div>
                             <div class="detail-item"><i class="material-icons">event</i> {{ request.details.service_date or 'N/A' }} at {{ request.details.service_time or 'N/A' }}</div>
+                          {% elif request.service_type == 'User Report' %}
+                             <div class="detail-item"><i class="material-icons">assessment</i> Activity Report</div>
+                             <div class="detail-item"><i class="material-icons">schedule</i> Generated: {{ request.created_at }}</div>
                           {% endif %}
                         </td>
                         <td>
-                          <span class="status-badge {{ 'confirmed' if request.payment_status == 'Confirmed' else 'pending' }}">
+                          <span class="status-badge {{ 'confirmed' if request.payment_status == 'Confirmed' or request.payment_status == 'Completed' else 'pending' }}">
                             {{ request.payment_status }}
                           </span>
                         </td>
@@ -349,9 +351,13 @@
                           <span class="admin-status">{{ request.admin_confirmation or 'Pending' }}</span>
                         </td>
                         <td>
-                          {% if request.payment_status == 'Confirmed' %}
+                          {% if request.service_type == 'User Report' %}
+                              <button class="btn-action success" onclick="downloadDocument('{{ request.details.report_url }}')">
+                                <i class="material-icons">download</i> Download
+                              </button>
+                          {% elif request.payment_status == 'Confirmed' %}
                             {% if request.details and request.details.ticket_pdf_url %}
-                              <button class="btn-action success" onclick="downloadPDFTicket('{{ request.details.ticket_pdf_url }}')">
+                              <button class="btn-action success" onclick="downloadDocument('{{ request.details.ticket_pdf_url }}')">
                                 <i class="material-icons">download</i> Download
                               </button>
                             {% else %}
@@ -1245,6 +1251,25 @@
                 console.log('Messages marked as read');
             });
 
+            // NEW: Real-time service price updates
+            socket.on('service_price_update', (data) => {
+                console.log('💰 Price update received:', data);
+                if (data.fluctuations) {
+                    Object.keys(data.fluctuations).forEach(service => {
+                        const fluctuation = data.fluctuations[service];
+                        if (Math.abs(fluctuation) > 0.05) {
+                            // Only show toast for significant changes
+                            const type = fluctuation > 0 ? 'Surge' : 'Price Drop';
+                            const icon = fluctuation > 0 ? 'trending_up' : 'trending_down';
+                            // showToast(`${service}: ${type} alert!`, 'info');
+                        }
+                    });
+                    
+                    // Update prices in the UI if visible
+                    updateNearbyServicePrices(data.fluctuations);
+                }
+            });
+
             socket.on('disconnect', () => {
                 console.log('⚠️ Disconnected from server');
             });
@@ -1867,21 +1892,21 @@
         }
     }
 
-    function downloadPDFTicket(pdfUrl) {
-        if (!pdfUrl) {
-            showToast('PDF ticket not available yet', 'error');
+    function downloadDocument(url) {
+        if (!url) {
+            showToast('Document not available', 'error');
             return;
         }
 
         const link = document.createElement('a');
-        link.href = pdfUrl;
-        link.download = pdfUrl.split('/').pop() || 'ticket.pdf';
+        link.href = url;
+        link.download = url.split('/').pop() || 'document';
         link.target = '_blank';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
 
-        showToast('Downloading PDF ticket...', 'success');
+        showToast('Downloading document...', 'success');
     }
 
     function requestTicket(bookingId, serviceType) {
@@ -2192,7 +2217,7 @@
         if (!listElement) return;
 
         listElement.innerHTML = services.map((service, index) => `
-        <div class="nearby-service-card" style="animation: fadeInUp 0.5s ease ${index * 0.1}s forwards; opacity: 0;">
+        <div class="nearby-service-card" data-service-type="${service.type}" style="animation: fadeInUp 0.5s ease ${index * 0.1}s forwards; opacity: 0;">
             <div class="service-distance">
                 <i class="material-icons">near_me</i>
                 ${service.distance} km away
@@ -2206,7 +2231,7 @@
             ${service.rating ? `
                 <div class="recommendation-meta">
                     <span><i class="material-icons">star</i>${service.rating}/5</span>
-                    ${service.price ? `<span><i class="material-icons">payments</i>${service.price}</span>` : ''}
+                    ${service.price ? `<span class="service-price-tag"><i class="material-icons">payments</i>${service.price}</span>` : ''}
                 </div>
             ` : ''}
             <div class="recommendation-actions">
@@ -2219,6 +2244,33 @@
             </div>
         </div>
         `).join('');
+    }
+
+    function updateNearbyServicePrices(fluctuations) {
+        document.querySelectorAll('.nearby-service-card').forEach(card => {
+            const type = card.dataset.serviceType;
+            const fluctuation = fluctuations[type];
+            if (fluctuation) {
+                const priceTag = card.querySelector('.service-price-tag');
+                if (priceTag) {
+                    // Visual feedback for price change
+                    if (fluctuation > 0.05) {
+                        priceTag.style.color = '#e74c3c'; // Red for surge
+                        priceTag.classList.add('surge-pulse');
+                    } else if (fluctuation < -0.05) {
+                        priceTag.style.color = '#2ecc71'; // Green for drop
+                        priceTag.classList.add('drop-pulse');
+                    }
+                    
+                    // Simple animation for the update
+                    priceTag.style.transition = 'all 0.5s ease';
+                    priceTag.style.transform = 'scale(1.1)';
+                    setTimeout(() => {
+                        priceTag.style.transform = 'scale(1)';
+                    }, 500);
+                }
+            }
+        });
     }
 
     function displayEmptyNearbyServices() {

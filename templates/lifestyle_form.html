@@ -800,7 +800,10 @@
                     </div>
 
                     <div class="form-group">
-                        <label>Preferred Services (Select your most used)</label>
+                        <label>Preferred Services (Select services you want AI recommendations for)</label>
+                        <p style="color: #888; font-size: 0.85rem; margin-top: -5px; margin-bottom: 15px;">
+                            ⚠️ Important: Only services you select here will appear in your AI recommendations
+                        </p>
                         <div class="service-grid">
                             <label class="service-option {% if profile and 'hotel' in profile.preferred_services %}selected{% endif %}">
                                 <input type="checkbox" name="preferred_services" value="hotel"
@@ -948,16 +951,50 @@
             document.getElementById('btn-submit').style.display = currentSection === totalSections ? 'flex' : 'none';
         }
 
-        function nextSection() {
+        async function saveProgress() {
+            const form = document.getElementById('lifestyle-form');
+            const formData = new FormData(form);
+            
+            try {
+                const response = await fetch('/save_lifestyle?ajax=1', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+                const data = await response.json();
+                console.log('Progress saved:', data);
+            } catch (error) {
+                console.error('Error saving progress:', error);
+            }
+        }
+
+        async function nextSection() {
             if (currentSection < totalSections) {
+                // Validate Section 3 (Interests & Services)
+                if (currentSection === 3) {
+                    const servicesChecked = document.querySelectorAll('input[name="preferred_services"]:checked').length;
+                    if (servicesChecked === 0) {
+                        alert('⚠️ Please select at least one preferred service to get AI recommendations!');
+                        return;
+                    }
+                }
+
+                // Auto-save on next
+                saveProgress();
+
                 currentSection++;
                 updateProgress();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
         }
 
-        function prevSection() {
+        async function prevSection() {
             if (currentSection > 1) {
+                // Auto-save on back too
+                saveProgress();
+                
                 currentSection--;
                 updateProgress();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1042,10 +1079,18 @@
 
         // Handle form submission with loading state
         document.getElementById('lifestyle-form').addEventListener('submit', function(e) {
+            // Validate that at least one service is selected
+            const servicesChecked = document.querySelectorAll('input[name="preferred_services"]:checked').length;
+            if (servicesChecked === 0) {
+                e.preventDefault();
+                alert('⚠️ Please select at least one preferred service to get AI recommendations!\n\nGo back to the "Interests & Services" section and select the services you want.');
+                return false;
+            }
+
             const btn = document.getElementById('btn-submit');
             btn.disabled = true;
             btn.innerHTML = '<i class="material-icons" style="animation: spin 1s linear infinite;">sync</i> Saving Profile...';
-            
+
             // Allow the form to submit naturally to /save_lifestyle
         });
     </script>
