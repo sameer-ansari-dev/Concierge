@@ -7,8 +7,8 @@
 <script>
 document.addEventListener("DOMContentLoaded", function() {
     const element = document.getElementById("typing-text");
-    const secondWord = "Luxury";
-    let i = element.textContent.length; // starting with "Concierge"
+    const secondWord = "Elevating";
+    let i = element.textContent.length; // starting with "Curating"
 
     function deleteWord(callback) {
         if (i > 0) {
@@ -45,8 +45,8 @@ document.addEventListener("DOMContentLoaded", function() {
 <body>
   <div class="hero">
     <div class="content animate">
-      <h1>Welcome to <span id="typing-text">Concierge</span> Lifestyle</h1>
-      <p>Your personal assistant for modern luxury living.</p>
+      <h1><span id="typing-text">Curating</span> Your Perfect Life</h1>
+      <p>Your personal gateway to modern luxury living and exclusive experiences.</p>
       <div class="buttons">
         <a href="{{ url_for('login') }}" class="btn-neon">Login</a>
         <a href="{{ url_for('register') }}" class="btn-neon">Register</a>

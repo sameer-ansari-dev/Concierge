@@ -5131,7 +5131,50 @@ def forgot_password():
                     
                     # In production, send email with reset link
                     # For now, show a success message (don't reveal if user exists)
-                    logger.info(f"Password reset requested for user {username}, token: {reset_token}")
+                    try:
+                        import smtplib
+                        from email.mime.text import MIMEText
+                        from email.mime.multipart import MIMEMultipart
+
+                        # Email configuration
+                        smtp_server = "smtp.gmail.com"
+                        smtp_port = 587
+                        sender_email = "formovieenjoy.1@gmail.com"  # Replace with environment variable
+                        sender_password = "vfli ztom yhln iyfc".replace(" ", "")  # Remove spaces from app password
+
+                        msg = MIMEMultipart()
+                        msg['From'] = sender_email
+                        msg['To'] = email
+                        msg['Subject'] = "Password Reset Request"
+
+                        reset_link = url_for('reset_password', token=reset_token, _external=True)
+
+                        body = f"""
+                        Hello,
+
+                        You have requested to reset your password. Please click the link below to reset it:
+
+                        {reset_link}
+
+                        If you did not request this change, please ignore this email.
+
+                        Link expires in 1 hour.
+
+                        Best regards,
+                        Concierge Life Team
+                        """
+
+                        msg.attach(MIMEText(body, 'plain'))
+
+                        server = smtplib.SMTP(smtp_server, smtp_port)
+                        server.starttls()
+                        server.login(sender_email, sender_password)
+                        server.send_message(msg)
+                        server.quit()
+
+                        logger.info(f"Password reset email sent to {email}")
+                    except Exception as email_error:
+                        logger.error(f"Failed to send reset email: {email_error}")
                 except Exception as e:
                     conn.rollback()
                     logger.error(f"Error creating reset token: {e}")
