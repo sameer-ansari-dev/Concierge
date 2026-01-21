@@ -24,6 +24,9 @@
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <!-- Socket.IO client -->
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <!-- Leaflet Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 
 <body data-user-id="{{ current_user_id|default('') }}">
@@ -156,6 +159,25 @@
             </div>
           </div>
 
+          <!-- Price Range Filter -->
+          <div class="form-group mt-3">
+            <label class="form-label">Price Range (Per Night)</label>
+            <div class="price-range-container">
+                <div class="range-values mb-2 d-flex justify-content-between">
+                    <span id="min-price-label">₹{{ min_price|default(0) }}</span>
+                    <span id="max-price-label">₹{{ max_price|default(50000) }}</span>
+                </div>
+                <div class="range-inputs">
+                    <input type="range" class="form-range" id="min-price" name="min_price" 
+                           min="0" max="50000" step="500" value="{{ min_price|default(0) }}" 
+                           oninput="updatePriceLabel('min')">
+                    <input type="range" class="form-range mt-2" id="max-price" name="max_price" 
+                           min="0" max="50000" step="500" value="{{ max_price|default(50000) }}" 
+                           oninput="updatePriceLabel('max')">
+                </div>
+            </div>
+          </div>
+
           <div class="apply-btn">
             <button type="submit" class="btn-primary search-flights-btn">
               <i class="fas fa-search"></i> Search Hotels
@@ -163,6 +185,11 @@
           </div>
         </form>
       </div>
+    </div>
+
+    <!-- Map Container -->
+    <div class="map-section mt-4 mb-4">
+        <div id="hotel-map" style="height: 400px; width: 100%; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); z-index: 1;"></div>
     </div>
 
     {% if hotels %}
@@ -173,8 +200,13 @@
         <div class="card hotel-card" data-rating="{{ hotel.rating|default(0) }}"
           data-price="{{ hotel.price|default(0) }}" data-wifi="{{ hotel.free_wifi|default(false) }}"
           data-couple="{{ hotel.couple_friendly|default(false) }}">
-          <img src="{{ url_for('static', filename=hotel.image|default('images/default-hotel.jpg')) }}"
-            alt="{{ hotel.name|default('Unknown Hotel')|escape }}" class="card-img-top hotel-image" loading="lazy">
+          {% if hotel.image.startswith('http') %}
+            <img src="{{ hotel.image }}"
+              alt="{{ hotel.name|default('Unknown Hotel')|escape }}" class="card-img-top hotel-image" loading="lazy">
+          {% else %}
+            <img src="{{ url_for('static', filename=hotel.image|default('images/default-hotel.jpg')) }}"
+              alt="{{ hotel.name|default('Unknown Hotel')|escape }}" class="card-img-top hotel-image" loading="lazy">
+          {% endif %}
           <div class="card-body hotel-info">
             <h2 class="card-title hotel-name">{{ hotel.name|default('Unknown Hotel')|escape }}</h2>
             <div class="hotel-rating">
@@ -589,6 +621,30 @@
     }
 
     // ===== Search Summary Functions =====
+    function updatePriceLabel(type) {
+        const minInput = document.getElementById('min-price');
+        const maxInput = document.getElementById('max-price');
+        const minLabel = document.getElementById('min-price-label');
+        const maxLabel = document.getElementById('max-price-label');
+
+        let min = parseInt(minInput.value);
+        let max = parseInt(maxInput.value);
+
+        // Ensure min <= max
+        if (min > max) {
+            if (type === 'min') {
+                maxInput.value = min;
+                max = min;
+            } else {
+                minInput.value = max;
+                min = max;
+            }
+        }
+
+        minLabel.textContent = `₹${min}`;
+        maxLabel.textContent = `₹${max}`;
+    }
+
     function updateCount(field, change) {
       const input = document.getElementById(field === 'room' ? 'roomCount' : 'guestCount');
       let current = parseInt(input.value);
@@ -626,7 +682,8 @@
     }
 
     // ===== City Validation =====
-    const allowedCities = ["mumbai", "pune", "nashik"];
+    // ALLOW ALL CITIES NOW
+    const allowedCities = ["mumbai", "pune", "nashik", "delhi", "bangalore", "hyderabad", "chennai", "kolkata", "jaipur", "goa", "ahmedabad", "chandigarh", "lucknow", "indore"];
 
     function showSuggestions(value) {
       const suggestionsBox = document.getElementById("suggestions");
@@ -637,8 +694,15 @@
         if (cityError) cityError.textContent = "";
         return;
       }
-      if (allowedCities.some(city => city.startsWith(input))) {
-        if (suggestionsBox) suggestionsBox.style.display = "block";
+      
+      const filtered = allowedCities.filter(city => city.startsWith(input));
+      if (filtered.length > 0) {
+        if (suggestionsBox) {
+            suggestionsBox.innerHTML = filtered.map(city => 
+                `<div class="suggestion" onclick="selectCity('${city.charAt(0).toUpperCase() + city.slice(1)}')">${city.charAt(0).toUpperCase() + city.slice(1)}</div>`
+            ).join('');
+            suggestionsBox.style.display = "block";
+        }
         if (cityError) cityError.textContent = "";
       } else {
         if (suggestionsBox) suggestionsBox.style.display = "none";
@@ -653,18 +717,8 @@
     }
 
     function validateCity(event) {
-      const destination = document.getElementById("destination").value.toLowerCase().trim();
-      const error = document.getElementById("city-error");
-      if (!allowedCities.includes(destination)) {
-        event.preventDefault();
-        if (["delhi", "agra", "bangalore", "hyderabad", "singapore", "dubai", "jaipur"].includes(destination)) {
-          error.textContent = "🔧 Coming soon in this city!";
-        } else {
-          error.textContent = "❗ Please enter correct city name: Mumbai, Pune or Nashik.";
-        }
-      } else {
-        error.textContent = "";
-      }
+      // Allow any city for now
+      return true;
     }
 
     // ===== Details Toggle =====
@@ -1018,6 +1072,33 @@
         const confirmModal = bootstrap.Modal.getInstance(document.getElementById('confirm-modal'));
         confirmModal.hide();
 
+        // Collect Guest Details
+        const guestDetails = [];
+        const rooms = currentRooms;
+        const totalGuests = currentGuests;
+        const guestsPerRoom = Math.ceil(totalGuests / rooms);
+        let guestIndex = 1;
+
+        for (let room = 1; room <= rooms; room++) {
+          const roomGuests = Math.min(guestsPerRoom, totalGuests - guestIndex + 1);
+          for (let g = 1; g <= roomGuests; g++) {
+            const nameInput = document.getElementById(`full-name-${room}-${g}`);
+            const typeInput = document.getElementById(`type-${room}-${g}`);
+            const titleInput = document.getElementById(`title-${room}-${g}`);
+
+            if (nameInput) {
+              guestDetails.push({
+                room: room,
+                guest_number: g,
+                name: nameInput.value,
+                type: typeInput ? typeInput.value : 'Adult',
+                title: titleInput ? titleInput.value : 'Mr.'
+              });
+            }
+            guestIndex++;
+          }
+        }
+
         // Prepare booking data
         const bookingData = {
           hotel: currentHotel,
@@ -1029,7 +1110,8 @@
           email: document.getElementById('email').value,
           mobile: document.getElementById('mobile').value,
           special_requests: document.getElementById('special_requests').value,
-          booking_id: bookingId
+          booking_id: bookingId,
+          guest_details: guestDetails
         };
 
 
@@ -1073,6 +1155,62 @@
       termsModal.show();
     }
 
+    // ===== Map Integration =====
+    function initHotelMap() {
+        const mapContainer = document.getElementById('hotel-map');
+        if (!mapContainer) return;
+
+        // Data injected from backend
+        const hotels = {{ hotels|tojson|safe }};
+        const cityCoords = {{ city_coords|tojson|safe }};
+        
+        if (!hotels || hotels.length === 0) {
+            mapContainer.style.display = 'none';
+            return;
+        }
+
+        const map = L.map('hotel-map').setView([cityCoords.lat, cityCoords.lng], 12);
+
+        // Standard OpenStreetMap Tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Your API Key Placeholder (ready for Ola/MapmyIndia swap)
+        const apiKey = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjZkYzllMjY3ZmRmZjQzMzk5NTY4N2JmOWVhMGNkZmQ2IiwiaCI6Im11cm11cjY0In0=";
+        // console.log("Using API Key for future premium maps:", apiKey);
+
+        const customIcon = L.divIcon({
+            className: 'custom-marker',
+            html: '<div style="background: #d4af37; width: 30px; height: 30px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:center; color:white; font-size:12px;"><i class="fas fa-bed"></i></div>',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+            popupAnchor: [0, -15]
+        });
+
+        const bounds = [];
+
+        hotels.forEach(hotel => {
+            if (hotel.lat && hotel.lng) {
+                const marker = L.marker([hotel.lat, hotel.lng], { icon: customIcon })
+                    .addTo(map)
+                    .bindPopup(`
+                        <div style="min-width: 150px; text-align: center;">
+                            <b>${hotel.name}</b><br>
+                            <span style="color: #28a745; font-weight: bold;">₹${hotel.price}</span><br>
+                            ${hotel.address}
+                        </div>
+                    `);
+                
+                bounds.push([hotel.lat, hotel.lng]);
+            }
+        });
+
+        if (bounds.length > 0) {
+            map.fitBounds(bounds, { padding: [50, 50] });
+        }
+    }
+
     // ===== DOMContentLoaded =====
     document.addEventListener('DOMContentLoaded', function () {
       try {
@@ -1081,6 +1219,9 @@
 
         // Update search summary
         updateSearchSummary();
+
+        // Initialize Map
+        initHotelMap();
 
         // Initialize progress bars
         document.querySelectorAll('.progress-bar').forEach(bar => {

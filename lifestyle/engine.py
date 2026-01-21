@@ -49,6 +49,7 @@ def _dynamic_price_info(service_type: str, base_price_min: int, base_price_max: 
 
     price_str = f"₹{final_min:,}-{final_max:,}"
     if "night" in service_type.lower() or service_type == "Hotel Booking":
+
         price_str += "/night"
     elif "car" in service_type.lower() or "cab" in service_type.lower():
         price_str += "/trip"
@@ -351,6 +352,7 @@ def generate_recommendations(
     # 5) Courier
     courier_score = 0
     courier_reasons: list[str] = []
+
 
     if "courier" in preferred_services:
         courier_score += 40

@@ -358,12 +358,10 @@
                           {% elif request.payment_status == 'Confirmed' %}
                             {% if request.details and request.details.ticket_pdf_url %}
                               <button class="btn-action success" onclick="downloadDocument('{{ request.details.ticket_pdf_url }}')">
-                                <i class="material-icons">download</i> Download
+                                <i class="material-icons">download</i> Ticket
                               </button>
                             {% else %}
-                              <button class="btn-action warning" onclick="requestTicket('{{ request.booking_id }}', '{{ request.service_type }}')">
-                                <i class="material-icons">confirmation_number</i> Request
-                              </button>
+                              <span class="no-action">Processing Ticket</span>
                             {% endif %}
                           {% else %}
                             <span class="no-action">Awaiting payment</span>
@@ -485,6 +483,11 @@
                   </div>
                 </div>
               </div>
+
+              <div class="price-estimate-box" id="hotel-estimate" style="margin-bottom: 15px; padding: 10px; background: rgba(212, 175, 55, 0.1); border: 1px solid #d4af37; border-radius: 8px; text-align: center; display: none;">
+                  <span class="estimate-text" style="color: #d4af37; font-weight: bold;">Estimated Price: Calculating...</span>
+                  <div class="estimate-reason" style="font-size: 0.8rem; color: #888;"></div>
+              </div>
               <button type="submit" class="btn-submit" onclick="showLoading(this)">
                 <i class="material-icons">search</i> Search Hotels
               </button>
@@ -547,6 +550,11 @@
                   <option value="business">Business</option>
                   <option value="first">First Class</option>
                 </select>
+              </div>
+
+              <div class="price-estimate-box" id="flight-estimate" style="margin-bottom: 15px; padding: 10px; background: rgba(212, 175, 55, 0.1); border: 1px solid #d4af37; border-radius: 8px; text-align: center; display: none;">
+                  <span class="estimate-text" style="color: #d4af37; font-weight: bold;">Estimated Price: Calculating...</span>
+                  <div class="estimate-reason" style="font-size: 0.8rem; color: #888;"></div>
               </div>
               <button type="submit" class="btn-submit" onclick="showLoading(this)">
                 <i class="material-icons">search</i> Search Flights
@@ -613,6 +621,11 @@
                 <label><i class="material-icons">note</i> Special Requests</label>
                 <textarea name="special_requests" rows="2" placeholder="e.g., Child seat, Extra luggage"></textarea>
               </div>
+
+              <div class="price-estimate-box" id="car-estimate" style="margin-bottom: 15px; padding: 10px; background: rgba(212, 175, 55, 0.1); border: 1px solid #d4af37; border-radius: 8px; text-align: center; display: none;">
+                  <span class="estimate-text" style="color: #d4af37; font-weight: bold;">Estimated Price: Calculating...</span>
+                  <div class="estimate-reason" style="font-size: 0.8rem; color: #888;"></div>
+              </div>
               <button type="submit" class="btn-submit" onclick="showLoading(this)">
                 <i class="material-icons">check</i> Book Cab
               </button>
@@ -667,6 +680,11 @@
                 <label><i class="material-icons">description</i> Issue Description</label>
                 <textarea name="description" rows="3" placeholder="Describe the issue in detail" required></textarea>
               </div>
+
+              <div class="price-estimate-box" id="technician-estimate" style="margin-bottom: 15px; padding: 10px; background: rgba(212, 175, 55, 0.1); border: 1px solid #d4af37; border-radius: 8px; text-align: center; display: none;">
+                  <span class="estimate-text" style="color: #d4af37; font-weight: bold;">Estimated Price: Calculating...</span>
+                  <div class="estimate-reason" style="font-size: 0.8rem; color: #888;"></div>
+              </div>
               <button type="submit" class="btn-submit" onclick="showLoading(this)">
                 <i class="material-icons">search</i> Find Technician
               </button>
@@ -717,6 +735,11 @@
               <div class="field">
                 <label><i class="material-icons">note</i> Special Requests</label>
                 <textarea name="special_requests" rows="2" placeholder="e.g., Fragile item, Insured delivery"></textarea>
+              </div>
+
+              <div class="price-estimate-box" id="courier-estimate" style="margin-bottom: 15px; padding: 10px; background: rgba(212, 175, 55, 0.1); border: 1px solid #d4af37; border-radius: 8px; text-align: center; display: none;">
+                  <span class="estimate-text" style="color: #d4af37; font-weight: bold;">Estimated Price: Calculating...</span>
+                  <div class="estimate-reason" style="font-size: 0.8rem; color: #888;"></div>
               </div>
               <button type="submit" class="btn-submit" onclick="showLoading(this)">
                 <i class="material-icons">check</i> Book Courier
@@ -980,6 +1003,8 @@
         initSocket();
         initNavigation();
         initSupportChat();
+        initPriceEstimators();
+        initPriceEstimators();
 
         // Start background services
         getUserLocation();
@@ -1616,6 +1641,8 @@
     // AI RECOMMENDATIONS
     // ============================================
 
+    let currentRecommendations = [];
+
     async function fetchLifestyleRecommendations() {
         const grid = document.getElementById('recommendations-grid');
         if (!grid) return;
@@ -1630,6 +1657,9 @@
             const data = await response.json();
 
             if (data.success) {
+                // Store global recommendations
+                currentRecommendations = data.recommendations || [];
+                
                 // Update recommendation count
                 const countElement = document.getElementById('recommendation-count');
                 if (countElement) {
@@ -1674,7 +1704,7 @@
                 </div>
             ` : ''}
             <div class="recommendation-actions">
-                <button class="btn-primary" onclick="bookRecommendedService('${rec.service_type.replace(/'/g, "\\'")}')">
+                <button class="btn-primary" onclick="bookRecommendedService(${index})">
                     <i class="material-icons">check</i> Book Now
                 </button>
                 <button class="btn-secondary" onclick="dismissRecommendation(${rec.id || index})">
@@ -1796,11 +1826,19 @@
         return 'economy';
     }
 
-    async function bookRecommendedService(serviceType) {
+    async function bookRecommendedService(index) {
+        if (index === undefined || !currentRecommendations[index]) {
+            showToast('Unable to load recommendation details.', 'error');
+            return;
+        }
+
+        const rec = currentRecommendations[index];
+        const serviceType = rec.service_type;
+        const meta = rec.metadata || {};
+        
+        // Fetch user profile for smart pre-filling
         const locationText = document.getElementById('location-text')?.textContent || 'Mumbai';
         const city = locationText.split(',')[0].trim();
-
-        // Fetch user profile for smart pre-filling
         const profile = await getUserProfile();
         const groupSize = profile?.typical_group_size || 2;
 
@@ -1810,22 +1848,36 @@
         switch (serviceType) {
             case 'Hotel Booking':
                 url = '/submit-hotel-booking';
-                params.set('destination', city);
+                // Use recommended location or default to current city
+                const dest = meta.location && meta.location !== "Major Cities" ? meta.location : city;
+                params.set('destination', dest);
                 params.set('checkin', getTomorrowDate());
                 params.set('checkout', getDayAfterTomorrowDate());
-                // Smart room calculation based on group size
                 params.set('rooms', calculateRoomsNeeded(groupSize).toString());
                 params.set('guests', groupSize.toString());
+                
+                // Pass budget hints if available (backend needs to support min/max price if passed)
+                // Assuming backend supports filter params in GET
                 break;
+                
             case 'Flight Booking':
                 url = '/submit-travel-booking';
                 params.set('origin', city);
-                params.set('destination', 'Delhi');
+                params.set('destination', 'Delhi'); // AI doesn't predict destination yet
                 params.set('departure_date', getIn7Days());
-                // Use actual group size
                 params.set('adults', groupSize.toString());
-                params.set('class', getFlightClass(profile));
+                
+                // Map AI Class Recommendation
+                let travelClass = 'economy';
+                if (meta.class) {
+                    const c = meta.class.toLowerCase();
+                    if (c.includes('business')) travelClass = 'business';
+                    else if (c.includes('first')) travelClass = 'first';
+                    else if (c.includes('premium')) travelClass = 'premium_economy';
+                }
+                params.set('class', travelClass);
                 break;
+                
             case 'Car Booking':
             case 'Luxury Cabs':
                 url = '/submit_car_booking';
@@ -1833,19 +1885,39 @@
                 params.set('dropoff', `${city} Airport`);
                 params.set('pickup_date', getTomorrowDate());
                 params.set('pickup_time', '10:00');
-                // Use actual group size
                 params.set('passengers', groupSize.toString());
-                params.set('cab_class', getCabClass(profile));
+                
+                // Map AI Vehicle Recommendation
+                let cabClass = 'standard';
+                if (meta.vehicle) {
+                    const v = meta.vehicle.toLowerCase();
+                    if (v.includes('luxury') || v.includes('bmw') || v.includes('merc')) cabClass = 'luxury';
+                    else if (v.includes('suv') || v.includes('premium')) cabClass = 'premium';
+                    else if (v.includes('budget')) cabClass = 'economy';
+                }
+                params.set('cab_class', cabClass);
                 break;
+                
             case 'Technician Booking':
             case 'Handyman Services':
                 url = '/submit-technician-booking';
                 params.set('location', locationText);
                 params.set('service_date', getTomorrowDate());
                 params.set('service_time', '14:00');
-                params.set('service_type', 'ac_repair');
                 params.set('urgency', 'normal');
+                
+                // Map AI Service Type
+                let techService = 'ac_repair';
+                if (meta.services) {
+                    const s = meta.services.toLowerCase();
+                    if (s.includes('plumb')) techService = 'plumbing';
+                    else if (s.includes('electric')) techService = 'electrical';
+                    else if (s.includes('carpenter')) techService = 'carpentry';
+                    else if (s.includes('clean')) techService = 'cleaning';
+                }
+                params.set('service_type', techService);
                 break;
+                
             case 'Courier Booking':
             case 'Courier & Delivery':
                 url = '/submit_courier_booking';
@@ -1854,13 +1926,21 @@
                 params.set('pickup_date', getTomorrowDate());
                 params.set('pickup_time', '11:00');
                 params.set('package_weight', '2.0');
-                params.set('courier_type', profile?.monthly_budget === 'premium' || profile?.monthly_budget === 'high' ? 'express' : 'standard');
+                
+                // Map AI Delivery Type
+                let courierType = 'standard';
+                if (meta.delivery) {
+                    const d = meta.delivery.toLowerCase();
+                    if (d.includes('express')) courierType = 'express';
+                    else if (d.includes('overnight') || d.includes('same-day')) courierType = 'overnight';
+                }
+                params.set('courier_type', courierType);
                 break;
         }
 
         if (url) {
             window.location.href = `${url}?${params.toString()}`;
-            showToast(`Finding best ${serviceType} options for ${groupSize} ${groupSize > 1 ? 'people' : 'person'}...`, 'info');
+            showToast(`Applying AI Recommendation: ${rec.title}...`, 'success');
         } else {
             showToast('Service coming soon!', 'warning');
         }
@@ -2197,10 +2277,10 @@
     }
 
     // ============================================
-    // TOAST NOTIFICATIONS
+    // TOAST NOTIFICATIONS (LUXURY)
     // ============================================
 
-    function showToast(message, type = 'success') {
+    function showToast(message, type = 'success', title = null) {
         const container = document.getElementById('toast-container');
         if (!container) return;
 
@@ -2211,21 +2291,48 @@
             success: 'check_circle',
             error: 'error',
             warning: 'warning',
-            info: 'info'
+            info: 'info',
+            recommendation: 'lightbulb'
         }[type] || 'notifications';
+
+        // Auto-generate title if missing
+        if (!title) {
+            title = {
+                success: 'Success',
+                error: 'Error',
+                warning: 'Warning',
+                info: 'Information',
+                recommendation: 'Recommendation'
+            }[type] || 'Notification';
+        }
 
         toast.innerHTML = `
         <i class="material-icons">${icon}</i>
-        <span>${message}</span>
+        <div class="toast-content">
+            <span class="toast-title">${title}</span>
+            <span class="toast-message">${message}</span>
+        </div>
+        <i class="material-icons toast-close" onclick="this.parentElement.remove()">close</i>
         `;
+
+        // Play subtle sound
+        playSound(type);
 
         container.appendChild(toast);
 
-        // Auto-remove after 4 seconds
+        // Auto-remove after 5 seconds
         setTimeout(() => {
-            toast.style.animation = 'slideOut 0.3s ease forwards';
-            setTimeout(() => toast.remove(), 300);
-        }, 4000);
+            if (toast.parentElement) {
+                toast.style.animation = 'slideOut 0.4s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards';
+                setTimeout(() => toast.remove(), 400);
+            }
+        }, 5000);
+    }
+
+    function playSound(type) {
+        // Optional: Implement simple beep or notification sound
+        // const audio = new Audio('/static/sounds/notification.mp3');
+        // audio.play().catch(() => {});
     }
 
     // ============================================
@@ -2612,30 +2719,87 @@
     function handleQuickReply(payload) {
         let message = '';
         let modalId = '';
-
-        switch (payload) {
-            case 'hotels':
-                message = 'Hotels';
-                modalId = 'hotel';
-                break;
-            case 'flights':
-                message = 'Flights';
-                modalId = 'travel';
-                break;
-            case 'cabs':
-                message = 'Cabs';
-                modalId = 'car';
-                break;
-            case 'technician':
-                message = 'Technician';
-                modalId = 'event';
-                break;
-            case 'courier':
-                message = 'Courier';
-                modalId = 'courier';
-                break;
-            default:
-                message = payload.replace(/_/g, ' ');
+        
+        // Handle Specific Actions
+        if (payload.startsWith('hotel_')) {
+            const city = payload.replace('hotel_', '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '); // Capitalize
+            message = `Book hotel in ${city}`;
+            modalId = 'hotel';
+            
+            // Set value after modal opens
+            setTimeout(() => {
+                const input = document.getElementById('hotel_destination'); // Ensure ID matches your hotel modal
+                if (input) input.value = city;
+            }, 500);
+            
+        } else if (payload === 'search_flights' || payload === 'business_class') {
+            message = payload === 'business_class' ? 'Business Class Flights' : 'Search Flights';
+            modalId = 'travel';
+            
+            if (payload === 'business_class') {
+                setTimeout(() => {
+                    const select = document.querySelector('#travel-modal select[name="class"]');
+                    if (select) select.value = 'business';
+                }, 500);
+            }
+            
+        } else if (payload.endsWith('_cab')) {
+            const type = payload.replace('_cab', '');
+            message = `${type.charAt(0).toUpperCase() + type.slice(1)} Cab`;
+            modalId = 'car';
+            
+            setTimeout(() => {
+                const input = document.querySelector('#car-modal input[name="dropoff"]');
+                if (input && type === 'airport') input.value = 'International Airport';
+            }, 500);
+            
+        } else if (['ac_repair', 'plumbing', 'electrical', 'other_repair'].includes(payload)) {
+            message = payload.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+            modalId = 'event'; // Technician modal
+            
+            setTimeout(() => {
+                const select = document.querySelector('#event-modal select[name="service_type"]');
+                if (select) select.value = payload;
+            }, 500);
+            
+        } else if (payload.includes('courier')) {
+            message = payload.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            modalId = 'courier';
+            
+            setTimeout(() => {
+                const select = document.querySelector('#courier-modal select[name="courier_type"]');
+                if (select) {
+                    if (payload.includes('same_day')) select.value = 'express';
+                    else select.value = 'standard';
+                }
+            }, 500);
+            
+        } else {
+            // General Fallback
+            switch (payload) {
+                case 'hotels':
+                    message = 'Hotels';
+                    modalId = 'hotel';
+                    break;
+                case 'flights':
+                    message = 'Flights';
+                    modalId = 'travel';
+                    break;
+                case 'cabs':
+                    message = 'Cabs';
+                    modalId = 'car';
+                    break;
+                case 'technician':
+                    message = 'Technician';
+                    modalId = 'event';
+                    break;
+                case 'courier':
+                    message = 'Courier';
+                    modalId = 'courier';
+                    break;
+                default:
+                    message = payload.replace(/_/g, ' ');
+            }
         }
 
         addAIChatMessage(message, 'user');
@@ -3087,6 +3251,87 @@
                     showToast('Upload failed', 'error');
                 });
         }
+    }
+
+    // ============================================
+    // REAL-TIME PRICE ESTIMATION (PHASE 2)
+    // ============================================
+
+    function initPriceEstimators() {
+        console.log('💰 Initializing price estimators...');
+        
+        const estimators = [
+            { id: 'hotel-modal', type: 'Hotel Booking' },
+            { id: 'travel-modal', type: 'Flight Booking' },
+            { id: 'car-modal', type: 'Car Booking' },
+            { id: 'event-modal', type: 'Technician Booking' },
+            { id: 'courier-modal', type: 'Courier Booking' }
+        ];
+
+        estimators.forEach(config => {
+            const modal = document.getElementById(config.id);
+            if (!modal) return;
+
+            const inputs = modal.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                // Trigger on change and input (debounced)
+                input.addEventListener('change', () => fetchEstimate(config));
+                input.addEventListener('input', debounce(() => fetchEstimate(config), 1000));
+            });
+        });
+    }
+
+    async function fetchEstimate(config) {
+        const modal = document.getElementById(config.id);
+        const estimateBox = modal.querySelector('.price-estimate-box');
+        if (!estimateBox) return;
+        
+        const estimateText = estimateBox.querySelector('.estimate-text');
+        const estimateReason = estimateBox.querySelector('.estimate-reason');
+        
+        // Show loading state
+        estimateBox.style.display = 'block';
+        estimateText.textContent = 'Calculating...';
+        estimateReason.textContent = '';
+
+        // Gather data
+        const formData = {};
+        modal.querySelectorAll('input, select').forEach(input => {
+            if(input.name) formData[input.name] = input.value;
+        });
+        formData['service_type'] = config.type;
+
+        try {
+            const response = await fetch('/api/estimate-price', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                estimateText.textContent = `Estimated: ${data.estimate}`;
+                estimateReason.textContent = data.reason || 'Based on current demand';
+                
+                // Pulse animation
+                estimateBox.style.transform = 'scale(1.05)';
+                setTimeout(() => estimateBox.style.transform = 'scale(1)', 200);
+            } else {
+                estimateText.textContent = 'Estimate unavailable';
+            }
+        } catch (error) {
+            console.error('Estimate error:', error);
+            estimateText.textContent = 'Estimate unavailable';
+        }
+    }
+
+    function debounce(func, wait) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
     }
 </script>
 

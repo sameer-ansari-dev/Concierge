@@ -1997,6 +1997,35 @@ def generate_pdf_ticket(booking_id, service_type, details, user_id):
                               ParagraphStyle('OTPStyle', parent=styles['Normal'], fontSize=12)))
         story.append(Paragraph("Show this code to your driver for verification", normal_style))
         
+        # Add Passenger List if available
+        if details.get('passengers_details'):
+            story.append(Spacer(1, 20))
+            story.append(Paragraph("Passenger List", header_style))
+            story.append(Spacer(1, 10))
+            
+            pax_data = [["Name", "Age", "Gender"]]
+            for pax in details['passengers_details']:
+                pax_data.append([
+                    pax.get('name', '-'),
+                    str(pax.get('age', '-')),
+                    pax.get('gender', '-')
+                ])
+                
+            pax_table = Table(pax_data, colWidths=[250, 100, 150])
+            pax_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498db')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#bdc3c7'))
+            ]))
+            story.append(pax_table)
+        
     elif service_type == 'Hotel Booking':
         hotel_data = [
             ["Hotel Name:", details.get('hotel_name', 'N/A')],
@@ -2004,6 +2033,8 @@ def generate_pdf_ticket(booking_id, service_type, details, user_id):
             ["Check-out Date:", details.get('checkout', 'N/A')],
             ["Rooms:", str(details.get('rooms', 1))],
             ["Guests:", str(details.get('guests', 1))],
+            ["Contact Email:", details.get('email', 'N/A')],
+            ["Contact Mobile:", details.get('mobile', 'N/A')],
             ["Total Amount:", f"₹{details.get('total_amount', 0)}"],
             ["Booking Status:", "Confirmed"],
             ["Confirmation Number:", f"HL-{random.randint(100000, 999999)}"]
@@ -2025,6 +2056,35 @@ def generate_pdf_ticket(booking_id, service_type, details, user_id):
         ]))
         story.append(table)
         
+        # Add Guest List if available
+        if details.get('guest_details'):
+            story.append(Spacer(1, 20))
+            story.append(Paragraph("Guest List", header_style))
+            story.append(Spacer(1, 10))
+            
+            guest_list_data = [["Room", "Guest Name", "Type"]]
+            for guest in details['guest_details']:
+                guest_list_data.append([
+                    f"Room {guest.get('room', '-')}",
+                    f"{guest.get('title', '')} {guest.get('name', 'Guest')}",
+                    guest.get('type', '-')
+                ])
+                
+            guest_table = Table(guest_list_data, colWidths=[80, 320, 100])
+            guest_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7f8c8d')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#bdc3c7'))
+            ]))
+            story.append(guest_table)
+        
     elif service_type == 'Flight Booking':
         flight_data = [
             ["Airline:", details.get('airline', 'N/A')],
@@ -2041,21 +2101,33 @@ def generate_pdf_ticket(booking_id, service_type, details, user_id):
         ]
         
         table = Table(flight_data, colWidths=[200, 300])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#9b59b6')),
-            ('TEXTCOLOR', (0, 0), (0, -1), colors.white),
-            ('BACKGROUND', (1, 0), (1, -1), colors.HexColor('#ecf0f1')),
-            ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#2c3e50')),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-            ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ('TOPPADDING', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#bdc3c7'))
-        ]))
-        story.append(table)
-        
+        if details.get('traveller_details'):
+            story.append(Spacer(1, 20))
+            story.append(Paragraph("Traveller List", header_style))
+            story.append(Spacer(1, 10))
+            
+            pax_data = [["Title", "Full Name"]]
+            for pax in details['traveller_details']:
+                pax_data.append([
+                    pax.get('title', '-'),
+                    pax.get('full_name', '-')
+                ])
+                
+            pax_table = Table(pax_data, colWidths=[100, 300])
+            pax_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#9b59b6')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#bdc3c7'))
+            ]))
+            story.append(pax_table)
+            
     elif service_type == 'Technician Booking':
         tech_data = [
             ["Service Type:", details.get('service_type', 'N/A').replace('_', ' ').title()],
@@ -2084,6 +2156,35 @@ def generate_pdf_ticket(booking_id, service_type, details, user_id):
             ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#bdc3c7'))
         ]))
         story.append(table)
+
+        # Add Customer Details if available
+        if details.get('customer_name'):
+            story.append(Spacer(1, 20))
+            story.append(Paragraph("Customer Details", header_style))
+            story.append(Spacer(1, 10))
+            
+            cust_data = [
+                ["Customer Name:", details.get('customer_name', 'N/A')],
+                ["Customer Address:", details.get('customer_address', 'N/A')],
+                ["Primary Contact:", details.get('mobile', 'N/A')],
+                ["Alternate Contact:", details.get('alternate_phone', 'N/A')],
+                ["Email:", details.get('email', 'N/A')]
+            ]
+            
+            cust_table = Table(cust_data, colWidths=[200, 300])
+            cust_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#d35400')),
+                ('TEXTCOLOR', (0, 0), (0, -1), colors.white),
+                ('BACKGROUND', (1, 0), (1, -1), colors.HexColor('#fdebd0')),
+                ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#2c3e50')),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#bdc3c7'))
+            ]))
+            story.append(cust_table)
         
     elif service_type == 'Courier Booking':
         courier_data = [
@@ -2114,6 +2215,38 @@ def generate_pdf_ticket(booking_id, service_type, details, user_id):
             ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#bdc3c7'))
         ]))
         story.append(table)
+
+        # Add Sender/Receiver Info if available
+        if details.get('sender') and details.get('receiver'):
+            story.append(Spacer(1, 20))
+            story.append(Paragraph("Shipping Details", header_style))
+            story.append(Spacer(1, 10))
+            
+            sender = details['sender']
+            receiver = details['receiver']
+            
+            shipping_data = [
+                ["Sender", "Receiver"],
+                [f"Name: {sender.get('name', '-')}", f"Name: {receiver.get('name', '-')}"],
+                [f"Phone: {sender.get('phone', '-')}", f"Phone: {receiver.get('phone', '-')}"],
+                [f"Address: {sender.get('full_address', '-')}", f"Address: {receiver.get('full_address', '-')}"]
+            ]
+            
+            ship_table = Table(shipping_data, colWidths=[250, 250])
+            ship_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#16a085')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#bdc3c7')),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP')
+            ]))
+            story.append(ship_table)
     
     story.append(Spacer(1, 30))
     story.append(Paragraph("Terms & Conditions", header_style))
@@ -2204,36 +2337,131 @@ def admin_generate_ticket():
         cur.close()
         conn.close()
 # ---------------------- Static Mock Data ----------------------
+# Central coordinates for mapping
+CITY_COORDINATES = {
+    "Mumbai": {"lat": 19.0760, "lng": 72.8777},
+    "Pune": {"lat": 18.5204, "lng": 73.8567},
+    "Nashik": {"lat": 19.9975, "lng": 73.7898},
+    "Delhi": {"lat": 28.6139, "lng": 77.2090},
+    "Bangalore": {"lat": 12.9716, "lng": 77.5946},
+    "Hyderabad": {"lat": 17.3850, "lng": 78.4867},
+    "Chennai": {"lat": 13.0827, "lng": 80.2707},
+    "Kolkata": {"lat": 22.5726, "lng": 88.3639},
+    "Jaipur": {"lat": 26.9124, "lng": 75.7873},
+    "Goa": {"lat": 15.2993, "lng": 74.1240},
+    "Ahmedabad": {"lat": 23.0225, "lng": 72.5714},
+    "Chandigarh": {"lat": 30.7333, "lng": 76.7794},
+    "Lucknow": {"lat": 26.8467, "lng": 80.9462},
+    "Indore": {"lat": 22.7196, "lng": 75.8577},
+    "Kerala": {"lat": 10.8505, "lng": 76.2711}
+}
+
 hotels_data = {
     "Mumbai": [
-        {"name": "The Taj Mahal Palace", "address": "Apollo Bunder Road, Colaba, Mumbai – 400001, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.7, "price": 18425, "image": "images/mumbai/mumbai1.jpg"},
-        {"name": "The Oberoi, Mumbai", "address": "Nariman Point, Marine Drive, Mumbai – 400021, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.9, "price": 11904, "image": "images/mumbai/mumbai2.jpg"},
-        {"name": "Trident Nariman Point", "address": "Nariman Point, Mumbai – 400021, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.6, "price": 9440, "image": "images/mumbai/mumbai3.jpg"},
-        {"name": "ITC Grand Central, Mumbai", "address": "Dr Babasaheb Ambedkar Road, Parel, Mumbai – 400012, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.5, "price": 8800, "image": "images/mumbai/mumbai4.jpg"},
-        {"name": "Sahara Star Hotel", "address": "Opposite Domestic Airport, Vile Parle (E), Mumbai – 400099, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.4, "price": 10200, "image": "images/mumbai/mumbai5.jpg"},
-        {"name": "Hotel Marine Plaza", "address": "Marine Drive, Mumbai – 400020, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.3, "price": 7900, "image": "images/mumbai/mumbai6.jpg"},
-        {"name": "Novotel Mumbai Juhu Beach", "address": "Juhu Beach, Balraj Sahani Marg, Mumbai – 400049, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.2, "price": 8400, "image": "images/mumbai/mumbai7.jpg"},
-        {"name": "Four Seasons Hotel Mumbai", "address": "Dr E Moses Road, Worli, Mumbai – 400018, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.5, "price": 12000, "image": "images/mumbai/mumbai8.jpg"},
-        {"name": "Hotel Sea Princess", "address": "Juhu Tara Road, Juhu Beach, Mumbai – 400049, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.1, "price": 6700, "image": "images/mumbai/mumbai9.jpg"},
-        {"name": "The St. Regis Mumbai", "address": "462 Senapati Bapat Marg, Lower Parel, Mumbai – 400013, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.8, "price": 14500, "image": "images/mumbai/mumbai10.jpg"}
+        {"name": "The Taj Mahal Palace", "address": "Apollo Bunder Road, Colaba, Mumbai", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.7, "price": 18425, "image": "images/mumbai/mumbai1.jpg", "lat": 18.9217, "lng": 72.8333},
+        {"name": "The Oberoi, Mumbai", "address": "Nariman Point, Marine Drive, Mumbai", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.9, "price": 11904, "image": "images/mumbai/mumbai2.jpg", "lat": 18.9272, "lng": 72.8206},
+        {"name": "Trident Nariman Point", "address": "Nariman Point, Mumbai", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": False, "rating": 4.6, "price": 9440, "image": "images/mumbai/mumbai3.jpg", "lat": 18.9286, "lng": 72.8213},
+        {"name": "ITC Grand Central, Mumbai", "address": "Dr Babasaheb Ambedkar Road, Parel, Mumbai", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.5, "price": 8800, "image": "images/mumbai/mumbai4.jpg", "lat": 18.9996, "lng": 72.8402},
+        {"name": "Sahara Star Hotel", "address": "Opposite Domestic Airport, Vile Parle (E), Mumbai", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.4, "price": 10200, "image": "images/mumbai/mumbai5.jpg", "lat": 19.0948, "lng": 72.8541},
+        {"name": "Hotel Marine Plaza", "address": "Marine Drive, Mumbai", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": False, "spa": False, "rating": 4.3, "price": 7900, "image": "images/mumbai/mumbai6.jpg", "lat": 18.9345, "lng": 72.8242},
+        {"name": "Novotel Mumbai Juhu Beach", "address": "Juhu Beach, Balraj Sahani Marg, Mumbai", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.2, "price": 8400, "image": "images/mumbai/mumbai7.jpg", "lat": 19.1026, "lng": 72.8252},
+        {"name": "Four Seasons Hotel Mumbai", "address": "Dr E Moses Road, Worli, Mumbai", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.5, "price": 12000, "image": "images/mumbai/mumbai8.jpg", "lat": 18.9964, "lng": 72.8202},
+        {"name": "Hotel Sea Princess", "address": "Juhu Tara Road, Juhu Beach, Mumbai", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.1, "price": 6700, "image": "images/mumbai/mumbai9.jpg", "lat": 19.0967, "lng": 72.8267},
+        {"name": "The St. Regis Mumbai", "address": "462 Senapati Bapat Marg, Lower Parel, Mumbai", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.8, "price": 14500, "image": "images/mumbai/mumbai10.jpg", "lat": 18.9932, "lng": 72.8239}
     ],
     "Pune": [
-        {"name": "JW Marriott Hotel Pune", "address": "Senapati Bapat Road, Pune – 411053, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.6, "price": 9800, "image": "images/pune/pune1.jpg"},
-        {"name": "Conrad Pune", "address": "7 Mangaldas Road, Pune – 411001, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.7, "price": 8900, "image": "images/pune/pune2.jpg"},
-        {"name": "Hyatt Regency Pune", "address": "Weikfield IT Park, Pune Nagar Road, Pune – 411014, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.5, "price": 7500, "image": "images/pune/pune3.jpg"},
-        {"name": "The Westin Pune Koregaon Park", "address": "Koregaon Park, Pune – 411001, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.6, "price": 8200, "image": "images/pune/pune4.jpg"},
-        {"name": "Marriott Suites Pune", "address": "Koregaon Park, Pune – 411001, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.6, "price": 850, "image": "images/pune/pune5.jpg"},
-        {"name": "Radisson Blu Hotel Pune Kharadi", "address": "Kharadi, Pune – 411014, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.4, "price": 6800, "image": "images/pune/pune6.jpg"}
+        {"name": "JW Marriott Hotel Pune", "address": "Senapati Bapat Road, Pune", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.6, "price": 9800, "image": "images/pune/pune1.jpg", "lat": 18.5309, "lng": 73.8334},
+        {"name": "Conrad Pune", "address": "7 Mangaldas Road, Pune", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.7, "price": 8900, "image": "images/pune/pune2.jpg", "lat": 18.5367, "lng": 73.8812},
+        {"name": "Hyatt Regency Pune", "address": "Weikfield IT Park, Pune Nagar Road, Pune", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.5, "price": 7500, "image": "images/pune/pune3.jpg", "lat": 18.5630, "lng": 73.9080},
+        {"name": "The Westin Pune Koregaon Park", "address": "Koregaon Park, Pune", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.6, "price": 8200, "image": "images/pune/pune4.jpg", "lat": 18.5393, "lng": 73.8990},
+        {"name": "Marriott Suites Pune", "address": "Koregaon Park, Pune", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.6, "price": 8500, "image": "images/pune/pune5.jpg", "lat": 18.5416, "lng": 73.9032},
+        {"name": "Radisson Blu Hotel Pune Kharadi", "address": "Kharadi, Pune", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.4, "price": 6800, "image": "images/pune/pune6.jpg", "lat": 18.5529, "lng": 73.9357}
     ],
     "Nashik": [
-        {"name": "Express Inn Nashik", "address": "Pathardi Phata, Mumbai-Agra Road, Ambad, Nashik – 422010, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.4, "price": 5500, "image": "images/nashik/nashik1.jpg"},
-        {"name": "The Gateway Hotel Ambad", "address": "Opposite Domestic Airport, Vile Parle (E), Mumbai – 400099, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.5, "price": 6200, "image": "images/nashik/nashik2.jpg"},
-        {"name": "Courtyard by Marriott Nashik", "address": "Near Mumbai Naka, Mumbai-Agra Highway, Nashik – 422001, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.6, "price": 6800, "image": "images/nashik/nashik3.jpg"},
-        {"name": "Grape County Eco Resort & Spa", "address": "Anjaneri, Nashik, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.5, "price": 7500, "image": "images/nashik/nashik4.jpg"},
-        {"name": "Regenta Resort Soma Vine Village", "address": "Gangapur-Ganghavare Road, Nashik, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.3, "price": 7200, "image": "images/nashik/nashik5.jpg"},
-        {"name": "ibis Nashik", "address": "Nashik-Trimbakeshwar Road, Satpur, Nashik, Maharashtra", "couple_friendly": True, "free_wifi": True, "rating": 4.1, "price": 3200, "image": "images/nashik/nashik6.jpg"}
+        {"name": "Express Inn Nashik", "address": "Pathardi Phata, Mumbai-Agra Road, Nashik", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.4, "price": 5500, "image": "images/nashik/nashik1.jpg", "lat": 19.9679, "lng": 73.7686},
+        {"name": "The Gateway Hotel Ambad", "address": "Ambad, Nashik", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.5, "price": 6200, "image": "images/nashik/nashik2.jpg", "lat": 19.9575, "lng": 73.7432},
+        {"name": "Courtyard by Marriott Nashik", "address": "Mumbai-Agra Highway, Nashik", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": True, "spa": True, "rating": 4.6, "price": 6800, "image": "images/nashik/nashik3.jpg", "lat": 19.9723, "lng": 73.7750},
+        {"name": "Grape County Eco Resort & Spa", "address": "Anjaneri, Nashik", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": False, "spa": True, "rating": 4.5, "price": 7500, "image": "images/nashik/nashik4.jpg", "lat": 19.9392, "lng": 73.6663},
+        {"name": "Regenta Resort Soma Vine Village", "address": "Gangapur-Ganghavare Road, Nashik", "couple_friendly": True, "free_wifi": True, "pool": True, "gym": False, "spa": True, "rating": 4.3, "price": 7200, "image": "images/nashik/nashik5.jpg", "lat": 20.0152, "lng": 73.6931},
+        {"name": "ibis Nashik", "address": "Nashik-Trimbakeshwar Road, Satpur, Nashik", "couple_friendly": True, "free_wifi": True, "pool": False, "gym": True, "spa": False, "rating": 4.1, "price": 3200, "image": "images/nashik/nashik6.jpg", "lat": 19.9922, "lng": 73.7455}
     ]
 }
+
+# City Localities for realistic addresses
+CITY_LOCALITIES = {
+    "Delhi": ["Connaught Place", "Karol Bagh", "South Extension", "Vasant Vihar", "Dwarka", "Rohini", "Saket", "Nehru Place"],
+    "Bangalore": ["Indiranagar", "Koramangala", "Whitefield", "Jayanagar", "MG Road", "Electronic City", "HSR Layout"],
+    "Hyderabad": ["Banjara Hills", "Jubilee Hills", "Gachibowli", "Hitech City", "Begumpet", "Secunderabad"],
+    "Chennai": ["T Nagar", "Adyar", "Anna Nagar", "Mylapore", "Velachery", "Nungambakkam"],
+    "Kolkata": ["Park Street", "Salt Lake", "New Town", "Ballygunge", "Alipore", "Howrah"],
+    "Jaipur": ["Vaishali Nagar", "Malviya Nagar", "C Scheme", "Raja Park", "Mansarovar", "Amer Road"],
+    "Goa": ["Calangute", "Candolim", "Panjim", "Anjuna", "Baga", "Margao", "Vasco"],
+    "Ahmedabad": ["Satellite", "Vastrapur", "Navrangpura", "Maninagar", "Bopal", "SG Highway"],
+    "Chandigarh": ["Sector 17", "Sector 35", "Sector 22", "Manimajra", "Industrial Area"],
+    "Lucknow": ["Gomti Nagar", "Hazratganj", "Aliganj", "Indira Nagar", "Aminabad"],
+    "Indore": ["Vijay Nagar", "Palasia", "Bhawarkua", "Rajwada", "Saket Nagar"]
+}
+
+def generate_dynamic_hotels(city):
+    """Generate realistic hotels for new cities using 'online' photos"""
+    city_center = CITY_COORDINATES.get(city, {"lat": 20.5937, "lng": 78.9629}) # Default India center
+    localities = CITY_LOCALITIES.get(city, ["City Center", "Market Road", "Station Road", "Civil Lines", "Main Street"])
+    
+    prefixes = ["The Grand", "Royal", "Hotel", "Hyatt", "Radisson", "Marriott", "Taj", "Sheraton", "Hilton", "Lemon Tree", "ITC", "Novotel", "Holiday Inn"]
+    suffixes = ["Palace", "Residency", "Suites", "Regency", "Plaza", "Inn", "Blu", "View", "Resort", "Towers"]
+    
+    # Online placeholder images from Unsplash (Hotels/Resorts)
+    online_images = [
+        "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1571896349842-68c8949120bb?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1455587734955-081b22074882?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1564501049412-61c2a3083791?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1596436889106-be35e843f974?auto=format&fit=crop&w=800&q=80"
+    ]
+    
+    dynamic_hotels = []
+    num_hotels = random.randint(8, 12)
+    
+    for i in range(num_hotels):
+        name = f"{random.choice(prefixes)} {city} {random.choice(suffixes)}"
+        if "The" not in name and "Hotel" not in name: 
+            name = f"The {name}"
+            
+        rating = round(random.uniform(3.8, 5.0), 1)
+        price = random.randint(2500, 15000)
+        
+        # Address Generation
+        locality = random.choice(localities)
+        street_no = random.randint(1, 99)
+        address = f"{street_no}, {locality}, {city} - {random.randint(110001, 800000)}"
+        
+        # Random offset for map (approx 5-10km radius)
+        lat_offset = random.uniform(-0.05, 0.05)
+        lng_offset = random.uniform(-0.05, 0.05)
+        
+        dynamic_hotels.append({
+            "name": name,
+            "address": address,
+            "couple_friendly": random.choice([True, False]),
+            "free_wifi": True,
+            "pool": random.choice([True, False]),
+            "gym": random.choice([True, False]),
+            "spa": random.choice([True, False]),
+            "rating": rating,
+            "price": price,
+            "image": random.choice(online_images),
+            "lat": city_center["lat"] + lat_offset,
+            "lng": city_center["lng"] + lng_offset
+        })
+        
+    # Sort by rating
+    dynamic_hotels.sort(key=lambda x: x['rating'], reverse=True)
+    return dynamic_hotels
 
 cars_data = [
     {"model": "Toyota Etios", "seats": 4, "luggage": 2, "fuel_type": "CNG/Petrol/Diesel", "price": 936, "cab_class": "Standard", "pickup_time": "10:00", "dropoff_time": "12:00", "duration": "2h", "status": "Available"},
@@ -2429,7 +2657,7 @@ def register():
         cur = conn.cursor()
         try:
             cur.execute(
-                "INSERT INTO users (full_name, email, username, password) VALUES (%s, %s, %s, %s)",
+                "INSERT INTO users (full_name, email, username, password, membership_tier) VALUES (%s, %s, %s, %s, 'Silver')",
                 (full_name, email, username, password)
             )
             conn.commit()
@@ -3395,6 +3623,7 @@ def confirm_booking():
     checkout = data.get('checkout')
     email = data.get('email')
     mobile = data.get('mobile')
+    guest_details = data.get('guest_details', [])
 
     booking_id = f"HOTEL-{random.randint(1000, 9999)}"
     details_obj = {
@@ -3406,6 +3635,7 @@ def confirm_booking():
         "checkout": checkout,
         "email": email,
         "mobile": mobile,
+        "guest_details": guest_details,
         "simulated_payment": True,
         "simulated_payment_at": datetime.now().isoformat()
     }
@@ -3413,12 +3643,18 @@ def confirm_booking():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        # Create ticket immediately
+        user_id = current_user.get_id()
+        pdf_filename = generate_pdf_ticket(booking_id, 'Hotel Booking', details_obj, user_id)
+        details_obj['ticket_pdf_url'] = f"/static/tickets/{pdf_filename}"
+        details_obj['ticket_generated_at'] = datetime.now().isoformat()
+
         cur.execute("""
             INSERT INTO requests (user_id, booking_id, service_type, details, payment_status, admin_confirmation)
             VALUES (%s, %s, %s, %s::jsonb, %s, %s)
             RETURNING id
         """, (
-            current_user.get_id(),
+            user_id,
             booking_id,
             'Hotel Booking',
             json.dumps(details_obj),
@@ -3430,7 +3666,7 @@ def confirm_booking():
 
         last_row = get_last_request_json()
         if last_row:
-            socketio.emit('new_request', {'request': last_row}, to=None)
+            socketio.emit('new_request', {'request': last_row})
 
         return jsonify({"success": True, "booking_id": booking_id, "request_id": new_id})
     except Exception as e:
@@ -3480,12 +3716,18 @@ def confirm_car_booking():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        # Create ticket immediately
+        user_id = current_user.get_id()
+        pdf_filename = generate_pdf_ticket(booking_id, 'Car Booking', details_obj, user_id)
+        details_obj['ticket_pdf_url'] = f"/static/tickets/{pdf_filename}"
+        details_obj['ticket_generated_at'] = datetime.now().isoformat()
+
         cur.execute("""
             INSERT INTO requests (user_id, booking_id, service_type, details, payment_status, admin_confirmation)
             VALUES (%s, %s, %s, %s::jsonb, %s, %s)
             RETURNING id
         """, (
-            current_user.get_id(),
+            user_id,
             booking_id,
             'Car Booking',
             json.dumps(details_obj),
@@ -3497,7 +3739,7 @@ def confirm_car_booking():
 
         last_row = get_last_request_json()
         if last_row:
-            socketio.emit('new_request', {'request': last_row}, to=None)
+            socketio.emit('new_request', {'request': last_row})
 
         return jsonify({"success": True, "booking_id": booking_id, "request_id": new_id})
     except Exception as e:
@@ -3592,77 +3834,94 @@ def submit_car_booking():
         }
         target_class = class_map.get(car_class, 'Standard')
 
+        # Get coordinates
+        pickup_coords = CITY_COORDINATES.get(pickup, CITY_COORDINATES.get('Mumbai'))
+        if not pickup_coords: pickup_coords = {"lat": 19.0760, "lng": 72.8777}
+        
+        # Determine Dropoff Coordinates
+        # 1. Check if dropoff is a known city
+        dropoff_clean = dropoff.split(',')[0].strip().title() # Handle "Delhi, India" etc
+        dropoff_coords = CITY_COORDINATES.get(dropoff_clean)
+        
+        # 2. If known city (Inter-city trip)
+        if dropoff_coords:
+            # Calculate Haversine distance for long trips
+            lat1, lon1 = pickup_coords["lat"], pickup_coords["lng"]
+            lat2, lon2 = dropoff_coords["lat"], dropoff_coords["lng"]
+            R = 6371 # Earth radius in km
+            dlat = math.radians(lat2 - lat1)
+            dlon = math.radians(lon2 - lon1)
+            a = math.sin(dlat/2) * math.sin(dlat/2) + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2) * math.sin(dlon/2)
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+            distance_km = R * c
+            distance_km = round(distance_km, 1)
+            
+        else:
+            # 3. Local trip (Random offset)
+            dropoff_coords = {
+                "lat": pickup_coords["lat"] + random.uniform(-0.05, 0.05),
+                "lng": pickup_coords["lng"] + random.uniform(-0.05, 0.05)
+            }
+            # Euclidean approx for local
+            dist_lat = (pickup_coords["lat"] - dropoff_coords["lat"]) * 111
+            dist_lng = (pickup_coords["lng"] - dropoff_coords["lng"]) * 111
+            distance_km = math.sqrt(dist_lat**2 + dist_lng**2)
+            distance_km = round(max(5, distance_km), 1)
+
         # Get user profile for budget filtering
         user_id = current_user.get_id()
         profile = get_user_profile(user_id)
-
-        # Budget-based max prices (per trip)
-        max_price = float('inf')
-        if profile:
-            monthly_budget = profile.get('monthly_budget', 'medium')
-            if monthly_budget == 'low':
-                max_price = 1000  # Budget cabs only
-            elif monthly_budget == 'medium':
-                max_price = 1800  # Standard to mid-range SUV
-            elif monthly_budget == 'high':
-                max_price = 2500  # Premium SUVs and some luxury
-            # premium budget has no limit
-
-        # ── Filter cars ─────────────────────────────────────────────
-        filtered_cars = []
-        for car in cars_data:
-            cab_class_car = car.get('cab_class', '').lower()
-            car_price = car.get('price', 0)
-
-            # Apply budget filter
-            if car_price > max_price:
-                continue
-
-            # Apply class and capacity filter
-            if target_class.lower() == 'standard' and cab_class_car == 'standard':
-                if car.get('seats', 4) >= passengers:
-                    filtered_cars.append(car)
-            elif cab_class_car == target_class.lower():
-                if car.get('seats', 4) >= passengers:
-                    filtered_cars.append(car)
-
-        if not filtered_cars:
-            filtered_cars = [car for car in cars_data
-                             if car.get('cab_class', '').lower() == target_class.lower()]
-
-        if not filtered_cars:
-            flash(f"No {target_class} cars available right now – showing popular options!", "info")
-            filtered_cars = [c for c in cars_data if c.get('cab_class') in ['Standard', 'SUV', 'Luxury']]
-
-        # Limit selection
-        selected = filtered_cars[:6]
-        if len(filtered_cars) > 6:
-            selected = random.sample(filtered_cars, 6)
-
-        # ── Enhance car data for template ───────────────────────────
+        
+        # Generate Dynamic Cars
         enhanced_cars = []
-        for idx, car in enumerate(selected):
-            enhanced_car = car.copy()
-
-            # transmission logic
-            if car.get('cab_class') == 'Luxury':
-                transmission = 'Automatic'
-            elif 'premium' in car.get('model', '').lower():
-                transmission = 'Automatic'
-            else:
-                transmission = 'Manual'
-
-            enhanced_car.update({
+        
+        driver_names = ["Rajesh", "Suresh", "Amit", "Vikram", "Rahul", "Mohan", "Deepak", "Sanjay", "Vinod", "Arun"]
+        
+        # Base rates per km
+        rates = {
+            "Standard": 15,
+            "SUV": 25,
+            "Luxury": 50
+        }
+        
+        filtered_cars = [c for c in cars_data if c.get('cab_class') == target_class or target_class == 'Standard']
+        if not filtered_cars: filtered_cars = cars_data[:5]
+        
+        for idx, car in enumerate(filtered_cars):
+            cab_class = car.get('cab_class', 'Standard')
+            rate = rates.get(cab_class, 15)
+            
+            # Dynamic Price Calculation
+            est_price = int(200 + (distance_km * rate)) # Base fare 200
+            
+            # Random Driver Location (near pickup)
+            driver_lat = pickup_coords["lat"] + random.uniform(-0.02, 0.02)
+            driver_lng = pickup_coords["lng"] + random.uniform(-0.02, 0.02)
+            
+            eta = random.randint(2, 15)
+            
+            enhanced_cars.append({
                 'id': idx + 1,
-                'transmission': transmission,
+                'model': car['model'],
+                'cab_class': cab_class,
+                'seats': car['seats'],
+                'luggage': car['luggage'],
+                'fuel_type': car['fuel_type'],
+                'transmission': 'Automatic' if cab_class == 'Luxury' else 'Manual',
+                'driver_name': random.choice(driver_names),
+                'driver_rating': round(random.uniform(4.5, 5.0), 1),
+                'eta': f"{eta} mins",
+                'distance': f"{distance_km} km",
+                'price': est_price,
                 'pickup': pickup,
                 'dropoff': dropoff,
                 'pickup_date': pickup_date,
-                'pickup_time': pickup_time.split(':')[0] + ':' + pickup_time.split(':')[1] if ':' in pickup_time else pickup_time,
-                'passengers': passengers,
-                'booking_for': pickup_dt.strftime('%b %d, %Y at %I:%M %p')
+                'pickup_time': pickup_time,
+                'lat': driver_lat,
+                'lng': driver_lng
             })
-            enhanced_cars.append(enhanced_car)
+            
+        enhanced_cars.sort(key=lambda x: int(x['eta'].split()[0]))
 
         # ── Render results page ─────────────────────────────────────
         return render_template(
@@ -3670,8 +3929,10 @@ def submit_car_booking():
             cars=enhanced_cars,
             pickup=pickup,
             dropoff=dropoff,
+            pickup_coords=pickup_coords,
+            dropoff_coords=dropoff_coords,
             pickup_date=pickup_date,
-            pickup_time=pickup_time.split(':')[0] + ':' + pickup_time.split(':')[1] if ':' in pickup_time else pickup_time,
+            pickup_time=pickup_time,
             passengers=passengers,
             car_class=target_class
         )
@@ -3684,12 +3945,84 @@ def submit_car_booking():
         return redirect(url_for('dashboard'))
 
 # ---------------------- Technician Booking ----------------------
+def generate_dynamic_technicians(service_type, city):
+    """Generate realistic technicians for any city"""
+    city_center = CITY_COORDINATES.get(city, {"lat": 19.0760, "lng": 72.8777})
+    
+    first_names = ["Ramesh", "Suresh", "Amit", "Vikram", "Rahul", "Mohan", "Deepak", "Sanjay", "Vinod", "Arun", "Rajesh", "Vijay", "Anil", "Sunil"]
+    last_names = ["Kumar", "Sharma", "Singh", "Patel", "Yadav", "Gupta", "Verma", "Mishra", "Reddy", "Nair"]
+    
+    service_titles = {
+        'ac_repair': ['AC Specialist', 'HVAC Expert', 'Cooling Tech'],
+        'plumbing': ['Master Plumber', 'Pipe Fitter', 'Leakage Expert'],
+        'electrical': ['Senior Electrician', 'Wiring Expert', 'Certified Electrician'],
+        'carpentry': ['Master Carpenter', 'Woodwork Artist', 'Furniture Expert'],
+        'cleaning': ['Deep Cleaning Pro', 'Hygiene Expert', 'Sanitization Spec.'],
+        'pest_control': ['Pest Control Expert', 'Fumigation Tech', 'Vector Control']
+    }
+    
+    titles = service_titles.get(service_type, ['Service Expert', 'Technician', 'Specialist'])
+    
+    technicians = []
+    num_techs = random.randint(8, 12)
+    
+    for i in range(num_techs):
+        name = f"{random.choice(first_names)} {random.choice(last_names)}"
+        experience = random.randint(2, 15)
+        rating = round(random.uniform(4.2, 5.0), 1)
+        jobs_done = random.randint(50, 500)
+        
+        # Location offset (within 5-10km)
+        lat_offset = random.uniform(-0.05, 0.05)
+        lng_offset = random.uniform(-0.05, 0.05)
+        tech_lat = city_center["lat"] + lat_offset
+        tech_lng = city_center["lng"] + lng_offset
+        
+        # Calculate ETA based on distance (approx)
+        dist_km = math.sqrt((lat_offset*111)**2 + (lng_offset*111)**2)
+        eta_mins = int(15 + (dist_km * 3)) # 3 mins per km + base
+        
+        # Price calculation
+        base_prices = {
+            'ac_repair': 500, 'plumbing': 300, 'electrical': 300,
+            'carpentry': 400, 'cleaning': 800, 'pest_control': 1000
+        }
+        base_price = base_prices.get(service_type, 400)
+        price = base_price + (experience * 20) # More exp = higher price
+        price = int(round(price, -1)) # Round to nearest 10
+        
+        # Generate Phone Number
+        phone = f"+91 {random.randint(70000, 99999)} {random.randint(10000, 99999)}"
+        
+        technicians.append({
+            "id": f"T{random.randint(1000, 9999)}",
+            "name": name,
+            "title": random.choice(titles),
+            "service_type": service_type.replace('_', ' ').title(),
+            "experience": experience,
+            "rating": rating,
+            "jobs_completed": jobs_done,
+            "price": price,
+            "phone": phone, # Added Phone
+            "availability": "Available Now" if random.random() > 0.3 else f"Available at {random.randint(9, 18)}:00",
+            "location": city,
+            "lat": tech_lat,
+            "lng": tech_lng,
+            "eta": f"{eta_mins} mins",
+            "distance": f"{dist_km:.1f} km",
+            "verified": random.choice([True, True, False]),
+            "vaccinated": random.choice([True, True, False])
+        })
+        
+    technicians.sort(key=lambda x: x['rating'], reverse=True)
+    return technicians
+
 @app.route('/submit-technician-booking', methods=['GET', 'POST'])
 @login_required
 def submit_technician_booking():
     try:
         # Default values
-        service_type = 'ac_repair'  # Most common request
+        service_type = 'ac_repair'
         location = 'Mumbai'
         service_date = get_tomorrow_date()
         service_time = get_default_service_time()
@@ -3697,7 +4030,6 @@ def submit_technician_booking():
         description = ''
 
         if request.method == 'GET':
-            # Pre-filled from AI Recommendations (URL params)
             location_text = session.get('user_location', {}).get('city', 'Mumbai')
             location = request.args.get('location', location_text).strip().title()
             service_date = request.args.get('service_date', get_tomorrow_date()).strip()
@@ -3706,81 +4038,52 @@ def submit_technician_booking():
             urgency = request.args.get('urgency', 'normal').strip().lower()
             description = request.args.get('description', '').strip()
 
-        else:  # POST from modal form
+        else:  # POST
             service_type = (request.form.get('service_type') or '').strip().lower()
-            location = (request.form.get('location') or '').strip()
+            location = (request.form.get('location') or '').strip().title()
             service_date = request.form.get('service_date', '').strip()
             service_time = request.form.get('service_time', '').strip()
             urgency = request.form.get('urgency', 'normal').strip().lower()
             description = request.form.get('description', '').strip()
 
-        # ── Validation ─────────────────────────────────────────────
+        # Validation
         if not all([service_type, location, service_date, service_time]):
             flash("Please provide all required technician details.", "danger")
             return redirect(url_for('dashboard'))
 
-        # Validate date/time
-        try:
-            service_datetime = datetime.strptime(f"{service_date} {service_time}", '%Y-%m-%d %H:%M')
-            if service_datetime < datetime.now():
-                flash("Service time cannot be in the past.", "danger")
-                return redirect(url_for('dashboard'))
-        except ValueError:
-            flash("Invalid date or time format. Use YYYY-MM-DD and HH:MM.", "danger")
-            return redirect(url_for('dashboard'))
+        # Get coordinates for map center
+        normalized_location = location.split(',')[0].strip()
+        city_coords = CITY_COORDINATES.get(normalized_location, CITY_COORDINATES.get('Mumbai'))
+        if location not in CITY_COORDINATES:
+             # Try to find a partial match or default to Mumbai but keep the label
+             for key in CITY_COORDINATES:
+                 if key in location:
+                     city_coords = CITY_COORDINATES[key]
+                     break
 
-        normalized_location = location.strip().title()
+        # Generate Dynamic Technicians
+        technicians = generate_dynamic_technicians(service_type, normalized_location)
+        
+        # Filter if needed (though generator handles logic)
+        # Apply urgency pricing surge if needed
+        if urgency == 'urgent':
+            for tech in technicians:
+                tech['price'] = int(tech['price'] * 1.5)
+        elif urgency == 'emergency':
+            for tech in technicians:
+                tech['price'] = int(tech['price'] * 2.0)
 
-        # ── Filter technicians ─────────────────────────────────────
-        filtered_technicians = [
-            tech for tech in technicians_data
-            if tech.get('service_type', '').lower() == service_type
-            and tech.get('location', '').lower() == normalized_location.lower()
-        ]
+        # Select display count
+        selected_technicians = technicians # Show all generated
 
-        fallback_reason = None
-        if not filtered_technicians:
-            fallback_reason = "no_exact_location"
-            filtered_technicians = [
-                tech for tech in technicians_data
-                if tech.get('service_type', '').lower() == service_type
-            ]
-
-        if not filtered_technicians:
-            fallback_reason = "no_service_type"
-            sorted_by_rating = sorted(technicians_data, key=lambda t: t.get('rating', 0), reverse=True)
-            filtered_technicians = sorted_by_rating[:6]
-
-        # Select 5–6 technicians
-        num_to_show = random.choice([5, 6])
-        selected_technicians = (
-            random.sample(filtered_technicians, min(num_to_show, len(filtered_technicians)))
-            if len(filtered_technicians) > num_to_show
-            else filtered_technicians
-        )
-
-        # Add display fields
-        for tech in selected_technicians:
-            tech['service_time'] = service_time
-            tech['location'] = normalized_location
-            tech['service_date'] = service_date
-            tech['urgency'] = urgency.capitalize()
-
-        # ── Flash messages ─────────────────────────────────────────
         if request.method == 'GET':
-            flash(f"Showing top technicians for {service_type.replace('_', ' ').title()} in {normalized_location}", "info")
-        else:
-            if fallback_reason == "no_exact_location":
-                flash("No technicians in exact location — showing available ones for this service.", "info")
-            elif fallback_reason == "no_service_type":
-                flash("Showing top-rated technicians across all services.", "info")
-            else:
-                flash("Here are the best matching technicians!", "success")
+            flash(f"Found {len(selected_technicians)} experts for {service_type.replace('_', ' ').title()} near {location}", "info")
 
         return render_template('technician_results.html',
                                technicians=selected_technicians,
                                service_type=service_type,
-                               location=normalized_location,
+                               location=location,
+                               city_coords=city_coords,
                                service_date=service_date,
                                service_time=service_time,
                                urgency=urgency,
@@ -3802,6 +4105,7 @@ def confirm_technician():
     payload = json.dumps({
         "technician_id": data.get("technician_id"),
         "name": data.get("name"),
+        "phone": data.get("technician_phone"), # Save technician phone
         "service_type": data.get("service_type"),
         "location": data.get("location"),
         "service_date": data.get("service_date"),
@@ -3809,22 +4113,51 @@ def confirm_technician():
         "description": data.get("description"),
         "total_price": data.get("total_price"),
         "email": data.get("email"),
-        "mobile": data.get("mobile")
+        "mobile": data.get("mobile"),
+        "customer_name": data.get("customer_name"),
+        "customer_address": data.get("customer_address"),
+        "alternate_phone": data.get("alternate_phone")
     })
 
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        # Create ticket immediately
+        user_id = current_user.get_id()
+        pdf_filename = generate_pdf_ticket(booking_id, 'Technician Booking', json.loads(payload), user_id)
+        
+        # Update payload with ticket url
+        details_obj = json.loads(payload)
+        details_obj['ticket_pdf_url'] = f"/static/tickets/{pdf_filename}"
+        details_obj['ticket_generated_at'] = datetime.now().isoformat()
+        payload = json.dumps(details_obj)
+
+        # Auto-Approve Logic (Phase 3)
+        total_price = float(data.get("total_price", 0))
+        urgency = data.get("urgency", "normal").lower()
+        admin_status = 'Pending'
+        
+        if urgency != 'emergency' and total_price < 2000:
+            admin_status = 'Confirmed'
+            # Send notification for auto-approval
+            save_notification(
+                user_id=user_id,
+                title="Technician Booking Approved",
+                message=f"Your request {booking_id} has been automatically approved.",
+                icon="check_circle",
+                type="success"
+            )
+
         cur.execute("""
             INSERT INTO requests (user_id, booking_id, service_type, details, payment_status, admin_confirmation, created_at)
             VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s)
         """, (
-            current_user.get_id(),
+            user_id,
             booking_id,
             'Technician Booking',
             payload,
             'Confirmed',
-            'Pending',
+            admin_status,
             datetime.now()
         ))
         conn.commit()
@@ -3839,12 +4172,14 @@ def confirm_technician():
             try:
                 socketio.emit('payment_confirmed', {
                     "request_id": last_row[0],
-                    "booking_id": booking_id
+                    "booking_id": booking_id,
+                    "service_type": "Technician Booking",
+                    "ticket_url": f"/static/tickets/{pdf_filename}"
                 })
             except Exception as e:
                 app.logger.exception("socketio.emit payment_confirmed failed: %s", e)
 
-        return jsonify({"success": True, "booking_id": booking_id})
+        return jsonify({"success": True, "booking_id": booking_id, "ticket_url": f"/static/tickets/{pdf_filename}"})
     except Exception as e:
         conn.rollback()
         return jsonify({"error": str(e)}), 500
@@ -3911,16 +4246,48 @@ def submit_courier_booking():
             flash("Invalid date or time format.", "danger")
             return redirect(url_for('dashboard'))
 
+        # ── Distance Calculation ───────────────────────────────────
+        pickup_coords = CITY_COORDINATES.get(pickup.split(',')[0].strip().title())
+        if not pickup_coords:
+            # Try partial match or default
+            for key, val in CITY_COORDINATES.items():
+                if key in pickup:
+                    pickup_coords = val
+                    break
+            if not pickup_coords: pickup_coords = CITY_COORDINATES.get('Mumbai')
+
+        dropoff_coords = CITY_COORDINATES.get(dropoff.split(',')[0].strip().title())
+        if not dropoff_coords:
+            for key, val in CITY_COORDINATES.items():
+                if key in dropoff:
+                    dropoff_coords = val
+                    break
+            if not dropoff_coords: 
+                # Random offset for local delivery if unknown
+                dropoff_coords = {
+                    "lat": pickup_coords["lat"] + random.uniform(-0.1, 0.1),
+                    "lng": pickup_coords["lng"] + random.uniform(-0.1, 0.1)
+                }
+
+        # Calculate Distance (Haversine)
+        R = 6371
+        lat1, lon1 = math.radians(pickup_coords["lat"]), math.radians(pickup_coords["lng"])
+        lat2, lon2 = math.radians(dropoff_coords["lat"]), math.radians(dropoff_coords["lng"])
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+        distance_km = round(R * c, 1)
+        if distance_km < 2: distance_km = 5.0 # Min distance
+
         # ── Pricing logic ──────────────────────────────────────────
         services = {
-            "standard":   {"price_per_kg": 50,  "delivery_time": "2–3 days"},
-            "express":    {"price_per_kg": 100, "delivery_time": "Same day"},
-            "overnight":  {"price_per_kg": 200, "delivery_time": "Next day"}
+            "standard":   {"rate_per_km": 5, "base": 50, "speed": "40 km/h"},
+            "express":    {"rate_per_km": 12, "base": 150, "speed": "60 km/h"},
+            "overnight":  {"rate_per_km": 20, "base": 300, "speed": "N/A"}
         }
         svc = services.get(courier_type, services["standard"])
-        price_per_kg = svc["price_per_kg"]
-        delivery_time = svc["delivery_time"]
-
+        
         # ── Generate mock couriers ─────────────────────────────────
         all_couriers = []
         base_names = [
@@ -3929,40 +4296,59 @@ def submit_courier_booking():
             "LightningDrop", "VortexShip", "CometCarry", "MeteorMove", "AstroPost"
         ]
 
-        for _ in range(25):
+        for _ in range(20):
             name = random.choice(base_names)
-            hours_offset = random.randint(1, 6)
-            est_drop = (pickup_dt + timedelta(hours=hours_offset)).strftime("%H:%M")
-            is_express = random.random() < 0.4
+            
+            # Duration logic
+            avg_speed = int(svc["speed"].split()[0]) if svc["speed"] != "N/A" else 50
+            hours_travel = distance_km / avg_speed
+            hours_total = hours_travel + random.randint(2, 24) # Processing time
+            
+            if hours_total < 24:
+                duration_str = f"{int(hours_total)} hours"
+            else:
+                duration_str = f"{int(hours_total/24)} days"
+                
+            if courier_type == 'express' and distance_km < 50:
+                duration_str = f"{random.randint(60, 180)} mins"
+
+            # Price logic: Base + (Dist * Rate) + (Weight * 10)
+            final_price = svc["base"] + (distance_km * svc["rate_per_km"] * 0.5) + (package_weight * 15)
+            final_price = int(round(final_price, -1))
 
             all_couriers.append({
-                "id": f"{'EXP' if is_express else 'COU'}-{random.randint(100, 9999)}",
+                "id": f"{'EXP' if courier_type=='express' else 'COU'}-{random.randint(100, 9999)}",
                 "name": name,
                 "pickup": pickup,
                 "dropoff": dropoff,
                 "pickup_time": pickup_time,
-                "dropoff_time": est_drop,
-                "courier_type": "Express" if is_express else courier_type.capitalize(),
+                "dropoff_time": "By End of Day",
+                "courier_type": courier_type.capitalize(),
                 "max_weight": random.choice([20, 25, 30, 40, 50]),
                 "rating": round(random.uniform(4.0, 5.0), 1),
                 "availability": "Available",
-                "duration": "Same day" if is_express else delivery_time,
-                "price": 100 if is_express else price_per_kg  # Price per kg or flat for express
+                "duration": duration_str,
+                "price": final_price,
+                "distance": f"{distance_km} km",
+                "vehicle": "Bike" if package_weight < 10 else "Van"
             })
 
         display_count = random.choice([5, 6])
         couriers = random.sample(all_couriers, display_count)
+        couriers.sort(key=lambda x: x['price'])
 
         # ── Flash message ──────────────────────────────────────────
         if request.method == 'GET':
-            flash(f"Showing fast courier options from {pickup} → {dropoff}", "info")
+            flash(f"Found {len(couriers)} couriers for {distance_km}km trip", "info")
         else:
-            flash("Search updated – showing 5–6 couriers.", "info")
+            flash("Search updated.", "info")
 
         return render_template(
             'courier_results.html',
             pickup=pickup,
             dropoff=dropoff,
+            pickup_coords=pickup_coords,
+            dropoff_coords=dropoff_coords,
             pickup_date=pickup_date,
             pickup_time=pickup_time,
             package_weight=package_weight,
@@ -4048,17 +4434,35 @@ def confirm_courier():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        # Create ticket immediately
+        user_id = current_user.get_id()
+        pdf_filename = generate_pdf_ticket(booking_id, 'Courier Booking', payload, user_id)
+        payload['ticket_pdf_url'] = f"/static/tickets/{pdf_filename}"
+        payload['ticket_generated_at'] = datetime.now().isoformat()
+
+        # Auto-Approve Logic (Phase 3)
+        admin_status = 'Pending'
+        if package_weight < 5.0 and data['courier_type'] == 'standard':
+            admin_status = 'Confirmed'
+            save_notification(
+                user_id=user_id,
+                title="Courier Booking Approved",
+                message=f"Your courier request {booking_id} has been automatically approved.",
+                icon="check_circle",
+                type="success"
+            )
+
         cur.execute("""
             INSERT INTO requests
             (user_id, booking_id, service_type, details, payment_status, admin_confirmation)
             VALUES (%s, %s, %s, %s::jsonb, %s, %s)
         """, (
-            current_user.get_id(),
+            user_id,
             booking_id,
             'Courier Booking',
             json.dumps(payload),
             'Confirmed',
-            'Pending'
+            admin_status
         ))
         conn.commit()
 
@@ -4068,13 +4472,15 @@ def confirm_courier():
             socketio.emit('payment_confirmed', {
                 "request_id": row[0],
                 "booking_id": booking_id,
-                "service_type": 'Courier Booking'
+                "service_type": 'Courier Booking',
+                "ticket_url": f"/static/tickets/{pdf_filename}"
             }, to=None)
 
         return jsonify({
             "success": True,
             "booking_id": booking_id,
-            "message": "Booking confirmed!"
+            "message": "Booking confirmed!",
+            "ticket_url": f"/static/tickets/{pdf_filename}"
         })
 
     except Exception as e:
@@ -4621,6 +5027,8 @@ def submit_hotel_booking():
     checkout = get_day_after_tomorrow()
     rooms = 1
     guests = 2
+    min_price = 0
+    max_price = 50000 # Default max
 
     if request.method == 'GET':
         # Pre-filled from AI Recommendations (via URL params)
@@ -4630,9 +5038,13 @@ def submit_hotel_booking():
         try:
             rooms = max(1, int(request.args.get('rooms', 1)))
             guests = max(1, int(request.args.get('guests', 2)))
+            min_price = int(request.args.get('min_price', 0))
+            max_price = int(request.args.get('max_price', 50000))
         except (ValueError, TypeError):
             rooms = 1
             guests = 2
+            min_price = 0
+            max_price = 50000
 
     else:  # POST from modal form
         destination = request.form.get('destination', '').strip().capitalize()
@@ -4641,9 +5053,13 @@ def submit_hotel_booking():
         try:
             rooms = max(1, int(request.form.get('rooms', 1)))
             guests = max(1, int(request.form.get('guests', 2)))
+            min_price = int(request.form.get('min_price', 0))
+            max_price = int(request.form.get('max_price', 50000))
         except (ValueError, TypeError):
             rooms = 1
             guests = 2
+            min_price = 0
+            max_price = 50000
 
     # Validation
     if not destination:
@@ -4673,20 +5089,21 @@ def submit_hotel_booking():
         flash("Invalid date format. Please use the date picker.", "danger")
         return redirect(url_for('dashboard'))
 
-    # Check if city is supported
-    allowed_cities = list(hotels_data.keys())
-    if destination not in allowed_cities:
-        flash(f"Hotel bookings in {destination} coming soon!", "info")
-        return render_template('hotel_results.html',
-                               message=f"We're expanding! Hotels in {destination} coming soon.",
-                               destination=destination,
-                               checkin=checkin,
-                               checkout=checkout,
-                               rooms=rooms,
-                               guests=guests)
-
-    # Fetch hotels and filter by user budget
-    all_hotels = hotels_data[destination]
+    # Check if city is supported or generate dynamic data
+    if destination in hotels_data:
+        all_hotels = hotels_data[destination]
+    else:
+        # Dynamic generation for all other cities
+        all_hotels = generate_dynamic_hotels(destination)
+        
+    # Get city coordinates for map
+    city_coords = CITY_COORDINATES.get(destination)
+    if not city_coords and all_hotels:
+        # Fallback: use first hotel's coords
+        city_coords = {"lat": all_hotels[0]['lat'], "lng": all_hotels[0]['lng']}
+    elif not city_coords:
+        # Default fallback
+        city_coords = {"lat": 20.5937, "lng": 78.9629}
 
     # Get user profile to filter by budget
     user_id = current_user.get_id()
@@ -4705,28 +5122,37 @@ def submit_hotel_booking():
         # premium: Above Rs 1,50,000/month → unlimited
 
         if monthly_budget == 'low':
-            max_price = 3000
+            budget_limit = 3000
             # For low budget, strictly exclude luxury
             if lifestyle_type == 'luxury':
-                max_price = 0  # Show no results - budget mismatch
+                budget_limit = 0  # Show no results - budget mismatch
         elif monthly_budget == 'medium':
-            max_price = 6000
+            budget_limit = 6000
             # Medium budget with luxury preference gets slightly higher range
             if lifestyle_type == 'luxury':
-                max_price = 7500
+                budget_limit = 7500
         elif monthly_budget == 'high':
-            max_price = 15000
+            budget_limit = 15000
         else:  # premium
-            max_price = float('inf')  # No limit
+            budget_limit = float('inf')  # No limit
 
         # Filter hotels by price
-        if max_price > 0:
-            filtered_hotels = [h for h in all_hotels if h.get('price', 0) <= max_price]
+        if budget_limit > 0:
+            filtered_hotels = [h for h in all_hotels if h.get('price', 0) <= budget_limit]
         else:
             filtered_hotels = []
 
+    # ── User Defined Price Range Filter (Overrides budget if specific range provided) ──
+    # If user manually sets filters in "Modify Search", we respect that over profile budget
+    if 'min_price' in request.form or 'min_price' in request.args:
+        filtered_hotels = [
+            h for h in all_hotels 
+            if min_price <= h.get('price', 0) <= max_price
+        ]
+
     random.shuffle(filtered_hotels)
-    selected_hotels = filtered_hotels[:min(len(filtered_hotels), 6)]  # Show up to 6
+    # selected_hotels = filtered_hotels[:min(len(filtered_hotels), 6)]  # Show up to 6
+    selected_hotels = filtered_hotels # Show all matching for better filtering experience
 
     # Render results page
     return render_template('hotel_results.html',
@@ -4736,7 +5162,10 @@ def submit_hotel_booking():
                            checkout=checkout,
                            rooms=rooms,
                            guests=guests,
-                           user_budget=profile.get('monthly_budget', 'medium') if profile else 'medium')
+                           city_coords=city_coords,
+                           user_budget=profile.get('monthly_budget', 'medium') if profile else 'medium',
+                           min_price=min_price,
+                           max_price=max_price)
 
 @app.route('/submit-travel-booking', methods=['GET', 'POST'])
 @login_required
@@ -4840,67 +5269,91 @@ def generate_flight_data(origin, destination, travel_class):
     """Generate realistic flight data"""
     flights = []
     
+    # Expanded Airlines List
     airlines = [
         {'name': 'IndiGo', 'code': '6E', 'hub': 'DEL'},
-        {'name': 'Global Airlines', 'code': 'GA', 'hub': 'BOM'},
-        {'name': 'SpiceJet', 'code': 'SG', 'hub': 'DEL'},
         {'name': 'Air India', 'code': 'AI', 'hub': 'DEL'},
         {'name': 'Vistara', 'code': 'UK', 'hub': 'DEL'},
-        {'name': 'Silver Wings', 'code': 'SW', 'hub': 'BOM'},
-        {'name': 'Red Sky', 'code': 'RS', 'hub': 'BLR'},
-        {'name': 'Golden Route', 'code': 'GR', 'hub': 'MAA'},
+        {'name': 'SpiceJet', 'code': 'SG', 'hub': 'DEL'},
         {'name': 'Air India Express', 'code': 'IX', 'hub': 'CCJ'},
-        {'name': 'Crystal Jets', 'code': 'CJ', 'hub': 'HYD'}
+        {'name': 'Akasa Air', 'code': 'QP', 'hub': 'BOM'},
+        {'name': 'Alliance Air', 'code': '9I', 'hub': 'DEL'},
+        {'name': 'Star Air', 'code': 'S5', 'hub': 'BLR'}
     ]
     
+    # Expanded Airport Codes (Major + Tier 2)
     airport_codes = {
-        'Mumbai': 'BOM',
-        'Delhi': 'DEL',
-        'Bangalore': 'BLR',
-        'Chennai': 'MAA',
-        'Hyderabad': 'HYD',
-        'Kolkata': 'CCU',
-        'Pune': 'PNQ',
-        'Goa': 'GOI',
-        'Jaipur': 'JAI',
-        'Ahmedabad': 'AMD'
+        'Mumbai': 'BOM', 'Delhi': 'DEL', 'Bangalore': 'BLR', 'Chennai': 'MAA',
+        'Hyderabad': 'HYD', 'Kolkata': 'CCU', 'Pune': 'PNQ', 'Goa': 'GOI',
+        'Jaipur': 'JAI', 'Ahmedabad': 'AMD', 'Lucknow': 'LKO', 'Cochin': 'COK',
+        'Patna': 'PAT', 'Indore': 'IDR', 'Chandigarh': 'IXC', 'Nagpur': 'NAG',
+        'Bhubaneswar': 'BBI', 'Coimbatore': 'CJB', 'Thiruvananthapuram': 'TRV',
+        'Visakhapatnam': 'VTZ', 'Surat': 'STV', 'Varanasi': 'VNS', 'Guwahati': 'GAU',
+        'Amritsar': 'ATQ', 'Ranchi': 'IXR', 'Raipur': 'RPR', 'Bhopal': 'BHO'
     }
     
-    for i in range(random.randint(10, 12)):
+    # Dynamic Code Generation for unknown cities
+    origin_code = airport_codes.get(origin, origin[:3].upper())
+    destination_code = airport_codes.get(destination, destination[:3].upper())
+    
+    # Calculate Approximate Distance & Duration (Mock logic)
+    # Using lat/long distance would be better, but mock logic suffices for realism
+    # Base duration 1h + random factor
+    base_duration_mins = random.randint(60, 180) 
+    
+    num_flights = random.randint(12, 18)
+    
+    for i in range(num_flights):
         airline = random.choice(airlines)
-        origin_code = airport_codes.get(origin, 'XXX')
-        destination_code = airport_codes.get(destination, 'YYY')
-
         flight_number = f"{airline['code']}{random.randint(100, 999)}"
-
         flight_name = f"{airline['name']} {flight_number}"
         
-        departure_hour = random.randint(6, 22)
-        departure_minute = random.choice([0, 15, 30, 45])
+        # Smart Departure Times (Morning, Afternoon, Evening, Night)
+        time_slot = random.choice(['morning', 'morning', 'afternoon', 'evening', 'night'])
+        if time_slot == 'morning': departure_hour = random.randint(5, 11)
+        elif time_slot == 'afternoon': departure_hour = random.randint(12, 16)
+        elif time_slot == 'evening': departure_hour = random.randint(17, 21)
+        else: departure_hour = random.randint(22, 23) # or early morning 0-4
         
-        duration_hours = random.randint(1, 6)
-        duration_minutes = random.randint(0, 59)
+        departure_minute = random.choice([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55])
         
-        arrival_hour = (departure_hour + duration_hours) % 24
-        arrival_minute = (departure_minute + duration_minutes) % 60
-        if departure_minute + duration_minutes >= 60:
-            arrival_hour = (arrival_hour + 1) % 24
+        # Duration variation
+        duration_minutes = base_duration_mins + random.randint(-15, 15)
+        duration_hours = duration_minutes // 60
+        duration_remaining_minutes = duration_minutes % 60
         
-        base_price = {
-            'economy': random.randint(3000, 8000),
-            'premium_economy': random.randint(6000, 12000),
-            'business': random.randint(15000, 30000),
-            'first': random.randint(25000, 50000)
-        }.get(travel_class, random.randint(3000, 8000))
+        # Arrival Time Calculation
+        departure_total_mins = departure_hour * 60 + departure_minute
+        arrival_total_mins = (departure_total_mins + duration_minutes) % (24 * 60)
+        arrival_hour = arrival_total_mins // 60
+        arrival_minute = arrival_total_mins % 60
+        
+        # Stops Logic
+        stops = random.choices([0, 1, 2], weights=[70, 25, 5], k=1)[0]
+        if stops > 0:
+            duration_hours += stops * 2 # Add layover time
+        
+        # Price Logic
+        base_price_map = {
+            'economy': random.randint(3000, 6000),
+            'premium_economy': random.randint(5500, 9000),
+            'business': random.randint(12000, 25000),
+            'first': random.randint(25000, 45000)
+        }
+        price = base_price_map.get(travel_class, 4000)
+        
+        # Adjust price based on stops (cheaper) and time (expensive morning/evening)
+        if stops > 0: price *= 0.85
+        if 8 <= departure_hour <= 10 or 17 <= departure_hour <= 19: price *= 1.10
+        
+        price = int(price / 100) * 100 + 99 # Make it look like 4999
         
         baggage_allowance = {
-            'economy': f"{random.choice([15, 20])}kg",
-            'premium_economy': f"{random.choice([20, 25])}kg",
-            'business': f"{random.choice([30, 35])}kg",
-            'first': f"{random.choice([40, 50])}kg"
-        }.get(travel_class, "20kg")
-        
-        stops = random.choice([0, 0, 0, 1, 1, 2])
+            'economy': "15kg (1 Pc)",
+            'premium_economy': "25kg (2 Pcs)",
+            'business': "35kg (2 Pcs)",
+            'first': "40kg (3 Pcs)"
+        }.get(travel_class, "15kg")
         
         flight_data = {
             'airline': airline['name'],
@@ -4912,18 +5365,21 @@ def generate_flight_data(origin, destination, travel_class):
             'destination_code': destination_code,
             'flight_no': flight_number,
             'flight_name': flight_name,
-            'duration': f'{duration_hours}h {duration_minutes}m',
+            'duration': f'{duration_hours}h {duration_remaining_minutes:02d}m',
             'travel_class': travel_class,
-            'seats_available': random.randint(2, 20),
-            'price': base_price,
-            'status': random.choice(['On Time', 'On Time', 'On Time', 'Delayed', 'Boarding']),
+            'seats_available': random.randint(2, 25),
+            'price': int(price),
+            'status': 'On Time',
             'baggage_allowance': baggage_allowance,
-            'meal_included': travel_class in ['business', 'first'] or random.choice([True, False]),
-            'wifi_available': travel_class in ['business', 'first'] or random.choice([True, False]),
+            'meal_included': travel_class != 'economy' or random.choice([True, False]),
+            'wifi_available': travel_class != 'economy',
             'stops': stops,
             'refundable': random.choice([True, False]),
-            'deal': random.choice(['', '', '', 'Fastest', 'Cheapest', 'Best Deal']),
-            'seats': random.randint(5, 40)
+            'deal': random.choice(['', '', '', 'Fastest', 'Cheapest', 'Best Value']),
+            'lat_origin': CITY_COORDINATES.get(origin, {}).get('lat', 20.59), # Pass coords for map
+            'lng_origin': CITY_COORDINATES.get(origin, {}).get('lng', 78.96),
+            'lat_dest': CITY_COORDINATES.get(destination, {}).get('lat', 28.61),
+            'lng_dest': CITY_COORDINATES.get(destination, {}).get('lng', 77.20)
         }
         flights.append(flight_data)
     
@@ -5038,12 +5494,18 @@ def confirm_flight():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        # Create ticket immediately
+        user_id = current_user.get_id()
+        pdf_filename = generate_pdf_ticket(booking_id, 'Flight Booking', details_obj, user_id)
+        details_obj['ticket_pdf_url'] = f"/static/tickets/{pdf_filename}"
+        details_obj['ticket_generated_at'] = datetime.now().isoformat()
+
         cur.execute("""
             INSERT INTO requests (user_id, booking_id, service_type, details, payment_status, admin_confirmation)
             VALUES (%s, %s, %s, %s::jsonb, %s, %s)
             RETURNING id
         """, (
-            current_user.get_id(),
+            user_id,
             booking_id,
             'Flight Booking',
             json.dumps(details_obj),
@@ -5058,7 +5520,8 @@ def confirm_flight():
             "booking_id": booking_id, 
             "request_id": new_id,
             "flight_no": details_obj['flight_no'],
-            "message": "Flight booking confirmed successfully!"
+            "message": "Flight booking confirmed successfully!",
+            "ticket_url": f"/static/tickets/{pdf_filename}"
         })
         
     except Exception as e:
@@ -5353,6 +5816,59 @@ def api_save_location():
     logger.info(f"Saved location for user {user_id}: {city}, {state}, {country}")
     
     return jsonify({'success': True, 'message': 'Location saved successfully'})
+
+
+# ---------------------- New Real-time Features (Phase 2) ----------------------
+
+from lifestyle.engine import _dynamic_price_info
+
+@app.route('/api/estimate-price', methods=['POST'])
+@login_required
+def api_estimate_price():
+    """Get real-time price estimate based on current demand/time"""
+    try:
+        data = request.json
+        service_type = data.get('service_type')
+        
+        # Base prices (can be moved to DB/Config later)
+        base_prices = {
+            'Hotel Booking': (3000, 8000),
+            'Flight Booking': (4000, 10000),
+            'Car Booking': (800, 2000),
+            'Luxury Cabs': (2500, 5000),
+            'Technician Booking': (500, 1500),
+            'Courier Booking': (100, 500),
+            'Courier & Delivery': (100, 500)
+        }
+        
+        if service_type not in base_prices:
+            # Try to map generic types
+            if 'hotel' in service_type.lower(): service_type = 'Hotel Booking'
+            elif 'flight' in service_type.lower(): service_type = 'Flight Booking'
+            elif 'car' in service_type.lower() or 'cab' in service_type.lower(): service_type = 'Car Booking'
+            elif 'tech' in service_type.lower(): service_type = 'Technician Booking'
+            elif 'courier' in service_type.lower(): service_type = 'Courier Booking'
+            
+        min_p, max_p = base_prices.get(service_type, (1000, 3000))
+        
+        # Adjust base based on specific params if provided
+        if service_type == 'Car Booking' and data.get('cab_class') == 'luxury':
+            min_p, max_p = 3000, 7000
+        elif service_type == 'Flight Booking' and data.get('class') == 'business':
+            min_p, max_p = 15000, 35000
+            
+        price_str, reason = _dynamic_price_info(service_type, min_p, max_p, datetime.now())
+        
+        return jsonify({
+            'success': True,
+            'estimate': price_str,
+            'reason': reason,
+            'service_type': service_type
+        })
+        
+    except Exception as e:
+        logger.error(f"Price estimate error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/dismiss-recommendation', methods=['POST'])
 @login_required

@@ -49,3 +49,4 @@ def flight_total(base_fare: float, passengers: int = 1) -> PriceBreakdown:
     passengers = max(1, int(passengers or 1))
     subtotal = float(base_fare or 0) * passengers
     return compute_gst(subtotal)
+

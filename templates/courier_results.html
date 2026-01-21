@@ -13,6 +13,27 @@
   <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css" rel="stylesheet" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/courier_results.css') }}" />
+  <!-- Leaflet Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    .map-container {
+        height: 350px;
+        width: 100%;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        margin-bottom: 25px;
+        z-index: 1;
+    }
+    .price-badge {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #28a745;
+    }
+    .per-kg {
+        display: none; /* Hiding outdated label */
+    }
+  </style>
 </head>
 <body data-user-id="{{ current_user_id|default('') }}">
 
@@ -25,23 +46,19 @@
     <a href="{{ url_for('dashboard') }}" class="nav-link">
       <i class="fas fa-tachometer-alt"></i> Dashboard
     </a>
-    <a href="{{ url_for('dashboard') }}#requests-section" class="nav-link active">
-      <i class="fas fa-list-alt"></i> My Requests
-    </a>
   </div>
 </nav>
 
 <main class="container">
   <div class="page-title">
     <h1>Available Courier Services</h1>
-    <p>Book your reliable pickup and delivery with ease</p>
+    <p>Reliable delivery from {{ pickup }} to {{ dropoff }}</p>
   </div>
 
-  <!-- Success Alert (will be shown dynamically) -->
-  <div id="successAlert" class="alert alert-success alert-dismissible fade show" style="display: none;">
-    <strong>✓ Booking submitted!</strong> <span id="successMessage"></span>
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-  </div>
+  <div id="dynamicAlertContainer"></div>
+  
+  <!-- Map -->
+  <div id="courier-map" class="map-container"></div>
 
   <div class="search-summary">
     <div class="search-info">
@@ -145,32 +162,43 @@
         <h3 class="card-title courier-name">{{ courier.name }}</h3>
         {% if loop.first %}<span class="premium-label">Premium</span>{% endif %}
         <div class="courier-details">
-          <div class="route">
-            <div class="time-point">
-              <span class="time">{{ courier.pickup_time }}</span>
-              <span class="place">{{ courier.pickup }}</span>
+          <div class="route" style="display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 10px 0;">
+            <!-- Pickup -->
+            <div class="time-point" style="text-align: left; flex: 1; min-width: 0;">
+              <span class="time" style="display: block; font-weight: 700; color: var(--text-light); font-size: 1.1rem; margin-bottom: 2px;">{{ courier.pickup_time }}</span>
+              <span class="place" style="display: block; font-size: 0.9rem; color: var(--text-gray); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ courier.pickup }}">
+                {{ courier.pickup.split(',')[0] }}
+              </span>
             </div>
-            <div class="route-line">
-              <span class="duration-label">{{ courier.duration }}</span>
-              <span class="truck-icon"><i class="fas fa-truck"></i></span>
+            
+            <!-- Connector -->
+            <div class="route-line" style="flex: 0 0 80px; text-align: center; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+              <div style="width: 100%; height: 2px; background: repeating-linear-gradient(to right, var(--border-light) 0, var(--border-light) 6px, transparent 6px, transparent 10px); position: absolute; top: 12px; z-index: 0;"></div>
+              <span class="truck-icon" style="background: var(--dark-bg); padding: 0 8px; position: relative; z-index: 1; color: var(--primary); border: 1px solid var(--primary);">
+                <i class="fas fa-truck"></i>
+              </span>
+              <span class="duration-label" style="display: block; font-size: 0.75rem; color: var(--primary); margin-top: 4px; white-space: nowrap;">{{ courier.duration }}</span>
             </div>
-            <div class="time-point">
-              <span class="time">{{ courier.dropoff_time }}</span>
-              <span class="place">{{ courier.dropoff }}</span>
+
+            <!-- Dropoff -->
+            <div class="time-point" style="text-align: right; flex: 1; min-width: 0;">
+              <span class="time" style="display: block; font-weight: 700; color: var(--text-light); font-size: 1.1rem; margin-bottom: 2px;">{{ courier.dropoff_time }}</span>
+              <span class="place" style="display: block; font-size: 0.9rem; color: var(--text-gray); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ courier.dropoff }}">
+                {{ courier.dropoff.split(',')[0] }}
+              </span>
             </div>
           </div>
-          <div class="courier-no">{{ courier.id }}</div>
         </div>
-        <div class="courier-info-details">
-          <span><i class="fas fa-tag"></i> {{ courier.courier_type|title }}</span>
-          <span><i class="fas fa-weight-hanging"></i> {{ courier.max_weight }} kg</span>
-          <span><i class="fas fa-star"></i> {{ courier.rating }}/5</span>
-          <span><i class="fas fa-check-circle"></i> {{ courier.availability }}</span>
+        <div class="courier-info-details" style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 15px; padding-top: 10px; border-top: 1px solid var(--border-light);">
+          <span style="color: var(--text-gray); font-size: 0.9rem;"><i class="fas fa-route text-primary me-1"></i> {{ courier.distance }}</span>
+          <span style="color: var(--text-gray); font-size: 0.9rem;"><i class="fas fa-truck text-primary me-1"></i> {{ courier.vehicle }}</span>
+          <span style="color: var(--text-gray); font-size: 0.9rem;"><i class="fas fa-star text-warning me-1"></i> {{ courier.rating }}/5</span>
+          <span style="color: var(--text-gray); font-size: 0.9rem;"><i class="fas fa-clock text-primary me-1"></i> {{ courier.duration }}</span>
         </div>
         <div class="courier-pricing">
           <div class="price-container">
             <span class="price-badge">₹{{ courier.price }}</span>
-            <small class="per-kg">per kg</small>
+            <small class="text-muted">total fare</small>
           </div>
           <button class="btn btn-primary book-btn"
                   onclick="showBookingModalForButton(this)"
@@ -938,8 +966,72 @@
     termsModal.show();
   }
 
+  // ===== Map Logic =====
+  function initCourierMap() {
+      const mapContainer = document.getElementById('courier-map');
+      if (!mapContainer) return;
+
+      const pickupLat = {{ pickup_coords.lat if pickup_coords else 19.07 }};
+      const pickupLng = {{ pickup_coords.lng if pickup_coords else 72.87 }};
+      const dropoffLat = {{ dropoff_coords.lat if dropoff_coords else 19.20 }};
+      const dropoffLng = {{ dropoff_coords.lng if dropoff_coords else 72.90 }};
+      
+      const map = L.map('courier-map', { zoomControl: false });
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+          attribution: '© OpenStreetMap',
+          maxZoom: 19
+      }).addTo(map);
+
+      // Pickup (Green)
+      const pickupIcon = L.divIcon({
+          className: 'custom-pin',
+          html: '<div style="background:#2e7d32; width:14px; height:14px; border-radius:50%; border:2px solid white; box-shadow:0 0 0 4px rgba(46,125,50,0.3);"></div>',
+          iconSize: [20, 20]
+      });
+      L.marker([pickupLat, pickupLng], {icon: pickupIcon}).addTo(map)
+          .bindPopup("<b>Pickup:</b> {{ pickup }}").openPopup();
+
+      // Dropoff (Red)
+      const dropoffIcon = L.divIcon({
+          className: 'custom-pin',
+          html: '<div style="background:#c62828; width:14px; height:14px; border-radius:50%; border:2px solid white; box-shadow:0 0 0 4px rgba(198,40,40,0.3);"></div>',
+          iconSize: [20, 20]
+      });
+      L.marker([dropoffLat, dropoffLng], {icon: dropoffIcon}).addTo(map)
+          .bindPopup("<b>Delivery:</b> {{ dropoff }}");
+
+      // Route Line
+      const latlngs = [[pickupLat, pickupLng], [dropoffLat, dropoffLng]];
+      L.polyline(latlngs, {color: '#1565c0', weight: 4, opacity: 0.7, dashArray: '10, 10'}).addTo(map);
+
+      // Static Truck Marker (Midpoint)
+      const midLat = (pickupLat + dropoffLat) / 2;
+      const midLng = (pickupLng + dropoffLng) / 2;
+      const truckIcon = L.divIcon({
+          html: '<div style="background:white; padding:6px; border-radius:50%; box-shadow:0 2px 6px rgba(0,0,0,0.2);"><i class="fas fa-truck" style="color:#333; font-size:14px;"></i></div>',
+          className: 'cab-icon',
+          iconSize: [30, 30]
+      });
+      L.marker([midLat, midLng], {icon: truckIcon}).addTo(map)
+          .bindTooltip("Courier Route", {permanent: true, direction: 'top', offset: [0,-15]});
+
+      // Fit bounds
+      const bounds = L.latLngBounds(latlngs);
+      map.fitBounds(bounds, {padding: [50, 50]});
+      
+      // Click to Google Maps
+      map.on('click', function() {
+          const url = `https://www.google.com/maps/dir/?api=1&origin=${pickupLat},${pickupLng}&destination=${dropoffLat},${dropoffLng}`;
+          window.open(url, '_blank');
+      });
+      map.getContainer().style.cursor = 'pointer';
+      map.getContainer().title = "Click to view route on Google Maps";
+  }
+
   // ===== DOMContentLoaded =====
   document.addEventListener('DOMContentLoaded', function () {
+    initCourierMap();
     try {
       // Initialize date pickers
       initializeDatePickers();

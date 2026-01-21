@@ -20,6 +20,50 @@
   <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css" rel="stylesheet" />
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/technician_results.css') }}" />
+  
+  <style>
+    .verified-badge {
+        color: #2196f3;
+        font-size: 0.9rem;
+        margin-left: 5px;
+    }
+    .tech-stat-badge {
+        background: #f8f9fa;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        color: #333; /* Darker text for visibility */
+        border: 1px solid #dee2e6;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-weight: 500;
+    }
+    .tech-avatar {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid #fff;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .status-dot {
+        height: 8px;
+        width: 8px;
+        background-color: #28a745;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 4px;
+    }
+    /* Ensure card text is visible */
+    .technician-name {
+        color: #000;
+        font-weight: 700;
+    }
+    .card-title {
+        color: #000;
+    }
+  </style>
 </head>
 
 <body data-user-id="{{ current_user_id|default('') }}">
@@ -33,40 +77,18 @@
         <a href="{{ url_for('dashboard') }}" class="nav-link">
           <i class="fas fa-tachometer-alt"></i> Dashboard
         </a>
-        <a href="{{ url_for('dashboard') }}#requests-section" class="nav-link active">
-          <i class="fas fa-list-alt"></i> My Requests
-        </a>
       </div>
     </nav>
 
-    <!-- Custom Success Alert -->
-    <div id="customSuccessAlert" class="custom-alert-success" style="display: none;">
-      <div class="alert-content">
-        <div class="alert-icon">
-          <i class="fas fa-check-circle"></i>
-        </div>
-        <div class="alert-message">
-          <strong>✓ Booking submitted!</strong>
-          <span id="customSuccessMessage">Your technician service has been booked!</span>
-        </div>
-        <div class="alert-actions">
-          <button class="btn btn-sm btn-light me-2" onclick="copyBookingIdToClipboard()">
-            <i class="fas fa-copy"></i> Copy Booking ID
-          </button>
-          <a href="/dashboard" class="btn btn-sm btn-success">
-            <i class="fas fa-tachometer-alt"></i> Go to Dashboard
-          </a>
-        </div>
-        <button type="button" class="alert-close" onclick="closeCustomAlert()">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
-    </div>
-
+    <!-- Page Title -->
     <div class="page-title">
-      <h1>Available Technicians</h1>
-      <p>Book your verified technician with ease</p>
+        <h1>Experts Near {{ location }}</h1>
+        <p>Verified professionals ready to help</p>
     </div>
+    
+    <div id="dynamicAlertContainer"></div>
+    
+    <!-- Map Removed as requested -->
 
     <div class="search-summary">
       <div class="search-info">
@@ -122,10 +144,9 @@
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label" for="description">Issue Description:</label>
+          <label class="form-label" for="description">Issue Description (Optional):</label>
           <textarea id="description" name="description" class="form-control" rows="4"
-            placeholder="Describe the issue (e.g., AC not cooling, leaking pipe)"
-            required>{{ description or '' }}</textarea>
+            placeholder="Describe the issue (e.g., AC not cooling, leaking pipe)">{{ description or '' }}</textarea>
         </div>
         <div class="apply-btn">
           <button type="submit" class="btn-primary">
@@ -138,37 +159,56 @@
 
     <div class="technicians-grid" id="techniciansContainer">
       {% for technician in technicians %}
-      <div class="card technician-card {% if loop.first %}premium-card{% endif %}">
-        <div class="technician-info">
-          <h3 class="card-title technician-name"><i class="fas fa-tools"></i> {{ technician.name }}</h3>
-          {% if loop.first %}<span class="premium-label">Premium</span>{% endif %}
-          <div class="technician-details">
-            <div class="service-info">
-              <span class="service-type">{{ technician.service_type }}</span>
-              <span class="experience">Experience: {{ technician.experience }} years</span>
-              <span class="rating">Rating: {{ technician.rating }}/5</span>
-            </div>
+      <div class="card technician-card">
+        <div class="technician-info d-flex gap-3">
+          <!-- Left: Avatar -->
+          <div class="d-flex flex-column align-items-center" style="min-width: 80px;">
+              <img src="https://ui-avatars.com/api/?name={{ technician.name }}&background=random&size=128" 
+                   class="tech-avatar mb-2" alt="{{ technician.name }}">
+              <div class="rating-box text-center">
+                  <span class="badge bg-warning text-dark"><i class="fas fa-star"></i> {{ technician.rating }}</span>
+              </div>
           </div>
-          <div class="technician-info-details">
-            <span>Service: {{ technician.service_type }}</span>
-            <span>Location: {{ technician.location }}</span>
-            <span>Availability: {{ technician.availability }}</span>
-            {% if technician.status %}<span class="status-tag">{{ technician.status }}</span>{% endif %}
-          </div>
-          <div class="technician-pricing">
-            <div class="price-container">
-              <span class="price-badge">₹{{ technician.price }}</span>
-            </div>
-            <button class="book-btn btn-primary" aria-label="Book technician {{ technician.id }}"
-              onclick="showBookingModalForButton(this)" data-technician-id="{{ technician.id }}"
-              data-name="{{ technician.name }}" data-service-type="{{ technician.service_type }}"
-              data-location="{{ technician.location }}" data-service-time="{{ technician.service_time }}"
-              data-price="{{ technician.price }}" data-service-date="{{ service_date|default('') }}"
-              data-description="{{ description|default('') }}" data-urgency="{{ urgency|default('normal') }}">
-              <i class="fas fa-calendar-check"></i> Book Now
-            </button>
-            <input type="checkbox" class="compare-checkbox" data-technician="{{ technician.id }}" />
-            <div class="tooltip">Rating: {{ technician.rating }}/5</div>
+          
+          <!-- Right: Details -->
+          <div class="flex-grow-1">
+              <h3 class="card-title technician-name mb-1">
+                  {{ technician.name }} 
+                  {% if technician.verified %}
+                  <i class="fas fa-check-circle verified-badge" title="Verified Professional"></i>
+                  {% endif %}
+              </h3>
+              <div class="text-secondary small mb-2" style="font-weight: 500;">{{ technician.title }} • {{ technician.experience }} Yrs Exp</div>
+              
+              <div class="d-flex flex-wrap gap-2 mb-3">
+                  <span class="tech-stat-badge"><i class="fas fa-briefcase"></i> {{ technician.jobs_completed }}+ Jobs</span>
+                  <span class="tech-stat-badge"><i class="fas fa-map-marker-alt"></i> {{ technician.distance }} away</span>
+                  <span class="tech-stat-badge"><i class="fas fa-clock"></i> Arrives in {{ technician.eta }}</span>
+                  {% if technician.vaccinated %}
+                  <span class="tech-stat-badge text-success border-success"><i class="fas fa-shield-alt"></i> Vaccinated</span>
+                  {% endif %}
+              </div>
+
+              <div class="d-flex justify-content-between align-items-end">
+                  <div class="price-section">
+                      <div class="text-secondary small" style="font-weight: 600;">Service Charge</div>
+                      <div class="price-badge" style="font-size: 1.2rem; font-weight: bold; color: var(--primary);">₹{{ technician.price }}</div>
+                  </div>
+                  <button class="book-btn btn-primary" 
+                      onclick="showBookingModalForButton(this)" 
+                      data-technician-id="{{ technician.id }}"
+                      data-name="{{ technician.name }}" 
+                      data-phone="{{ technician.phone }}"
+                      data-service-type="{{ technician.service_type }}"
+                      data-location="{{ technician.location }}" 
+                      data-service-time="{{ technician.service_time }}"
+                      data-price="{{ technician.price }}" 
+                      data-service-date="{{ service_date|default('') }}"
+                      data-description="{{ description|default('') }}" 
+                      data-urgency="{{ urgency|default('normal') }}">
+                      <i class="fas fa-check"></i> Book Now
+                  </button>
+              </div>
           </div>
         </div>
       </div>
@@ -437,6 +477,7 @@
     // ===== Global Variables =====
     let currentTechnician = null;
     let currentTechnicianName = null;
+    let currentTechnicianPhone = null;
     let currentPrice = null;
     let currentServiceType = null;
     let currentLocation = null;
@@ -448,11 +489,31 @@
     let currentBookingType = 'technician';
 
     // ===== Custom Success Alert Functions =====
-    function showCustomSuccessAlert(message) {
+    function showCustomSuccessAlert(message, phone) {
       const alert = document.getElementById('customSuccessAlert');
       const messageSpan = document.getElementById('customSuccessMessage');
+      const actionsDiv = alert.querySelector('.alert-actions');
+      
       if (alert && messageSpan) {
-        messageSpan.innerHTML = message;
+        let fullMessage = message;
+        
+        // Update message
+        messageSpan.innerHTML = fullMessage;
+        
+        // Add Call Button if phone exists
+        // Remove existing call button if any to prevent duplicates
+        const existingCallBtn = document.getElementById('callTechBtn');
+        if (existingCallBtn) existingCallBtn.remove();
+        
+        if (phone) {
+            const callBtn = document.createElement('a');
+            callBtn.href = `tel:${phone.replace(/\s/g, '')}`;
+            callBtn.id = 'callTechBtn';
+            callBtn.className = 'btn btn-sm btn-success me-2';
+            callBtn.innerHTML = `<i class="fas fa-phone-alt"></i> Call ${phone}`;
+            actionsDiv.insertBefore(callBtn, actionsDiv.firstChild);
+        }
+        
         alert.style.display = 'block';
         
         // Add animation class
@@ -460,10 +521,10 @@
           alert.classList.add('show');
         }, 10);
         
-        // Auto-hide after 15 seconds
+        // Auto-hide after 30 seconds (longer time to note number)
         setTimeout(() => {
           closeCustomAlert();
-        }, 15000);
+        }, 30000);
       }
     }
 
@@ -582,14 +643,16 @@
         btn.dataset.price,
         btn.dataset.serviceDate,
         btn.dataset.description,
-        btn.dataset.urgency
+        btn.dataset.urgency,
+        btn.dataset.phone // Pass phone
       );
     }
 
-    function showBookingModal(technicianId, name, serviceType, location, serviceTime, price, serviceDate, description, urgency) {
+    function showBookingModal(technicianId, name, serviceType, location, serviceTime, price, serviceDate, description, urgency, phone) {
       try {
         currentTechnician = technicianId;
         currentTechnicianName = name;
+        currentTechnicianPhone = phone;
         currentPrice = parseFloat(price) || 0;
         currentServiceType = serviceType;
         currentLocation = location;
@@ -811,6 +874,7 @@
         const bookingData = {
           technician_id: currentTechnician,
           technician_name: currentTechnicianName,
+          technician_phone: currentTechnicianPhone, // Send phone to backend
           service_type: currentServiceType,
           location: currentLocation,
           service_date: currentServiceDate,
@@ -837,8 +901,11 @@
         if (data.booking_id) {
           bookingId = data.booking_id || bookingId;
           
-          // Show custom success alert
-          showCustomSuccessAlert(`Your technician service has been confirmed! Booking ID: ${bookingId}. You can track it in your dashboard.`);
+          // Show custom success alert with Phone Number
+          showCustomSuccessAlert(
+            `Booking Confirmed! ID: ${bookingId}.<br>You can contact your technician directly.`, 
+            currentTechnicianPhone
+          );
           
           showToast(`Booking submitted successfully! ID: ${bookingId}`, 'success');
           resetBookingState();
@@ -865,6 +932,8 @@
 
     // ===== Initialize =====
     document.addEventListener('DOMContentLoaded', () => {
+      // Map removed
+      
       flatpickr(".date-input", {
         altInput: true,
         altFormat: "F j, Y",
